@@ -1,0 +1,11 @@
+Material Symbols Rounded: Copyright Google LLC. Apache License 2.0.
+Selected SVGs from google/material-design-icons, commit 10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7.
+Nozoki bundles selected path data and adds semantic aliases; the glyph outlines are unchanged.
+License: /licenses/material-symbols.txt
+
+Material Color Utilities 0.3.0: Copyright 2021 Google LLC. Apache License 2.0.
+Bundled into the external theme initializer and application theme code.
+License: /licenses/material-color-utilities.txt
+
+Varlet 3.20.7: Copyright (c) 2024 varletjs. MIT.
+License: /licenses/varlet.txt

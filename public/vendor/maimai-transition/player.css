@@ -1,0 +1,12 @@
+/* Integration layout only. Artwork and upstream keyframes are unchanged. */
+html,
+body {
+  background: transparent;
+}
+.stage > .frame {
+  width: max(100vw, calc(100vh * 16 / 9));
+  height: max(100vh, calc(100vw * 9 / 16));
+  flex-shrink: 0;
+  background: transparent;
+  box-shadow: none;
+}

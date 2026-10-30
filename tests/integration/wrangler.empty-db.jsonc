@@ -1,0 +1,16 @@
+// Test-only local empty D1; isolated persistence, no remote database exists.
+{
+  "name": "nozoki-empty-database-test",
+  "main": "../../.output/server/index.mjs",
+  "compatibility_date": "2026-10-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "../../.output/public", "binding": "ASSETS" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nozoki-empty-test",
+      "database_id": "00000000-0000-0000-0000-000000000003",
+      "remote": false,
+    },
+  ],
+}

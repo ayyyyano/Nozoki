@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nozoki-dashboard",
+  "main": ".output/server/index.mjs",
+  "compatibility_date": "2026-10-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".output/public",
+    "binding": "ASSETS",
+  },
+  "dev": { "ip": "127.0.0.1", "port": 8787 },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nozoki-db",
+      // Local-only placeholder UUID. No Cloudflare database has been created with this ID.
+      "database_id": "00000000-0000-0000-0000-000000000002",
+      "remote": false,
+      "migrations_dir": "migrations",
+    },
+  ],
+}

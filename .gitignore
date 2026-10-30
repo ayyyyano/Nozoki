@@ -1,0 +1,59 @@
+# Local credentials
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
+private-relay.local.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies and build output
+node_modules/
+.nuxt/
+.output/
+.output-node/
+/data/
+.cache/
+.wrangler/
+*.tsbuildinfo
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite3-journal
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Test output and logs
+coverage/
+test-results/
+playwright-report/
+blob-report/
+*.log
+
+# Editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+__pycache__/
+*.py[cod]
+
+# Archives accidentally copied into the repository
+/Nozoki-Archives/
+/backups/
+/archives/
+/nozoki-backup-*/
+/nozoki-docs-archive-*/

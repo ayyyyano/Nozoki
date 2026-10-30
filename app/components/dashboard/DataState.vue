@@ -1,0 +1,48 @@
+<script setup lang="ts">
+import type { DataStatus } from '../../../shared/contracts/dashboard'
+withDefaults(
+  defineProps<{
+    status: DataStatus
+    empty?: boolean
+    loading?: boolean
+    compact?: boolean
+    lastSuccessAt?: string | null
+  }>(),
+  { empty: false, loading: false, compact: false, lastSuccessAt: null },
+)
+const labels: Record<DataStatus, string> = {
+  ok: '暂无数据',
+  stale: '数据已过期',
+  error: '采集失败',
+  unconfigured: '尚未配置数据源',
+  unsupported: '来源不支持此能力',
+  offline: '来源已确认离线',
+}
+const timezone = useDashboardTimezone()
+const notes: Partial<Record<DataStatus, string>> = {
+  stale: '以下为最近成功数据',
+  error: '采集失败不代表监控对象离线',
+  offline: '离线状态由来源明确报告',
+}
+</script>
+<template>
+  <div
+    v-if="loading || status !== 'ok' || empty"
+    class="data-state"
+    :class="{ compact }"
+    :data-status="status"
+    role="status"
+    :aria-busy="loading"
+  >
+    <div>
+      <span>{{ loading ? '正在加载' : labels[status] }}</span
+      ><small v-if="!compact && notes[status]">{{ notes[status] }}</small
+      ><small v-if="(status === 'stale' || status === 'error') && lastSuccessAt"
+        >最近成功 {{ formatTimestamp(lastSuccessAt, timezone) }}</small
+      >
+    </div>
+  </div>
+</template>
+<script lang="ts">
+import { formatTimestamp } from '../../../shared/domain/format'
+</script>

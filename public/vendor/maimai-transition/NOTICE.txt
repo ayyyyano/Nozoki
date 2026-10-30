@@ -1,0 +1,8 @@
+gfdfdxc/maimai-transition
+Pinned revision: 1d77eef5c003dc6f02d3dbb48f2d46c52a9653b5
+Source: https://github.com/gfdfdxc/maimai-transition
+Copyright (c) 2022-2026 gfdfdxc.
+Upstream states learning/exchange use and attributes the transition design to SEGA.
+The complete upstream statement is preserved in README.upstream.md. No standard open-source license was supplied.
+Nozoki integration: original SVG and extracted upstream stylesheet are unchanged, isolated in a same-origin local iframe. player.html, player.css and player.js provide only the embedding bridge. Application code controls resource readiness, paused animation clocks, entry/exit completion and cleanup. No replacement artwork is drawn.
+This notice does not replace or broaden upstream permissions.

@@ -1,0 +1,646 @@
+/* Management surfaces share Dashboard M3 roles; no image filters or separate palette. */
+.nozoki-app:has(.management-page) .background-scene.banner {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  min-height: 0;
+}
+.nozoki-app:has(.management-page) .banner-wave {
+  display: none;
+}
+.nozoki-app:has(.management-page) .dashboard-stage {
+  background: none;
+}
+.management-page {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  color: var(--color-text);
+  padding: 24px max(16px, env(safe-area-inset-right)) 32px max(16px, env(safe-area-inset-left));
+}
+.management-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    130deg,
+    color-mix(in srgb, var(--color-surface) 72%, transparent),
+    color-mix(in srgb, var(--color-surface-container) 88%, transparent)
+  );
+}
+.admin-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-container-low, var(--color-surface-container));
+}
+.admin-page.management-page {
+  padding: 0;
+  background: var(--color-surface);
+}
+.admin-page::before,
+.nozoki-app:has(.admin-page) .background-scene {
+  display: none;
+}
+.admin-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 12px;
+  min-height: 72px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--color-outline-variant);
+  background: var(--color-surface-container);
+}
+.admin-toolbar-title {
+  min-width: 0;
+  flex: 1;
+}
+.admin-toolbar-title :is(h1, small, .admin-current-section) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-toolbar-title small {
+  display: block;
+}
+.admin-current-section,
+.admin-dirty-dot,
+.admin-more-menu,
+.admin-more-trigger.var-button {
+  display: none;
+}
+.admin-toolbar h1 {
+  font-size: 20px;
+  line-height: 1.4;
+  margin: 0 0 2px;
+  font-weight: 650;
+}
+.admin-toolbar small,
+.admin-note {
+  color: var(--color-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.admin-dirty {
+  color: var(--color-primary);
+}
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.admin-toolbar > .admin-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+.admin-save .var-button__content {
+  gap: 8px;
+}
+.admin-icon-button.var-button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  flex-shrink: 0;
+}
+.admin-actions a {
+  color: var(--color-primary);
+  text-decoration: none;
+  padding: 10px 8px;
+  border-radius: 12px;
+}
+.admin-dashboard-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.admin-workspace {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 204px minmax(0, 1fr);
+}
+.admin-nav {
+  min-width: 0;
+  padding: 20px 12px;
+}
+.admin-nav-list {
+  display: grid;
+  gap: 6px;
+  position: sticky;
+  top: 92px;
+}
+.admin-nav .var-button,
+.admin-section-menu > .var-button {
+  justify-content: flex-start;
+  width: 100%;
+  border-radius: 28px;
+  min-height: 48px;
+  box-shadow: none;
+}
+.admin-nav .var-button__content,
+.admin-section-menu .var-button__content {
+  gap: 12px;
+}
+.admin-nav-active {
+  background: var(--color-primary-container) !important;
+  color: var(--color-on-primary-container) !important;
+  font-weight: 600;
+}
+.admin-section-trigger.var-button {
+  display: none;
+}
+.admin-form {
+  min-width: 0;
+  container-type: inline-size;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-outline-variant);
+  padding: 28px 32px 40px;
+  --management-scroll-space: 90px;
+}
+.admin-form > fieldset {
+  max-width: 1200px;
+}
+.admin-form :is(input, textarea, button, [tabindex]) {
+  scroll-margin-block: var(--management-scroll-space) 24px;
+}
+.admin-form fieldset {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.admin-form fieldset[style*='display: none'] {
+  display: none;
+}
+.admin-form legend {
+  font-size: 20px;
+  font-weight: 650;
+  padding: 0;
+  margin-bottom: 24px;
+}
+.admin-fields {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 24px;
+  align-items: center;
+}
+.admin-fields > * {
+  min-width: 0;
+}
+.admin-form label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 14px;
+}
+.admin-form .var-switch {
+  width: fit-content;
+  flex: 0 0 auto;
+}
+.admin-item {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+  border-bottom: 1px solid var(--color-outline-variant);
+  padding: 0 0 16px;
+}
+.admin-item > header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+}
+.admin-item-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 12px;
+  padding: 12px 4px;
+  font: inherit;
+}
+.admin-item-toggle > .app-icon {
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+.admin-item-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+.admin-item-copy strong {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.admin-item-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+.admin-item-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.admin-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+.admin-item-actions .var-button {
+  min-width: 44px;
+  padding-inline: 10px;
+}
+.admin-item-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  padding: 8px 4px;
+  min-width: 0;
+}
+.admin-item-body[style*='display: none'] {
+  display: none;
+}
+.admin-chevron-open {
+  transform: rotate(90deg);
+}
+.admin-details {
+  min-width: 0;
+}
+.admin-details summary {
+  cursor: pointer;
+  color: var(--color-primary);
+  padding-block: 8px;
+  font-size: 14px;
+}
+.admin-details[open] > :not(summary) {
+  margin-top: 16px;
+}
+.admin-rule {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.admin-rule code {
+  flex: 1 1 100%;
+  overflow-wrap: anywhere;
+}
+.schedule-editor .admin-text:not(:focus-within) .var-form-details {
+  display: none;
+}
+.schedule-editor,
+.schedule-periods {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.schedule-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  min-width: 0;
+}
+.schedule-weekdays .var-button {
+  min-width: 0;
+  padding-inline: 4px;
+}
+.schedule-weekdays [aria-pressed='true'] {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.schedule-period {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border-bottom: 1px solid var(--color-outline-variant);
+  padding-bottom: 12px;
+}
+.schedule-copy .var-select {
+  width: min(220px, 100%);
+}
+.schedule-preview {
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--color-surface-container);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.schedule-preview p {
+  margin-block: 8px;
+}
+.schedule-error {
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+.schedule-editor .admin-details > :not(summary) {
+  margin-top: 16px;
+}
+.schedule-exceptions {
+  max-height: 280px;
+  overflow-y: auto;
+}
+.admin-rule .var-select {
+  max-width: 180px;
+}
+.admin-feedback {
+  padding: 16px 24px;
+  overflow-wrap: anywhere;
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.admin-feedback-popup {
+  width: 100%;
+  pointer-events: none;
+}
+.admin-feedback-toast {
+  pointer-events: auto;
+  width: min(540px, calc(100vw - 32px));
+  margin: 0 auto max(16px, env(safe-area-inset-bottom));
+  padding: 16px 20px;
+  max-height: min(45dvh, 360px);
+  overflow-y: auto;
+  border-radius: 14px;
+  background: var(--color-inverse-surface, var(--color-surface-container-high));
+  color: var(--color-inverse-on-surface, var(--color-text));
+}
+.admin-feedback p {
+  margin: 0;
+}
+.admin-error-link {
+  background: none;
+  border: 0;
+  color: inherit;
+  text-decoration: underline;
+  text-align: left;
+  cursor: pointer;
+}
+.admin-confirm {
+  display: grid;
+  gap: 12px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 24px;
+  border-radius: 24px;
+  background: var(--color-surface-container-high, var(--color-surface-container));
+  color: var(--color-text);
+}
+.admin-confirm h2,
+.admin-confirm p {
+  margin: 0;
+}
+.admin-confirm h2 {
+  font-size: 20px;
+}
+.admin-drawer {
+  width: min(300px, 85vw);
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
+  border-radius: 0 20px 20px 0;
+  background: var(--color-surface-container-high, var(--color-surface-container));
+  color: var(--color-text);
+}
+.admin-drawer > .var-button {
+  margin-bottom: 6px;
+}
+.admin-action-menu {
+  width: min(196px, calc(100vw - 16px));
+  padding: 6px;
+  max-height: calc(100dvh - 80px);
+  overflow-y: auto;
+  background: var(--color-surface-container-high, var(--color-surface-container));
+  color: var(--color-text);
+  border-radius: 12px;
+  box-shadow: none;
+}
+.admin-action-menu > .var-button {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  justify-content: flex-start;
+  border-radius: 8px;
+}
+.admin-action-menu .var-button__content {
+  gap: 12px;
+}
+.admin-link-icon-input {
+  display: grid;
+  align-self: start;
+  gap: 8px;
+  min-width: 0;
+}
+.admin-link-icon-input p {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.admin-link-icon-input a {
+  color: var(--color-primary);
+}
+.admin-icon-error {
+  color: var(--color-danger);
+}
+.management-page :is(button, a, summary):focus-visible,
+.admin-confirm :is(button, a):focus-visible,
+.admin-drawer button:focus-visible,
+.admin-action-menu button:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+.admin-item-toggle:hover,
+.admin-dashboard-link:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+.admin-item-toggle:active {
+  background: color-mix(in srgb, var(--color-text) 12%, transparent);
+}
+.auth-page {
+  display: grid;
+  place-items: center;
+}
+.auth-card {
+  display: grid;
+  gap: 24px;
+  width: min(100%, 400px);
+  padding: 32px;
+  border-radius: 24px;
+  border: 1px solid var(--color-outline-variant);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.auth-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.auth-heading .app-icon {
+  color: var(--color-primary);
+}
+.auth-field-icon {
+  margin-inline-end: 8px;
+  color: var(--color-muted);
+}
+.auth-submit-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.auth-heading h1 {
+  font-size: 22px;
+  margin: 0;
+}
+.password-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.password-field > .var-input {
+  flex: 1;
+  min-width: 0;
+}
+.password-field .var-button {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  margin-block: -10px;
+}
+.auth-card .var-form-details {
+  display: none;
+}
+.auth-card p {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 14px;
+}
+.auth-card > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: center;
+  color: var(--color-primary);
+  text-decoration: none;
+  padding: 8px;
+  border-radius: 12px;
+}
+@container (max-width: 560px) {
+  .admin-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .auth-page.management-page {
+    padding: 12px 12px max(16px, env(safe-area-inset-bottom));
+  }
+  .admin-toolbar {
+    min-height: 64px;
+    padding: 8px max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left));
+    gap: 4px;
+  }
+  .admin-toolbar-title h1,
+  .admin-toolbar-title small,
+  .admin-desktop-action.var-button,
+  .admin-toolbar .admin-dashboard-link,
+  .admin-action-text {
+    display: none;
+  }
+  .admin-current-section {
+    display: block;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .admin-dirty-dot {
+    display: block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    flex-shrink: 0;
+    margin-inline: 3px;
+  }
+  .admin-toolbar .admin-actions {
+    gap: 4px;
+  }
+  .admin-more-trigger.var-button {
+    display: inline-flex;
+  }
+  .admin-more-menu {
+    display: block;
+  }
+  .admin-save.var-button,
+  .admin-toolbar .admin-dashboard-link {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 14px;
+  }
+  .admin-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-nav {
+    display: none;
+  }
+  .admin-nav-list {
+    display: none;
+  }
+  .admin-section-trigger.var-button {
+    display: inline-flex;
+  }
+  .admin-form {
+    border-left: 0;
+    padding: 24px;
+    --management-scroll-space: 80px;
+  }
+}
+@media (max-width: 540px) {
+  .admin-form {
+    padding: 22px 16px;
+  }
+  .admin-form legend {
+    font-size: 18px;
+  }
+  .admin-item > header {
+    display: block;
+  }
+  .admin-item-toggle {
+    width: 100%;
+  }
+  .admin-item-actions {
+    justify-content: flex-end;
+  }
+  .admin-fields {
+    gap: 20px;
+  }
+  .auth-card {
+    padding: 28px 20px;
+  }
+  .auth-heading h1 {
+    font-size: 20px;
+  }
+}

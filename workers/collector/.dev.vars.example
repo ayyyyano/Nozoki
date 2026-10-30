@@ -1,0 +1,11 @@
+# Local-only template. Set in this Worker's private .dev.vars; never copy the admin password here.
+COLLECTOR_EPOCH="1"
+# Reuse the correct integration encryption key/version only when needed, via private Secrets.
+# INTEGRATION_ENCRYPTION_KEY=REPLACE_WITH_APPROVED_LOCAL_SECRET
+# INTEGRATION_KEY_VERSION=v1
+# INTEGRATION_DECRYPTION_KEYS='{}'
+# NOZOKI_PRIVATE_ROUTES='[]'
+# NOZOKI_PRIVATE_RELAY_TOKEN=REPLACE_WITH_INDEPENDENT_RELAY_SECRET
+# NOZOKI_PRIVATE_RELAY is a fixed VPC Service Fetcher binding, configured separately.
+# COLLECTOR_BINDING_REVISION=PIN_THE_APPROVED_VPC_SERVICE_ID_OR_DEPLOYMENT_REVISION
+# Increment COLLECTOR_EPOCH before changing routes, bindings, relay identity or credential-key versions.

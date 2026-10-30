@@ -1,0 +1,8 @@
+// Test-only local preview of the real Nuxt artifact without a DB binding. Never deploy.
+{
+  "name": "nozoki-binding-failure-test",
+  "main": "../../.output/server/index.mjs",
+  "compatibility_date": "2026-10-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "../../.output/public", "binding": "ASSETS" },
+}

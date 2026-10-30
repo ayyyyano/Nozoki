@@ -1,0 +1,27 @@
+# Local development template. Replace the placeholders in a private .dev.vars file.
+# Production ADMIN_PASSWORD must be configured as a Cloudflare Worker Secret.
+ADMIN_EMAIL="admin@example.com"
+ADMIN_PASSWORD="REPLACE_WITH_A_LOCAL_DEVELOPMENT_PASSWORD"
+AUTH_VERSION="1"
+# Independent random 32-byte base64url Secret for limits and session/CSRF signing.
+AUTH_RATE_LIMIT_SECRET="GENERATE_A_RANDOM_32_BYTE_BASE64URL_KEY"
+# Required trusted browser origin. HTTP exception is local/loopback only.
+AUTH_ORIGIN="http://127.0.0.1:3000"
+AUTH_ALLOW_LOCAL_HTTP="1"
+# Leave unset behind proxies; enable only for a direct Cloudflare edge Worker.
+# AUTH_TRUST_CF_IP="1"
+
+# Optional for integration credential replacement. Independent 32-byte base64url Secret.
+# Leave absent to safely disable replacement; keep/clear do not require encryption.
+# INTEGRATION_ENCRYPTION_KEY=REPLACE_WITH_RANDOM_32_BYTE_BASE64URL
+# INTEGRATION_KEY_VERSION=v1
+# Optional Secret JSON map of retained decryption-only versions. Keep old keys when rotating.
+# INTEGRATION_DECRYPTION_KEYS='{"v1":"REPLACE_WITH_OLD_32_BYTE_BASE64URL_KEY"}'
+# Never put this map or any actual key into ordinary Wrangler vars.
+
+# Optional private VPC Service relay; absent settings deny self-hosted targets.
+# NOZOKI_PRIVATE_RELAY_TOKEN=REPLACE_WITH_INDEPENDENT_32_BYTE_BASE64URL_SECRET
+# NOZOKI_PRIVATE_ROUTES='[]'
+# NOZOKI_PRIVATE_RELAY is a VPC Service binding, not an ordinary vars string.
+# Configure the fixed relay routes and VPC Service binding before enabling private sources.
+# NOZOKI_RELAY_ID_KEY belongs only on the local relay host, never in browser config.

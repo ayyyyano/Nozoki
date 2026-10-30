@@ -1,0 +1,33 @@
+/* Available before Nuxt hydration; no JS means no overlay DOM. */
+.dx-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  pointer-events: auto;
+  contain: strict;
+}
+.dx-geometry {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.dx-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #7861d4;
+  opacity: 1;
+  pointer-events: none;
+}
+.dx-transition[data-phase='leaving'] .dx-veil {
+  /* The original expanding artwork reveals the page; no second fade or delayed curtain. */
+  visibility: hidden;
+}
+.dx-transition[data-phase='boot'] .dx-geometry {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dx-transition {
+    display: none;
+  }
+}
