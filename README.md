@@ -116,10 +116,10 @@ Nuxt 构建会清理 `.output`，需要在 `pnpm build` 之后构建 Collector�
 9. 执行 git remote -v 确认本地远端指向我的仓库；没有远端时向我索取仓库地址并执行 git remote add origin。把根目录 wrangler.jsonc 的全部修改提交并推送到生产分支（默认 master，仓库使用其他默认分支时按实际填写）。随后引导我在 Cloudflare 控制台完成一次性连接：打开 nozoki-dashboard → Settings → Builds → Connect，按提示完成 GitHub 授权并选择该仓库，生产分支与推送分支保持一致，构建命令填 pnpm build，部署命令填 pnpm exec wrangler deploy --config wrangler.jsonc（与下一节第 4 步一致），保存后等待首次构建完成并向我报告结果。此后更新代码只需提交推送，Worker 会自动构建部署。
 
 数据凭据加密（我明确要求时再执行）：
-10. 运行 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" 生成一份独立密钥，用 pnpm exec wrangler secret put 在 nozoki-dashboard 上设为 INTEGRATION_ENCRYPTION_KEY，并在根目录 wrangler.jsonc 的 vars 中加入 INTEGRATION_KEY_VERSION=v1，随后提交推送修改（第 9 步未完成时改为执行 deploy 命令）。密钥同样只通过交互输入或 stdin 传入，并提醒我保存在密码管理器中——遗失后将无法解密已保存的凭据。
+10. 运行 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" 生成一份独立密钥，用 pnpm exec wrangler secret put 在 nozoki-dashboard 上设为 INTEGRATION_ENCRYPTION_KEY，并在根目录 wrangler.jsonc 的 vars 中加入 INTEGRATION_KEY_VERSION=v1，随后提交推送修改（第 9 步未完成时改为执行 deploy 命令）。密钥同样只通过交互输入或 stdin 传入，并提醒我保存在密码管理器中——遗失后将无法解密已保存的凭据。若我未留存该密钥且尚无已加密凭据，直接重新生成一份并在两个 Worker 上设置为相同值即可。
 
 定时采集（我明确要求时再执行）：
-11. 按下一节第 6 步修改 workers/collector/wrangler.jsonc：填入同一个 database_id，删除 remote: false，在顶层 vars 中加入 COLLECTOR_EPOCH=1 和 INTEGRATION_KEY_VERSION=v1。依次执行 pnpm collector:build 和 pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc，再用第 10 步的同一密钥在 nozoki-collector 上设置 INTEGRATION_ENCRYPTION_KEY；第 10 步未执行时，先生成一份并在 nozoki-dashboard 和 nozoki-collector 上设置相同的值。
+11. 按下一节第 6 步修改 workers/collector/wrangler.jsonc：填入同一个 database_id，删除 remote: false，在顶层 vars 中加入 COLLECTOR_EPOCH=1 和 INTEGRATION_KEY_VERSION=v1。依次执行 pnpm collector:build 和 pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc，再用第 10 步的同一密钥在 nozoki-collector 上设置 INTEGRATION_ENCRYPTION_KEY；第 10 步未执行或密钥未留存时，重新生成一份并在 nozoki-dashboard 和 nozoki-collector 上设置相同的值。部署后等待下一个五分钟边界，执行 pnpm exec wrangler d1 execute DB --remote --command "SELECT COUNT(*) FROM collector_environment" --config wrangler.jsonc 确认出现一行记录，即验证 cron 已生效；尚未配置数据源时采集为空跑属正常现象。
 
 安全要求：密码和密钥只进入 Worker Secrets 与被 Git 忽略的本地文件，不要提交到仓库，不要在输出或日志中回显。
 ```
