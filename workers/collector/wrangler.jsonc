@@ -9,10 +9,13 @@
     {
       "binding": "DB",
       "database_name": "nozoki-db",
-      "database_id": "00000000-0000-0000-0000-000000000002",
-      "remote": false,
+      "database_id": "baa4ee9c-248b-41f5-a912-06b8824e551b",
       "migrations_dir": "../../migrations",
     },
   ],
+  "vars": {
+    "COLLECTOR_EPOCH": "1",
+    "INTEGRATION_KEY_VERSION": "v1",
+  },
   "dev": { "ip": "127.0.0.1", "port": 8788 },
 }
