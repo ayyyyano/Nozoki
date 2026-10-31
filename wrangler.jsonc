@@ -23,5 +23,6 @@
     "AUTH_VERSION": "1",
     "AUTH_ALLOW_LOCAL_HTTP": "0",
     "AUTH_ORIGIN": "https://nozoki.nekro.top",
+    "INTEGRATION_KEY_VERSION": "v1",
   },
 }
