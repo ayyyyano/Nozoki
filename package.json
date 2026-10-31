@@ -20,7 +20,7 @@
     "dev": "node scripts/dev-local.mjs",
     "predev:local": "pnpm dx:generate",
     "dev:local": "node scripts/dev-local.mjs --local-auth",
-    "build": "nuxt build",
+    "build": "nuxt prepare --envName=development && nuxt build",
     "prebuild:node": "node scripts/build-prepaint.mjs",
     "build:node": "node scripts/build-node.mjs",
     "start:node": "node --env-file-if-exists=.env .output-node/start.mjs",
