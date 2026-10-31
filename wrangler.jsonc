@@ -22,6 +22,6 @@
     "ADMIN_EMAIL": "lovestu44@gmail.com",
     "AUTH_VERSION": "1",
     "AUTH_ALLOW_LOCAL_HTTP": "0",
-    "AUTH_ORIGIN": "https://nozoki-dashboard.ayano.workers.dev",
+    "AUTH_ORIGIN": "https://nozoki.nekro.top",
   },
 }

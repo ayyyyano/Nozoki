@@ -277,6 +277,7 @@ Push code to the production branch to rebuild and deploy connected Workers. If a
 | Unsupported Node.js or pnpm version              | Version build variables and the `pnpm build` command                                  |
 | Dashboard API returns 503 or storage unavailable | Correct Database ID, completed cloud migrations, and `DB` bound to `nozoki-db`        |
 | Login temporarily unavailable                    | `AUTH_ORIGIN` matches the address bar, and both login secrets are in runtime settings |
+| Cannot log in after binding a custom domain      | `AUTH_ORIGIN` updated to the custom domain and redeployed; before that, any password is rejected when visiting through the custom domain instead of the `workers.dev` address |
 | Incorrect email or password                      | Email matches `ADMIN_EMAIL`; password matches the configured Secret                   |
 | Source unconfigured or target not approved       | Source settings and fixed relay configuration                                         |
 
