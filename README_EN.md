@@ -112,8 +112,11 @@ Build and deploy:
 7. Run node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" to generate one secret and set it as AUTH_RATE_LIMIT_SECRET with pnpm exec wrangler secret put. Ask me for the administrator password. Supply both values through interactive input or stdin; never write them to files, command-line arguments or your reply.
 8. Verify the deployment: request the address from step 5 and confirm the dashboard responds, sign in at /admin with the administrator email and password, change the site name, save and refresh to confirm the change persists. Report the result and anything unfinished.
 
+Credential encryption (only when I ask for it):
+9. Run node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" to generate an independent secret and set it as INTEGRATION_ENCRYPTION_KEY on nozoki-dashboard with pnpm exec wrangler secret put. Add INTEGRATION_KEY_VERSION=v1 to the vars of the root wrangler.jsonc and run the deploy command again. Supply the secret through interactive input or stdin only, and remind me to store it in a password manager; losing it prevents decryption of saved credentials.
+
 Scheduled collection (only when I ask for it):
-9. Edit workers/collector/wrangler.jsonc as described in step 6 of the next section: fill in the same database_id, remove "remote": false, and add top-level vars COLLECTOR_EPOCH=1 and INTEGRATION_KEY_VERSION=v1. Run pnpm collector:build and pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc. Then generate one more independent secret and set it as the same INTEGRATION_ENCRYPTION_KEY on nozoki-dashboard and nozoki-collector with wrangler secret put.
+10. Edit workers/collector/wrangler.jsonc as described in step 6 of the next section: fill in the same database_id, remove "remote": false, and add top-level vars COLLECTOR_EPOCH=1 and INTEGRATION_KEY_VERSION=v1. Run pnpm collector:build and pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc. Then set the same INTEGRATION_ENCRYPTION_KEY from step 9 on nozoki-collector with wrangler secret put; if step 9 was skipped, generate one first and set the same value on both nozoki-dashboard and nozoki-collector.
 
 Security: passwords and secrets belong only in Worker Secrets and Git-ignored local files. Never commit them, and never echo them into logs or your reply.
 ```
@@ -247,7 +250,7 @@ Open the website and click the account icon at the top right. Sign in with `ADMI
 
 ### 6. Set source credentials and automatic collection
 
-To save API keys in the admin interface, run the random-secret command again to generate an independent encryption key. Add it as the Dashboard's runtime Secret `INTEGRATION_ENCRYPTION_KEY`. Add `"INTEGRATION_KEY_VERSION": "v1"` to the root Wrangler `vars` and push the change. Save this key in a password manager; losing it prevents decryption of existing credentials.
+To save API keys in the admin interface, run the random-secret command from step 5 again to generate an independent encryption key. Add it as the Dashboard's runtime Secret `INTEGRATION_ENCRYPTION_KEY`. Add `"INTEGRATION_KEY_VERSION": "v1"` to the root Wrangler `vars` and push the change. Save this key in a password manager; losing it prevents decryption of existing credentials.
 
 The Collector is a second Worker that collects data and removes expired sessions and old logs. When ready, edit [workers/collector/wrangler.jsonc](workers/collector/wrangler.jsonc):
 

@@ -32,16 +32,6 @@ withDefaults(
   />
 </template>
 <style scoped>
-.admin-text {
-  position: relative;
-}
-.admin-text :deep(.var-form-details) {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  width: 100%;
-  pointer-events: none;
-}
 .admin-text:not(.admin-text--count) :deep(.var-form-details) {
   display: none;
 }

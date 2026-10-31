@@ -7,6 +7,7 @@ import {
   type ConfigWrite,
 } from '../../shared/contracts/config'
 import { editableConfig, canonical } from '../../shared/contracts/admin'
+import { defaultProtocol } from '../../shared/contracts/adapter'
 import { COLOR_PRESETS, parseSourceColor } from '../../shared/domain/color-input'
 import type { Appearance } from '../../shared/contracts/appearance'
 const { data: session, refresh: refreshSession } = await useFetch<SessionDto>('/api/auth/session', {
@@ -257,7 +258,7 @@ function addSource() {
   draft.value!.integrations.push({
     id,
     provider: 'sleepy',
-    protocolVersion: 'unverified',
+    protocolVersion: defaultProtocol('sleepy'),
     baseUrl: null,
     enabled: false,
     refreshInterval: 300,

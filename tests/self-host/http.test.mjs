@@ -7,9 +7,10 @@ import { resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID, randomBytes } from 'node:crypto'
 import { SqliteDatabase } from '../../platform/node/sqlite.mjs'
-import { readConfig } from '../../server/services/config.ts'
+import { readConfig, saveConfig } from '../../server/services/config.ts'
 import { editableConfig, CONFIG_BODY_LIMIT } from '../../shared/contracts/admin.ts'
 import { chromium } from 'playwright'
+import { expect } from 'playwright/test'
 import { existsSync } from 'node:fs'
 
 async function portNumber() {
@@ -284,6 +285,39 @@ test(
     await t.test(
       'real browser restores admin, saves a draft and logs out on Node SSR',
       async () => {
+        const db = new SqliteDatabase(env.NOZOKI_SQLITE_PATH)
+        try {
+          const current = await readConfig(db),
+            config = editableConfig(current)
+          config.integrations = [
+            {
+              id: 'saved-accounts',
+              provider: 'cliproxy-bridge',
+              protocolVersion: 'cliproxy-v8-accounts',
+            },
+            { id: 'saved-legacy', provider: 'sleepy', protocolVersion: 'legacy-custom-version' },
+          ].map((s) => ({
+            ...s,
+            baseUrl: null,
+            enabled: false,
+            refreshInterval: 300,
+            fieldMappings: {},
+            capabilities: {},
+            credential: { operation: 'keep' },
+          }))
+          assert.equal(
+            (
+              await saveConfig(
+                db,
+                { expectedVersion: current.site.configVersion, config },
+                { actor: { kind: 'system' } },
+              )
+            ).success,
+            true,
+          )
+        } finally {
+          db.close()
+        }
         const edge = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
         browser = await chromium.launch({
           headless: true,
@@ -298,6 +332,111 @@ test(
         await page.getByLabel('密码', { exact: true }).fill(env.ADMIN_PASSWORD)
         await page.getByRole('button', { name: '登录', exact: true }).click()
         await page.waitForURL('**/admin')
+        await page.getByRole('button', { name: '数据源', exact: true }).click()
+        const item = (id) =>
+          page.locator('.admin-editor-item').filter({ has: page.getByText(id, { exact: true }) })
+        const accounts = item('saved-accounts'),
+          legacy = item('saved-legacy')
+        await accounts.locator('.admin-item-toggle').click()
+        assert.equal(
+          await accounts
+            .getByLabel('协议版本', { exact: true })
+            .locator('.var-select__label')
+            .textContent(),
+          'cliproxy-v8-accounts',
+        )
+        await legacy.locator('.admin-item-toggle').click()
+        assert.equal(
+          await legacy
+            .getByLabel('协议版本', { exact: true })
+            .locator('.var-select__label')
+            .textContent(),
+          '未支持：legacy-custom-version',
+        )
+        await page.getByRole('button', { name: '添加来源', exact: true }).click()
+        const added = page
+          .locator('fieldset')
+          .filter({ has: page.locator('legend').getByText('数据源', { exact: true }) })
+          .locator('.admin-editor-item')
+          .last()
+        const protocol = added.getByLabel('协议版本', { exact: true }).locator('.var-select__label')
+        await expect(protocol).toHaveText('sleepy-v5-status')
+        const urlField = added.locator('input[aria-label="服务根 HTTPS 地址"]'),
+          refreshField = added.locator('input[aria-label="来源刷新间隔（秒）"]'),
+          urlControl = added.locator('.admin-text').filter({
+            has: page.getByLabel('服务根 HTTPS 地址', { exact: true }),
+          }),
+          details = urlControl.locator('.var-form-details'),
+          originalUrl = await urlField.inputValue()
+        const checkCounter = async (width, scenario) => {
+          await expect(details).toBeVisible()
+          const counter = await details.boundingBox()
+          const next = await refreshField.evaluate((el) =>
+            el
+              .closest('.var-input')
+              .querySelector('.var-field-decorator__line')
+              .getBoundingClientRect()
+              .toJSON(),
+          )
+          const control = await urlControl.boundingBox()
+          assert.ok(
+            counter.y + counter.height <= control.y + control.height + 1,
+            `${width} ${scenario}: counter must fit inside its input's layout box`,
+          )
+          assert.ok(
+            counter.y + counter.height + 4 <= next.top,
+            `${width} ${scenario}: counter overlaps next field (${counter.y + counter.height} vs ${next.top})`,
+          )
+          assert.equal(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            true,
+          )
+        }
+        for (const width of [1440, 768, 390, 320]) {
+          await page.setViewportSize({ width, height: 900 })
+          await urlField.fill('')
+          await checkCounter(width, 'focused empty field')
+          await refreshField.focus()
+          await expect(details).toBeHidden()
+          await urlField.fill('https://example.invalid/' + 'x'.repeat(1850))
+          await refreshField.focus()
+          await checkCounter(width, 'near-limit blurred field')
+        }
+        await urlField.fill(originalUrl)
+        await refreshField.focus()
+        await page.setViewportSize({ width: 1280, height: 720 })
+        const select = async (label, value) => {
+          await added.getByLabel(label, { exact: true }).click()
+          await page
+            .locator('.var-menu__menu:visible .var-option')
+            .filter({ hasText: new RegExp('^' + value + '$') })
+            .click()
+        }
+        for (const [provider, expected] of [
+          ['deepseek', 'deepseek-balance-v1'],
+          ['uptime-kuma', 'kuma-public-2.0.2'],
+          ['uptimeflare', 'uptimeflare-data-2024'],
+          ['cliproxy-bridge', 'cliproxy-v8-toggle'],
+        ]) {
+          await select('Provider', provider)
+          await expect(protocol).toHaveText(expected)
+        }
+        await select('协议版本', 'cliproxy-v8-accounts')
+        await expect(protocol).toHaveText('cliproxy-v8-accounts')
+        await select('Provider', 'cliproxy-bridge')
+        await expect(protocol).toHaveText('cliproxy-v8-accounts')
+        await select('Provider', 'quotes-custom')
+        await expect(protocol).toHaveText('未支持：unverified')
+        await select('Provider', 'sleepy')
+        await expect(protocol).toHaveText('sleepy-v5-status')
+        assert.equal(
+          await added
+            .getByLabel('凭据操作', { exact: true })
+            .locator('.var-select__label')
+            .textContent(),
+          'keep · 保留',
+        )
+        await page.getByRole('button', { name: '站点与外观', exact: true }).click()
         await page.getByLabel('站点名称', { exact: true }).fill('Browser self-host save')
         await page.getByRole('button', { name: '保存配置', exact: true }).click()
         await page.getByText('已保存并确认持久化', { exact: true }).waitFor()
@@ -305,6 +444,20 @@ test(
         assert.equal(
           await page.getByLabel('站点名称', { exact: true }).inputValue(),
           'Browser self-host save',
+        )
+        const persisted = (await (await context.request.get(origin + '/api/admin/config')).json())
+          .integrations
+        assert.equal(
+          persisted.find((i) => i.id === 'saved-accounts').protocolVersion,
+          'cliproxy-v8-accounts',
+        )
+        assert.equal(
+          persisted.find((i) => i.id === 'saved-legacy').protocolVersion,
+          'legacy-custom-version',
+        )
+        assert.equal(
+          persisted.find((i) => i.id.startsWith('source-')).protocolVersion,
+          'sleepy-v5-status',
         )
         await page.getByRole('button', { name: '注销', exact: true }).click()
         await page.waitForURL(origin + '/login')
