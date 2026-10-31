@@ -93,10 +93,10 @@ Nuxt 构建会清理 `.output`，需要在 `pnpm build` 之后构建 Collector�
 
 ## 使用 Agent 工具快速部署
 
-把下面整段提示词发给能在项目目录执行命令的 AI Agent（如 Codex CLI、Claude Code），由它用 wrangler 完成部署，无需在 Cloudflare 控制台手动操作。`wrangler login` 需要在浏览器完成一次授权，其余步骤都在终端进行。本流程不依赖 GitHub；之后想改为推送自动构建，按下一节的第 3～4 步把配置推上 GitHub 并在控制台连接仓库即可。愿意手动操作时，直接跳到下一节。
+把下面整段提示词发给能在项目目录执行命令的 AI Agent（如 Codex CLI、Claude Code），由它用 wrangler 完成首次部署，并把 Worker 绑定到你的 GitHub 仓库，此后推送代码即自动构建部署。`wrangler login` 需要在浏览器完成一次授权；绑定 Git 仓库需要你在 Cloudflare 控制台做一次连接确认（含 GitHub App 授权），其余步骤都在终端进行。愿意手动操作时，直接跳到下一节。
 
 ```text
-请把当前目录的 Nozoki 看板部署到 Cloudflare Workers。全程使用命令行，不要打开 Cloudflare 控制台；创建云端资源前先向我确认。开始前先阅读 README.md 的「管理员配置」和「通过 GitHub 部署到 Cloudflare」两节。本流程不需要 git 提交或推送。
+请把当前目录的 Nozoki 看板部署到 Cloudflare Workers，并默认把 Worker 绑定到我的 GitHub 仓库，此后通过推送自动构建。除最后的 Git 绑定一步需要我在控制台确认外，其余全程使用命令行，不要打开 Cloudflare 控制台；创建云端资源前先向我确认。开始前先阅读 README.md 的「管理员配置」和「通过 GitHub 部署到 Cloudflare」两节。本流程需要把部署配置提交推送到我的仓库。
 
 准备与检查：
 1. 确认 Node.js 24 和 Git 可用，缺少 pnpm 时执行 npm install --global pnpm@12.15.0，然后运行 pnpm install --frozen-lockfile。
@@ -112,11 +112,14 @@ Nuxt 构建会清理 `.output`，需要在 `pnpm build` 之后构建 Collector�
 7. 运行 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" 生成一份密钥，用 pnpm exec wrangler secret put 设为 AUTH_RATE_LIMIT_SECRET。管理员密码向我索取。两个值都通过交互输入或 stdin 传入，不要写入文件、命令行参数或对话输出。
 8. 验证部署：请求第 5 步的地址确认看板返回正常，用管理员邮箱和密码登录 /admin，修改站点名称保存并刷新确认生效。完成后向我报告结果和未完成事项。
 
+绑定 Git 自动构建：
+9. 执行 git remote -v 确认本地远端指向我的仓库；没有远端时向我索取仓库地址并执行 git remote add origin。把根目录 wrangler.jsonc 的全部修改提交并推送到生产分支（默认 master，仓库使用其他默认分支时按实际填写）。随后引导我在 Cloudflare 控制台完成一次性连接：打开 nozoki-dashboard → Settings → Builds → Connect，按提示完成 GitHub 授权并选择该仓库，生产分支与推送分支保持一致，构建命令填 pnpm build，部署命令填 pnpm exec wrangler deploy --config wrangler.jsonc（与下一节第 4 步一致），保存后等待首次构建完成并向我报告结果。此后更新代码只需提交推送，Worker 会自动构建部署。
+
 数据凭据加密（我明确要求时再执行）：
-9. 运行 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" 生成一份独立密钥，用 pnpm exec wrangler secret put 在 nozoki-dashboard 上设为 INTEGRATION_ENCRYPTION_KEY，并在根目录 wrangler.jsonc 的 vars 中加入 INTEGRATION_KEY_VERSION=v1 后再次执行 deploy 命令。密钥同样只通过交互输入或 stdin 传入，并提醒我保存在密码管理器中——遗失后将无法解密已保存的凭据。
+10. 运行 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" 生成一份独立密钥，用 pnpm exec wrangler secret put 在 nozoki-dashboard 上设为 INTEGRATION_ENCRYPTION_KEY，并在根目录 wrangler.jsonc 的 vars 中加入 INTEGRATION_KEY_VERSION=v1，随后提交推送修改（第 9 步未完成时改为执行 deploy 命令）。密钥同样只通过交互输入或 stdin 传入，并提醒我保存在密码管理器中——遗失后将无法解密已保存的凭据。
 
 定时采集（我明确要求时再执行）：
-10. 按下一节第 6 步修改 workers/collector/wrangler.jsonc：填入同一个 database_id，删除 remote: false，在顶层 vars 中加入 COLLECTOR_EPOCH=1 和 INTEGRATION_KEY_VERSION=v1。依次执行 pnpm collector:build 和 pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc，再用第 9 步的同一密钥在 nozoki-collector 上设置 INTEGRATION_ENCRYPTION_KEY；第 9 步未执行时，先生成一份并在 nozoki-dashboard 和 nozoki-collector 上设置相同的值。
+11. 按下一节第 6 步修改 workers/collector/wrangler.jsonc：填入同一个 database_id，删除 remote: false，在顶层 vars 中加入 COLLECTOR_EPOCH=1 和 INTEGRATION_KEY_VERSION=v1。依次执行 pnpm collector:build 和 pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc，再用第 10 步的同一密钥在 nozoki-collector 上设置 INTEGRATION_ENCRYPTION_KEY；第 10 步未执行时，先生成一份并在 nozoki-dashboard 和 nozoki-collector 上设置相同的值。
 
 安全要求：密码和密钥只进入 Worker Secrets 与被 Git 忽略的本地文件，不要提交到仓库，不要在输出或日志中回显。
 ```
