@@ -9,6 +9,9 @@ export const ADAPTER_PROTOCOLS = {
   uptimeflare: ['uptimeflare-data-2024'],
   'quotes-custom': [],
 } as const
+export function defaultProtocol(provider: keyof typeof ADAPTER_PROTOCOLS): string {
+  return ADAPTER_PROTOCOLS[provider][0] ?? 'unverified'
+}
 export const AdapterCodeSchema = z.enum([
   'NOT_CONFIGURED',
   'SOURCE_DISABLED',

@@ -195,10 +195,13 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px 24px;
-  align-items: center;
+  align-items: start;
 }
 .admin-fields > * {
   min-width: 0;
+}
+.admin-fields > label {
+  align-self: center;
 }
 .admin-form label {
   display: flex;

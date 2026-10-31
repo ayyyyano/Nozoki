@@ -112,8 +112,11 @@ Nuxt 构建会清理 `.output`，需要在 `pnpm build` 之后构建 Collector�
 7. 运行 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" 生成一份密钥，用 pnpm exec wrangler secret put 设为 AUTH_RATE_LIMIT_SECRET。管理员密码向我索取。两个值都通过交互输入或 stdin 传入，不要写入文件、命令行参数或对话输出。
 8. 验证部署：请求第 5 步的地址确认看板返回正常，用管理员邮箱和密码登录 /admin，修改站点名称保存并刷新确认生效。完成后向我报告结果和未完成事项。
 
+数据凭据加密（我明确要求时再执行）：
+9. 运行 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" 生成一份独立密钥，用 pnpm exec wrangler secret put 在 nozoki-dashboard 上设为 INTEGRATION_ENCRYPTION_KEY，并在根目录 wrangler.jsonc 的 vars 中加入 INTEGRATION_KEY_VERSION=v1 后再次执行 deploy 命令。密钥同样只通过交互输入或 stdin 传入，并提醒我保存在密码管理器中——遗失后将无法解密已保存的凭据。
+
 定时采集（我明确要求时再执行）：
-9. 按下一节第 6 步修改 workers/collector/wrangler.jsonc：填入同一个 database_id，删除 remote: false，在顶层 vars 中加入 COLLECTOR_EPOCH=1 和 INTEGRATION_KEY_VERSION=v1。依次执行 pnpm collector:build 和 pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc，再生成一份新的独立密钥，在 nozoki-dashboard 和 nozoki-collector 上用 wrangler secret put 设置相同的 INTEGRATION_ENCRYPTION_KEY。
+10. 按下一节第 6 步修改 workers/collector/wrangler.jsonc：填入同一个 database_id，删除 remote: false，在顶层 vars 中加入 COLLECTOR_EPOCH=1 和 INTEGRATION_KEY_VERSION=v1。依次执行 pnpm collector:build 和 pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc，再用第 9 步的同一密钥在 nozoki-collector 上设置 INTEGRATION_ENCRYPTION_KEY；第 9 步未执行时，先生成一份并在 nozoki-dashboard 和 nozoki-collector 上设置相同的值。
 
 安全要求：密码和密钥只进入 Worker Secrets 与被 Git 忽略的本地文件，不要提交到仓库，不要在输出或日志中回显。
 ```
@@ -247,7 +250,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 
 ### 6. 配置数据凭据与自动采集
 
-需要在后台保存 API Key 时，再运行一次上面的随机密钥命令，生成独立的加密密钥。在 `nozoki-dashboard` 的运行时 Secrets 中添加 `INTEGRATION_ENCRYPTION_KEY`，并在根目录 `wrangler.jsonc` 的 `vars` 中添加 `"INTEGRATION_KEY_VERSION": "v1"`，随后推送修改。将这个密钥保存在密码管理器中，遗失后将无法解密已保存的凭据。
+需要在后台保存 API Key 时，再运行一次第 5 步的随机密钥命令，生成独立的加密密钥。在 `nozoki-dashboard` 的运行时 Secrets 中添加 `INTEGRATION_ENCRYPTION_KEY`，并在根目录 `wrangler.jsonc` 的 `vars` 中添加 `"INTEGRATION_KEY_VERSION": "v1"`，随后推送修改。将这个密钥保存在密码管理器中，遗失后将无法解密已保存的凭据。
 
 Collector 是负责定时采集的第二个 Worker，也负责清理过期会话和旧日志。准备启用时，打开 [workers/collector/wrangler.jsonc](workers/collector/wrangler.jsonc)：
 

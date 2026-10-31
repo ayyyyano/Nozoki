@@ -14,6 +14,14 @@ import {
 } from '../../shared/domain/appearance-overrides.ts'
 import { DEFAULT_APPEARANCE } from '../../shared/contracts/appearance.ts'
 import { fieldPointer, parseFieldPath } from '../../shared/contracts/field-paths.ts'
+import { defaultProtocol } from '../../shared/contracts/adapter.ts'
+test('new or changed providers select a registered protocol without inventing unsupported capabilities', () => {
+  assert.equal(defaultProtocol('sleepy'), 'sleepy-v5-status')
+  assert.equal(defaultProtocol('deepseek'), 'deepseek-balance-v1')
+  assert.equal(defaultProtocol('cliproxy-bridge'), 'cliproxy-v8-toggle')
+  assert.equal(defaultProtocol('deepseek-spend'), 'unverified')
+  assert.equal(defaultProtocol('quotes-custom'), 'unverified')
+})
 test('request keys are UUIDv4; canonical comparison ignores keys and declared collection order', () => {
   assert.ok(validRequestKey(crypto.randomUUID()))
   assert.ok(!validRequestKey('test'))

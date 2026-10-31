@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { ADAPTER_PROTOCOLS, type ProbeResult } from '../../../shared/contracts/adapter'
+import {
+  ADAPTER_PROTOCOLS,
+  defaultProtocol,
+  type ProbeResult,
+} from '../../../shared/contracts/adapter'
 import { canonical } from '../../../shared/contracts/admin'
 import type { CsrfDto } from '../../../shared/contracts/auth'
 import type { ConfigWrite, IntegrationSettings } from '../../../shared/contracts/config'
@@ -10,6 +14,14 @@ const props = defineProps<{
   saved?: IntegrationSettings
 }>()
 const versions = computed<readonly string[]>(() => ADAPTER_PROTOCOLS[model.value.provider])
+const provider = computed({
+  get: () => model.value.provider,
+  set: (value: Integration['provider']) => {
+    if (value === model.value.provider) return
+    model.value.provider = value
+    model.value.protocolVersion = defaultProtocol(value)
+  },
+})
 const testing = ref(false),
   testResult = ref<ProbeResult | null>(null),
   testMessage = ref('')
@@ -87,11 +99,7 @@ function operation(value: unknown) {
 <template>
   <div class="admin-fields">
     <AdminText v-model="model.id" label="来源 ID" :max="64" />
-    <VarSelect
-      v-model="model.provider"
-      placeholder="Provider"
-      aria-label="Provider"
-      variant="outlined"
+    <VarSelect v-model="provider" placeholder="Provider" aria-label="Provider" variant="outlined"
       ><VarOption v-for="p in providers" :key="p" :label="p" :value="p"
     /></VarSelect>
     <AdminText v-model="nullableUrl" label="服务根 HTTPS 地址" />
@@ -102,6 +110,7 @@ function operation(value: unknown) {
       :max="64"
     />
     <VarSelect
+      :key="model.provider"
       v-model="model.protocolVersion"
       placeholder="协议版本"
       aria-label="协议版本"
