@@ -157,7 +157,7 @@ function operation(value: unknown) {
     }}</span>
   </div>
   <p class="admin-note">
-    私有来源经预先配置的 VPC Service 只读中继读取；路由须与已保存配置一致，不会直接请求自定义域名。
+    公网直连须在部署环境中批准来源、协议和完整服务根地址；私有来源使用只读 Relay。
   </p>
   <div v-if="testResult" role="status" class="admin-note">
     <p>
@@ -165,7 +165,7 @@ function operation(value: unknown) {
       {{ testResult.protocolMatched ? '协议匹配' : '协议未确认' }}
     </p>
     <p v-if="testResult.code === 'TARGET_NOT_APPROVED'">
-      私有路由未匹配：请核对 VPC 服务绑定和部署侧来源配置。
+      目标未批准：请核对部署侧公网路由，或私有来源的 Relay 路由与绑定。
     </p>
     <p>
       已验证能力：{{

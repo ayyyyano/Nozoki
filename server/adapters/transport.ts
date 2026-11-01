@@ -1,14 +1,27 @@
 import type { IntegrationSettings } from '../../shared/contracts/config.ts'
 import { normalizeServiceTarget } from '../services/service-target.ts'
 import { AdapterError, type ReadTransport } from './types.ts'
+import { publicTarget } from './public-targets.ts'
+import {
+  yahooChartEndpoint,
+  isYahooChartEndpoint,
+  type QuoteSymbolInput,
+} from '../../shared/quotes/yahoo-symbol.ts'
 export const RESPONSE_LIMIT = 131072
 export interface TransportOptions {
+  quoteSymbols?: readonly QuoteSymbolInput[]
+  environment?: Record<string, unknown>
+  /** Trusted runtime injection for offline tests or a platform HTTP implementation. */
+  fetch?: typeof fetch
   signal?: AbortSignal
   timeoutMs?: number
   onRead?: (bytes: number) => void
   onRequest?: () => void
 }
-export function endpointCatalog(source: IntegrationSettings): readonly string[] {
+export function endpointCatalog(
+  source: IntegrationSettings,
+  quoteSymbols: readonly QuoteSymbolInput[] = [],
+): readonly string[] {
   switch (source.provider) {
     case 'deepseek':
       return ['user/balance']
@@ -24,6 +37,15 @@ export function endpointCatalog(source: IntegrationSettings): readonly string[] 
       if (!slug || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(slug))
         throw new AdapterError('NOT_CONFIGURED')
       return [`api/status-page/${slug}`, `api/status-page/heartbeat/${slug}`]
+    }
+    case 'quotes-custom': {
+      if (source.protocolVersion !== 'yahoo-chart-v8') return []
+      if (quoteSymbols.length > 20) throw new AdapterError('REQUEST_BUDGET')
+      try {
+        return [...new Set(quoteSymbols.map(yahooChartEndpoint))]
+      } catch {
+        throw new AdapterError('TARGET_NOT_APPROVED')
+      }
     }
     default:
       return []
@@ -44,7 +66,7 @@ export function serviceEndpoint(base: string, endpoint: string): string {
   } catch {
     throw new AdapterError('TARGET_NOT_APPROVED')
   }
-  if (!/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(endpoint))
+  if (!/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(endpoint) && !isYahooChartEndpoint(endpoint))
     throw new AdapterError('TARGET_NOT_APPROVED')
   const resolved = new URL(endpoint, target),
     root = new URL(target)
@@ -52,12 +74,16 @@ export function serviceEndpoint(base: string, endpoint: string): string {
     throw new AdapterError('TARGET_NOT_APPROVED')
   return resolved.href
 }
-/** The only production direct destination. Custom DNS is never checked-then-fetched. */
-export function assertProductionTarget(source: IntegrationSettings) {
+/** Resolve a built-in service or an exact deployment-owned public route. */
+export function assertProductionTarget(
+  source: IntegrationSettings,
+  env: Record<string, unknown> = {},
+) {
   if (!source.baseUrl) throw new AdapterError('NOT_CONFIGURED')
-  const sample = serviceEndpoint(source.baseUrl, 'probe')
-  if (source.provider !== 'deepseek' || sample !== 'https://api.deepseek.com/probe')
-    throw new AdapterError('TARGET_NOT_APPROVED')
+  serviceEndpoint(source.baseUrl, 'probe')
+  const target = publicTarget(source, env)
+  if (!target) throw new AdapterError('TARGET_NOT_APPROVED')
+  return target
 }
 function complexity(text: string) {
   let depth = 0,
@@ -91,19 +117,26 @@ export function responseTransport(
   wire: (endpoint: string, signal: AbortSignal) => Promise<Response>,
   options: TransportOptions = {},
 ): ReadTransport {
-  return boundedReadTransport(endpointCatalog(source), wire, options)
+  const allowed = endpointCatalog(source, options.quoteSymbols)
+  return boundedReadTransport(
+    allowed,
+    wire,
+    options,
+    source.provider === 'quotes-custom' ? Math.min(20, allowed.length) : 2,
+  )
 }
 export function boundedReadTransport(
   allowed: readonly string[],
   wire: (endpoint: string, signal: AbortSignal) => Promise<Response>,
   options: TransportOptions = {},
+  requestLimit = 2,
 ): ReadTransport {
   let requests = 0,
     active = false
   return {
     async get(endpoint) {
       if (!allowed.includes(endpoint)) throw new AdapterError('TARGET_NOT_APPROVED')
-      if (++requests > 2 || active) throw new AdapterError('REQUEST_BUDGET')
+      if (++requests > requestLimit || active) throw new AdapterError('REQUEST_BUDGET')
       active = true
       const controller = new AbortController()
       let expired = false
@@ -209,23 +242,30 @@ export function productionTransport(
   credential: string | undefined,
   options: TransportOptions = {},
 ): ReadTransport {
-  assertProductionTarget(source)
-  if (!credential) throw new AdapterError('AUTH_REQUIRED')
-  if (/[\r\n\u0000]/.test(credential)) throw new AdapterError('CREDENTIAL_INVALID')
-  const base = source.baseUrl!
+  if (!source.enabled) throw new AdapterError('SOURCE_DISABLED')
+  const target = assertProductionTarget(source, options.environment)
+  if (target.authentication === 'bearer' && !credential) throw new AdapterError('AUTH_REQUIRED')
+  if (target.authentication === 'bearer' && /[\r\n\u0000]/.test(credential!))
+    throw new AdapterError('CREDENTIAL_INVALID')
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (target.authentication === 'bearer') headers.Authorization = 'Bearer ' + credential
+  const wire = options.fetch ?? fetch
   return responseTransport(
     source,
     (endpoint, signal) => {
       options.onRequest?.()
-      return fetch(serviceEndpoint(base, endpoint), {
+      return wire(serviceEndpoint(target.baseUrl, endpoint), {
         method: 'GET',
-        headers: { Accept: 'application/json', Authorization: 'Bearer ' + credential },
+        headers,
         redirect: 'manual',
         credentials: 'omit',
         cache: 'no-store',
         signal,
       })
     },
-    options,
+    {
+      ...options,
+      timeoutMs: options.timeoutMs ?? (source.provider === 'quotes-custom' ? 10000 : 3500),
+    },
   )
 }

@@ -1,8 +1,8 @@
 // Portable scheduling rules; timestamps and counters are ordinary values supplied by the host.
 export const COLLECTION_BUDGET = {
-  maxSources: 2,
+  maxSources: 10,
   concurrency: 1,
-  maxRequests: 4,
+  maxRequests: 50,
   sourceTimeoutMs: 10000,
   leaseMs: 60000,
   cronSeconds: 300,

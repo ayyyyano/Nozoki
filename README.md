@@ -14,13 +14,13 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 | Devices  | Sleepy 设备状态文字、可确认的前台应用、可选电量和供电信息 |
 | Codex    | CLIProxyAPI 账户状态及来源提供的被动额度观测              |
 | Activity | 每周日程、多时段、模板、日期例外、倒计时和进度            |
-| Quotes   | 行情标的管理与供应商接口                                  |
+| Quotes   | Yahoo 行情、日涨跌、成交量与 5 日走势                     |
 | Links    | 常用链接、排序与 Material 图标                            |
 | Services | Uptime Kuma、UptimeFlare 监控状态和延迟                   |
 
 后台可设置模块启停、顺序、标题和访问权限。服务端根据登录身份过滤数据，访客刷新页面时从数据库读取已保存的结果。
 
-数据源需要配置地址、协议版本及凭据。Cloudflare 上的自建来源通过固定 VPC Service 和只读 Relay 访问，Node.js 服务器可以运行内嵌只读 Relay。行情供应商尚未选定，QQQM、VOO 是配置槽位。DeepSeek 余额净变化与官方消费账单分别处理，Codex Token 用量和费用需要可信来源。
+数据源需要配置地址、协议版本及凭据。公开 HTTPS 来源可由部署管理员批准直连；私有来源通过固定 VPC Service 和只读 Relay 访问，Node.js 服务器可以运行内嵌只读 Relay。QQQM、VOO 默认不绑定供应商，可按下文配置 Yahoo 行情。DeepSeek 余额净变化与官方消费账单分别处理，Codex Token 用量和费用需要可信来源。
 
 ## 技术栈
 
@@ -271,21 +271,60 @@ pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc
 
 需要随 GitHub 推送更新 Collector 时，将修改后的 Collector 配置也提交到仓库，然后打开 `nozoki-collector → Settings → Builds → Connect`，连接同一仓库。根目录仍选仓库根目录，构建命令填写 `pnpm collector:build`，部署命令填写 `pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc`。
 
-Collector 的网页地址返回 404 是正常行为。采集结果在看板显示，执行情况可在该 Worker 的日志中查看。DeepSeek 需要自己的 API Key；Sleepy、CLIProxyAPI、Kuma 和 Flare 还需要固定 VPC Service 与只读 Relay，部署 Collector 不会自动连接家中或局域网的服务。更改采集密钥、Relay 路由或绑定修订时，递增 `COLLECTOR_EPOCH` 后发布。
+Collector 的网页地址返回 404 是正常行为。采集结果在看板显示，执行情况可在该 Worker 的日志中查看。DeepSeek 需要自己的 API Key。公开的 Sleepy、Kuma 和 Flare 可按下节批准直连；CLIProxyAPI 管理接口和私有网络来源使用固定 VPC Service 与只读 Relay。更改采集密钥、路由或绑定修订时，递增 `COLLECTOR_EPOCH` 后发布。
+
+### 批准公开 HTTPS 数据源
+
+先在后台保存来源，记下来源 ID、Provider、协议版本及完整服务根地址。在 Dashboard 和 Collector 的运行时变量中设置相同的 `NOZOKI_PUBLIC_ROUTES`（JSON 字符串）。Node.js 部署则写入服务与采集进程共同使用的环境文件。例如：
+
+```json
+[
+  {
+    "id": "my-sleepy",
+    "provider": "sleepy",
+    "protocolVersion": "sleepy-v5-status",
+    "baseUrl": "https://sleepy.example.com/",
+    "authentication": "none"
+  }
+]
+```
+
+将示例替换为自己已确认的来源。服务根路径参与匹配，`/service-a/` 与 `/service-b/` 是两个目标。每份配置最多 10 个来源。修改后台地址、Provider 或协议后，需要同步更新部署变量；目标不匹配时拒绝请求。公开状态接口使用 `none`；仅在自己的只读代理要求 Bearer Token 时选择 `bearer`，并在后台单独保存该来源凭据。`none` 模式不发送已保存凭据。
+
+批准前需确认域名、DNS 和服务由可信运营者控制，最终目标位于公网，TLS 证书有效。直连采用固定 HTTPS 地址和适配器登记的只读端点，拒绝 IP 字面量、局域网主机名、非标准端口及重定向。运行时仍按域名建立连接，没有 DNS/IP 固定能力；DNS 重绑定、分流到私网或网络位置不明的来源应继续使用受限 Relay。Cloudflare 代理或 Tunnel 本身不替代这项确认。不要向公网开放完整 CLIProxyAPI 管理接口。
+
+已有 Collector 在升级到包含此策略的版本、修改公网路由或内置公网服务表后，需要递增 `COLLECTOR_EPOCH`。同一 epoch 下配置指纹变化会被内部检查拒绝，采集报告返回 `COLLECTION_UNAVAILABLE`。官方 DeepSeek 地址内置批准，其他来源默认不直连；添加路由不会启用未知协议。
+
+### Yahoo 行情（可选）
+
+1. 应用新增迁移后，在后台「数据源」添加来源，ID 例如 `yahoo`，Provider 选择 `quotes-custom`，协议选择 `yahoo-chart-v8`，地址填写 `https://query1.finance.yahoo.com/`，启用来源。无需密钥。
+2. 在上述 `NOZOKI_PUBLIC_ROUTES` 数组中加入以下条目，Dashboard 与 Collector 保持一致，并递增已有 Collector 的 `COLLECTOR_EPOCH`：
+
+   ```json
+   {"id":"yahoo","provider":"quotes-custom","protocolVersion":"yahoo-chart-v8","baseUrl":"https://query1.finance.yahoo.com/","authentication":"none"}
+   ```
+
+3. 在「行情标的」将 QQQM、VOO 的 Provider 选为 `yahoo`；在「Dashboard 模块 → 行情 → 数据源引用」添加 `main` 引用，选择同一来源并保存。之后可手动测试连接，Collector 按来源刷新间隔采集。
+
+美股使用 `US / QQQM`，A 股可用 `CN / 600519.SS` 或 `CN / 000001.SZ`，港股可用 `HK / 0700.HK`。每标的一次请求，单来源最多 20 个标的，顺序读取且总采集时间受 10 秒上限约束。也可批准并配置 `https://query2.finance.yahoo.com/`，不会自动切换镜像或重试。失败时保留上次有效快照。
+
+日涨跌使用明确昨收或上一交易日历史收盘计算；5 日区间基准不会冒充昨收，缺失可靠值时留空。时间保留上游报价时刻，休市旧数据会标记过期。
+
+此来源是未公开授权的非官方 Yahoo Finance v8 chart 接口，`licenseReference` 为 `Unofficial Yahoo Finance v8 chart endpoint; no public license`。代码可用不代表已取得公开展示许可，启用前需自行确认使用权利。可在构建 Node 版本后运行 `node --experimental-strip-types tests/browser/yahoo-live.mjs`，以临时数据库和真实浏览器执行一次实际 Yahoo 采集验证；该检查不会自动加入日常测试。
 
 ### 后续更新与常见问题
 
 平时推送代码到生产分支，已连接的 Worker 会自动构建部署。若更新包含新的 `migrations/*.sql`，先在本地运行第 3 步的迁移命令，再部署新代码；迁移器会跳过已经执行的文件。迁移前可在 D1 数据库详情中查看 Time Travel 或导出备份。自定义域名启用后，也要将 `AUTH_ORIGIN` 更新为实际访问的 HTTPS 地址。
 
-| 现象                              | 检查位置                                                                    |
-| --------------------------------- | --------------------------------------------------------------------------- |
-| 构建提示 Worker 名称不一致        | 控制台 Worker 名称与本次部署配置的 `name` 是否相同                          |
-| 构建提示 Node 或 pnpm 版本不支持  | Build variables 中的版本；构建命令是否为 `pnpm build`                       |
-| 首页接口返回 503 或提示存储不可用 | Database ID 是否正确、云端迁移是否完成、Worker 的 `DB` 是否绑定 `nozoki-db` |
-| 登录提示“暂时无法登录”            | `AUTH_ORIGIN` 与地址栏是否一致、两个登录 Secret 是否添加在运行时设置中      |
+| 现象                              | 检查位置                                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 构建提示 Worker 名称不一致        | 控制台 Worker 名称与本次部署配置的 `name` 是否相同                                                                  |
+| 构建提示 Node 或 pnpm 版本不支持  | Build variables 中的版本；构建命令是否为 `pnpm build`                                                               |
+| 首页接口返回 503 或提示存储不可用 | Database ID 是否正确、云端迁移是否完成、Worker 的 `DB` 是否绑定 `nozoki-db`                                         |
+| 登录提示“暂时无法登录”            | `AUTH_ORIGIN` 与地址栏是否一致、两个登录 Secret 是否添加在运行时设置中                                              |
 | 绑定自定义域名后无法登录          | `AUTH_ORIGIN` 是否已改为自定义域名并重新部署；改前通过 `workers.dev` 地址之外的自定义域名访问时，任何密码都会被拒绝 |
-| 登录提示“邮箱或密码错误”          | 登录邮箱是否与 `ADMIN_EMAIL` 相同，密码是否与 Secret 中设置的值相同         |
-| 数据源显示未配置或目标未批准      | 后台来源配置及固定 Relay 设置，这类状态需要按来源补充配置                   |
+| 登录提示“邮箱或密码错误”          | 登录邮箱是否与 `ADMIN_EMAIL` 相同，密码是否与 Secret 中设置的值相同                                                 |
+| 数据源显示未配置或目标未批准      | 后台来源配置及固定 Relay 设置，这类状态需要按来源补充配置                                                           |
 
 控制台操作参考 Cloudflare 的 [Git 仓库部署](https://developers.cloudflare.com/workers/ci-cd/builds/)、[D1 数据库](https://developers.cloudflare.com/d1/get-started/) 和 [Secret 设置](https://developers.cloudflare.com/workers/configuration/secrets/) 文档。
 
@@ -368,11 +407,11 @@ pnpm collector:node
 */5 * * * * /usr/bin/node --env-file=/etc/nozoki/nozoki.env /opt/nozoki/.output-node/collector.mjs
 ```
 
-采集命令同时执行有界的小时级清理。部署包不会自行安装或启用定时任务。固定 DeepSeek 官方目标可以直接读取；其他来源默认拒绝出站，需由服务器管理员配置静态只读 Relay。
+采集命令同时执行有界的小时级清理。部署包不会自行安装或启用定时任务。公网直连按上文设置 `NOZOKI_PUBLIC_ROUTES`；私有来源由服务器管理员配置静态只读 Relay。
 
 内嵌 Relay 使用 `NOZOKI_RELAY_CONFIG_FILE` 指向受限权限的 JSON 文件，格式为 `{"sources":[{"source":{...},"credential":"..."}]}`。`source` 包含 `id`、`provider`、`protocolVersion`、规范化 HTTPS `baseUrl`、`enabled`、`refreshInterval`、`fieldMappings`、`capabilities` 和 `credentialState`，采用已有 IntegrationSettings 校验。上游管理密钥放在 `credential`，它只供 Relay 使用。`NOZOKI_PRIVATE_ROUTES` 中登记同一来源的 `id`、`provider`、`protocolVersion`、`baseUrl`、`refreshInterval`、`fieldMappings`。路由必须与 D1/SQLite 中已保存的配置一致。还需配置独立的 `NOZOKI_PRIVATE_RELAY_TOKEN` 和 `COLLECTOR_BINDING_REVISION`。Codex 账户协议另外需要稳定的 `NOZOKI_RELAY_ID_KEY`，其 SHA-256 十六进制摘要填入对应路由的 `identityVersion`。
 
-内嵌 Relay 在进程内处理固定请求，不监听额外 HTTP 端口。它使用正常的 TLS 证书校验，来源仍限于已注册的只读路径。未配置 Relay 时，Sleepy、CLIProxyAPI、Kuma 和 Flare 返回受限状态。
+内嵌 Relay 在进程内处理固定请求，不监听额外 HTTP 端口。它使用正常的 TLS 证书校验，来源限于已注册的只读路径。来源没有匹配的公网批准或 Relay 配置时，返回 `TARGET_NOT_APPROVED`。
 
 ### 数据备份与升级
 

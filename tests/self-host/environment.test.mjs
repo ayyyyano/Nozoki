@@ -15,6 +15,13 @@ import { editableConfig } from '../../shared/contracts/admin.ts'
 import { fieldPointer } from '../../shared/contracts/field-paths.ts'
 import { randomToken } from '../../server/services/auth-crypto.ts'
 
+test('Node passes deployment public routes to server and collector without creating a relay', async () => {
+  const raw = '[{"id":"public-sleepy"}]'
+  const env = await nodeEnvironment({ NOZOKI_PUBLIC_ROUTES: raw })
+  assert.equal(env.NOZOKI_PUBLIC_ROUTES, raw)
+  assert.equal(env.NOZOKI_PRIVATE_RELAY, undefined)
+})
+
 test('Node origin ignores forwarded headers and refuses hostile Host/absolute targets', () => {
   const env = { AUTH_ORIGIN: 'https://dashboard.example.invalid' }
   assert.equal(

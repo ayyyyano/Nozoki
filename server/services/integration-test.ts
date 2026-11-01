@@ -8,6 +8,8 @@ import { selectedAdapter, runAdapter } from '../adapters/registry.ts'
 import { productionTransport, assertProductionTarget } from '../adapters/transport.ts'
 import { AdapterError, type AdapterRead } from '../adapters/types.ts'
 import { readPrivateSource } from '../adapters/private-relay.ts'
+import { publicTarget } from '../adapters/public-targets.ts'
+import { readConfig } from './config.ts'
 import { declaredCapabilities } from '../adapters/capabilities.ts'
 import {
   reserveIntegrationTest,
@@ -42,18 +44,28 @@ export async function testIntegration(
     summary: { items: 0, views: 0 },
   }
   let slot: Awaited<ReturnType<typeof reserveIntegrationTest>> | undefined
+  let requiresAuthentication = source.provider === 'cliproxy-bridge'
   try {
     if (!source.enabled) throw new AdapterError('SOURCE_DISABLED')
     if (!source.baseUrl) throw new AdapterError('NOT_CONFIGURED')
     slot = await reserveIntegrationTest(db, session, id, now)
     selectedAdapter(source)
+    const quoteSymbols =
+      source.provider === 'quotes-custom'
+        ? (await readConfig(db)).quotes
+            .filter((q) => q.enabled && q.provider === source.id)
+            .map(({ market, symbol }) => ({ market, symbol }))
+            .slice(0, 1)
+        : undefined
     let result: AdapterRead
-    if (source.provider !== 'deepseek') {
+    const target = publicTarget(source, env)
+    if (!target) {
       result = await readPrivateSource(source, env, 'probe', now)
     } else {
-      assertProductionTarget(source)
+      assertProductionTarget(source, env)
+      requiresAuthentication = target.authentication === 'bearer'
       let credential: string | undefined
-      if (record.envelope) {
+      if (requiresAuthentication && record.envelope) {
         let ring
         try {
           ring = await credentialKeys(env)
@@ -68,8 +80,8 @@ export async function testIntegration(
           throw new AdapterError('CREDENTIAL_INVALID')
         }
       }
-      const transport = productionTransport(source, credential)
-      result = await runAdapter({ source, now, transport }, 'probe')
+      const transport = productionTransport(source, credential, { environment: env, quoteSymbols })
+      result = await runAdapter({ source, now, transport, quoteSymbols }, 'probe')
       credential = undefined
     }
     response.status = result.status
@@ -95,7 +107,7 @@ export async function testIntegration(
         ? 'rejected'
         : result.code
           ? 'unverified'
-          : source.provider === 'deepseek' || source.provider === 'cliproxy-bridge'
+          : requiresAuthentication
             ? 'accepted'
             : 'not_required'
     response.summary = { items: result.items, views: Object.keys(result.views).length }

@@ -14,13 +14,13 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 | Devices  | Sleepy status text, identifiable foreground applications, optional battery and external power information |
 | Codex    | CLIProxyAPI account status and passive quota observations supplied by the source                          |
 | Activity | Weekly schedules, multiple periods, templates, date exceptions, countdowns and progress                   |
-| Quotes   | Symbol settings and a quote provider interface                                                            |
+| Quotes   | Yahoo prices, daily changes, volume and five-day history                                                   |
 | Links    | Bookmarks, ordering and Material icons                                                                    |
 | Services | Uptime Kuma and UptimeFlare monitor status and latency                                                    |
 
 The admin interface controls module availability, ordering, titles and access permissions. The server filters data for the current session. Visitor requests read saved results from the database.
 
-Each source needs an address, a supported protocol version and any required credentials. Private sources on Cloudflare use a fixed VPC Service and a read-only relay. Node.js can run the relay inside the server process. A quote provider has not been selected; QQQM and VOO are configuration slots. DeepSeek balance changes are separate from official billing records. Codex token usage and costs require a trusted source.
+Each source needs an address, a supported protocol version and any required credentials. Deployment administrators can approve public HTTPS sources for direct access. Private sources on Cloudflare use a fixed VPC Service and a read-only relay. Node.js can run the relay inside the server process. QQQM and VOO have no provider by default; Yahoo can be configured below. DeepSeek balance changes are separate from official billing records. Codex token usage and costs require a trusted source.
 
 ## Tech stack
 
@@ -271,21 +271,60 @@ This enables the configured five-minute Cron. Each source keeps its own refresh 
 
 For automatic updates on GitHub pushes, commit the Collector configuration, then open **nozoki-collector → Settings → Builds → Connect** and connect the same repository. Keep the repository root, use build command `pnpm collector:build` and deploy command `pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc`.
 
-A 404 at the Collector's web address is expected. Results appear on the dashboard; execution details are in the Worker's logs. DeepSeek needs your API key. Sleepy, CLIProxyAPI, Kuma and Flare also need a fixed VPC Service and read-only relay. Publishing the Collector does not automatically connect home or LAN services. Increment `COLLECTOR_EPOCH` when changing collection keys, relay routes or binding revisions.
+A 404 at the Collector's web address is expected. Results appear on the dashboard; execution details are in the Worker's logs. DeepSeek needs your API key. Public Sleepy, Kuma and Flare sources can use the direct routes below. CLIProxyAPI management interfaces and private network sources use a fixed VPC Service and read-only relay. Increment `COLLECTOR_EPOCH` when changing collection keys, routes or binding revisions.
+
+### Approving public HTTPS sources
+
+Save the source in the admin page and note its ID, provider, protocol version and full service root. Set the same `NOZOKI_PUBLIC_ROUTES` JSON string in the Dashboard and Collector runtime variables. For Node.js, use the environment file shared by the server and collection processes. Example:
+
+```json
+[
+  {
+    "id": "my-sleepy",
+    "provider": "sleepy",
+    "protocolVersion": "sleepy-v5-status",
+    "baseUrl": "https://sleepy.example.com/",
+    "authentication": "none"
+  }
+]
+```
+
+Replace the example with your confirmed source. Matching includes the service root path: `/service-a/` and `/service-b/` are different targets. A configuration can contain up to 10 sources. Update the deployment variable after changing a source address, provider or protocol. Mismatched targets are rejected. Use `none` for public status interfaces. Use `bearer` when your own read-only proxy requires a Bearer Token, and save that source credential separately in the admin page. The `none` mode sends no stored credential.
+
+Before approval, confirm that a trusted operator controls the domain, DNS and service, that the destination is on the public network, and that its TLS certificate is valid. Direct access uses fixed HTTPS roots and registered read-only endpoints. IP literals, local host names, nonstandard ports and redirects are rejected. Connections still resolve the approved host name at runtime; DNS/IP pinning is not provided. Use the constrained relay for DNS rebinding risks, split DNS into private networks, or uncertain network placement. Cloudflare proxying or Tunnel does not replace this check. Keep the full CLIProxyAPI management interface off the public internet.
+
+Increment `COLLECTOR_EPOCH` when upgrading an existing Collector to this policy, changing public routes or changing the built-in public service catalog. A changed configuration fingerprint under the same epoch fails the internal check, and the collection report returns `COLLECTION_UNAVAILABLE`. The official DeepSeek target has built-in approval. Other sources require an approved route; a route cannot enable an unknown protocol.
+
+### Yahoo quotes (optional)
+
+1. Apply new migrations. In Sources, add an enabled source with ID `yahoo`, provider `quotes-custom`, protocol `yahoo-chart-v8` and root `https://query1.finance.yahoo.com/`. No API key is needed.
+2. Add this entry to the `NOZOKI_PUBLIC_ROUTES` array in both Dashboard and Collector environments, incrementing an existing Collector's `COLLECTOR_EPOCH`:
+
+   ```json
+   {"id":"yahoo","provider":"quotes-custom","protocolVersion":"yahoo-chart-v8","baseUrl":"https://query1.finance.yahoo.com/","authentication":"none"}
+   ```
+
+3. Select `yahoo` for QQQM and VOO in Symbols. In Dashboard modules → Quotes → Source references, add a `main` reference to that source and save. Manual connection tests are then available; the Collector reads on the source refresh interval.
+
+Use `US / QQQM`, `CN / 600519.SS`, `CN / 000001.SZ` or `HK / 0700.HK`. Each symbol needs one request. A source supports up to 20 symbols, read sequentially within the 10-second source deadline. You may instead approve and configure `https://query2.finance.yahoo.com/`; there is no automatic mirror fallback or retry. Failures retain the last valid snapshot.
+
+Daily changes use an explicit previous close or the previous trading session's historical close. The five-day range baseline is never treated as yesterday's close. Missing reliable values remain unknown. Quotes retain upstream observation times and are marked stale when old, including market closures.
+
+This is an unofficial Yahoo Finance v8 chart endpoint with no confirmed public display license. Its `licenseReference` is `Unofficial Yahoo Finance v8 chart endpoint; no public license`. Confirm usage rights before enabling public display. After building the Node release, run `node --experimental-strip-types tests/browser/yahoo-live.mjs` for an opt-in live collection check using a temporary database and a real browser. Routine tests do not contact Yahoo.
 
 ### Updates and troubleshooting
 
 Push code to the production branch to rebuild and deploy connected Workers. If an update adds `migrations/*.sql`, run the migration command from step 3 before deploying the new code. Applied migrations are skipped. Before migrations, review Time Travel or export a backup from D1. If you enable a custom domain, update `AUTH_ORIGIN` to its actual HTTPS origin.
 
-| Symptom                                          | Check                                                                                 |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| Worker name mismatch during build                | The dashboard Worker name matches `name` in the configuration used by that deployment |
-| Unsupported Node.js or pnpm version              | Version build variables and the `pnpm build` command                                  |
-| Dashboard API returns 503 or storage unavailable | Correct Database ID, completed cloud migrations, and `DB` bound to `nozoki-db`        |
-| Login temporarily unavailable                    | `AUTH_ORIGIN` matches the address bar, and both login secrets are in runtime settings |
+| Symptom                                          | Check                                                                                                                                                                         |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker name mismatch during build                | The dashboard Worker name matches `name` in the configuration used by that deployment                                                                                         |
+| Unsupported Node.js or pnpm version              | Version build variables and the `pnpm build` command                                                                                                                          |
+| Dashboard API returns 503 or storage unavailable | Correct Database ID, completed cloud migrations, and `DB` bound to `nozoki-db`                                                                                                |
+| Login temporarily unavailable                    | `AUTH_ORIGIN` matches the address bar, and both login secrets are in runtime settings                                                                                         |
 | Cannot log in after binding a custom domain      | `AUTH_ORIGIN` updated to the custom domain and redeployed; before that, any password is rejected when visiting through the custom domain instead of the `workers.dev` address |
-| Incorrect email or password                      | Email matches `ADMIN_EMAIL`; password matches the configured Secret                   |
-| Source unconfigured or target not approved       | Source settings and fixed relay configuration                                         |
+| Incorrect email or password                      | Email matches `ADMIN_EMAIL`; password matches the configured Secret                                                                                                           |
+| Source unconfigured or target not approved       | Source settings and fixed relay configuration                                                                                                                                 |
 
 See Cloudflare's [Git deployment](https://developers.cloudflare.com/workers/ci-cd/builds/), [D1 database](https://developers.cloudflare.com/d1/get-started/) and [Secret settings](https://developers.cloudflare.com/workers/configuration/secrets/) documentation for dashboard details.
 
@@ -368,11 +407,11 @@ To automate collection, the runtime account can add a system Cron entry with the
 */5 * * * * /usr/bin/node --env-file=/etc/nozoki/nozoki.env /opt/nozoki/.output-node/collector.mjs
 ```
 
-Collection also performs bounded hourly retention cleanup. The deployment bundle does not install or enable scheduled tasks. Direct requests are restricted to the fixed official DeepSeek target. Other sources require a statically configured read-only relay.
+Collection also performs bounded hourly retention cleanup. The deployment bundle does not install or enable scheduled tasks. Configure public access with `NOZOKI_PUBLIC_ROUTES` as described above. Private sources require a statically configured read-only relay.
 
 For the embedded relay, point `NOZOKI_RELAY_CONFIG_FILE` to a protected JSON file shaped as `{"sources":[{"source":{...},"credential":"..."}]}`. Each `source` follows IntegrationSettings validation: `id`, `provider`, `protocolVersion`, normalized HTTPS `baseUrl`, `enabled`, `refreshInterval`, `fieldMappings`, `capabilities` and `credentialState`. Upstream management secrets belong in the relay's `credential` field. Register the same source in `NOZOKI_PRIVATE_ROUTES` with `id`, `provider`, `protocolVersion`, `baseUrl`, `refreshInterval` and `fieldMappings`. These values must match the saved D1/SQLite configuration. Set an independent `NOZOKI_PRIVATE_RELAY_TOKEN` and a `COLLECTOR_BINDING_REVISION`. Codex account protocols also require a stable `NOZOKI_RELAY_ID_KEY`; put its SHA-256 hex digest in the route's `identityVersion`.
 
-The embedded relay handles fixed requests inside the process, with no extra HTTP listener. TLS certificate verification remains enabled, and upstream requests use registered read-only paths. Without a relay, Sleepy, CLIProxyAPI, Kuma and Flare return restricted states.
+The embedded relay handles fixed requests inside the process, with no extra HTTP listener. TLS certificate verification remains enabled, and upstream requests use registered read-only paths. Sources without matching public approval or relay configuration return `TARGET_NOT_APPROVED`.
 
 ### Backups and upgrades
 
