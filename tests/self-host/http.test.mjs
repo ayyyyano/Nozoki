@@ -426,7 +426,7 @@ test(
         await select('Provider', 'cliproxy-bridge')
         await expect(protocol).toHaveText('cliproxy-v8-accounts')
         await select('Provider', 'quotes-custom')
-        await expect(protocol).toHaveText('未支持：unverified')
+        await expect(protocol).toHaveText('yahoo-chart-v8')
         await select('Provider', 'sleepy')
         await expect(protocol).toHaveText('sleepy-v5-status')
         assert.equal(
@@ -459,7 +459,8 @@ test(
           persisted.find((i) => i.id.startsWith('source-')).protocolVersion,
           'sleepy-v5-status',
         )
-        await page.getByRole('button', { name: '注销', exact: true }).click()
+        await page.getByRole('button', { name: '更多管理操作', exact: true }).click()
+        await page.getByRole('menuitem', { name: '注销', exact: true }).click()
         await page.waitForURL(origin + '/login')
         const res = await context.request.get(origin + '/api/auth/session')
         assert.equal((await res.json()).viewer, 'guest')

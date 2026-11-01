@@ -16,6 +16,16 @@ const { data: session, refresh: refreshSession } = await useFetch<SessionDto>('/
 if (session.value?.viewer !== 'admin') await navigateTo('/login')
 const { data: initial } = await useFetch<Config>('/api/admin/config', { key: 'admin-config' })
 const shared = useSharedDashboard()
+const themeControl = inject<{ dark: Ref<boolean>; ready: Ref<boolean>; toggleTheme: () => void }>(
+  'themeControl',
+)!
+const themeLabel = computed(() =>
+  themeControl.ready.value
+    ? themeControl.dark.value
+      ? '切换到亮色模式'
+      : '切换到暗色模式'
+    : '切换明暗模式',
+)
 const baseline = ref<Config | null>(initial.value ? ConfigSchema.parse(initial.value) : null)
 const draft = ref<ConfigWrite | null>(baseline.value ? editableConfig(baseline.value) : null)
 const section = ref('site'),
@@ -38,7 +48,6 @@ const sections = [
 ] as const
 const navigation = useTemplateRef('navigation')
 const scheduleDraftReset = ref(0)
-const currentSection = computed(() => sections.find((item) => item.id === section.value)!)
 const showActions = ref(false)
 const actionsPanel = useTemplateRef<HTMLElement>('actionsPanel')
 const showFeedback = ref(false)
@@ -93,6 +102,10 @@ function dashboardFromMenu() {
   afterActions = () => {
     void navigateTo('/', { external: true })
   }
+  showActions.value = false
+}
+function themeFromMenu() {
+  themeControl.toggleTheme()
   showActions.value = false
 }
 const expandedLinks = ref<Record<string, boolean>>({})
@@ -374,7 +387,6 @@ onBeforeRouteLeave(() => {
         /></VarButton>
         <div class="admin-toolbar-title">
           <h1>站点管理</h1>
-          <span class="admin-current-section">{{ currentSection.label }}</span>
           <small
             >{{ session?.viewer === 'admin' ? session.email : '' }}
             <span v-if="dirty" class="admin-dirty">· 未保存修改</span></small
@@ -388,22 +400,7 @@ onBeforeRouteLeave(() => {
           title="未保存修改"
         ></span>
         <div class="admin-actions">
-          <NuxtLink
-            to="/"
-            external
-            class="admin-dashboard-link"
-            aria-label="返回看板"
-            title="返回看板"
-            ><CommonAppIcon name="home" :size="22" /><span class="admin-action-text"
-              >看板</span
-            ></NuxtLink
-          ><VarButton
-            class="admin-desktop-action"
-            text
-            :disabled="busy || !dirty"
-            @click="showDiscard = true"
-            >放弃修改</VarButton
-          ><VarButton
+          <VarButton
             type="primary"
             class="admin-save"
             :aria-label="busy ? '保存中' : '保存配置'"
@@ -414,8 +411,6 @@ onBeforeRouteLeave(() => {
             ><CommonAppIcon name="save" :size="22" /><span class="admin-action-text">{{
               busy ? '保存中' : '保存配置'
             }}</span></VarButton
-          ><VarButton class="admin-desktop-action" text :disabled="busy" @click="logout"
-            >注销</VarButton
           >
           <VarMenu
             v-model:show="showActions"
@@ -454,6 +449,11 @@ onBeforeRouteLeave(() => {
               >
                 <VarButton role="menuitem" text :disabled="busy" @click="dashboardFromMenu"
                   ><CommonAppIcon name="home" :size="20" />返回看板</VarButton
+                >
+                <VarButton role="menuitem" text @click="themeFromMenu"
+                  ><span class="theme-icon-light"><CommonAppIcon name="moon" :size="20" /></span
+                  ><span class="theme-icon-dark"><CommonAppIcon name="sun" :size="20" /></span
+                  >{{ themeLabel }}</VarButton
                 >
                 <VarButton role="menuitem" text :disabled="busy || !dirty" @click="discardFromMenu"
                   ><CommonAppIcon name="undo" :size="20" />放弃修改</VarButton
@@ -630,8 +630,13 @@ onBeforeRouteLeave(() => {
                 >删除来源 {{ i.id }}</VarButton
               >
             </AdminEditorItem>
-            <VarButton text :disabled="draft.integrations.length >= 10" @click="addSource"
-              >添加来源</VarButton
+            <VarButton
+              class="admin-add-button"
+              type="primary"
+              tonal
+              :disabled="draft.integrations.length >= 10"
+              @click="addSource"
+              ><CommonAppIcon name="AddRound" :size="20" />添加来源</VarButton
             >
           </fieldset>
           <fieldset v-show="section === 'schedule'">
@@ -686,8 +691,13 @@ onBeforeRouteLeave(() => {
                 >
               </div>
             </AdminEditorItem>
-            <VarButton text :disabled="draft.quotes.length >= 20" @click="addQuote"
-              >添加行情标的</VarButton
+            <VarButton
+              class="admin-add-button"
+              type="primary"
+              tonal
+              :disabled="draft.quotes.length >= 20"
+              @click="addQuote"
+              ><CommonAppIcon name="AddRound" :size="20" />添加行情标的</VarButton
             >
           </fieldset>
           <fieldset v-show="section === 'links'">
@@ -727,8 +737,13 @@ onBeforeRouteLeave(() => {
                 >
               </div>
             </AdminEditorItem>
-            <VarButton text :disabled="draft.links.length >= 100" @click="addLink"
-              >添加链接</VarButton
+            <VarButton
+              class="admin-add-button"
+              type="primary"
+              tonal
+              :disabled="draft.links.length >= 100"
+              @click="addLink"
+              ><CommonAppIcon name="AddRound" :size="20" />添加链接</VarButton
             >
           </fieldset>
         </form>
@@ -750,7 +765,7 @@ onBeforeRouteLeave(() => {
       >
         <h2 id="discard-title">放弃未保存修改？</h2>
         <p>恢复本次读取的服务器配置。</p>
-        <VarButton type="primary" @click="discard">确认放弃</VarButton
+        <VarButton text type="primary" @click="discard">确认放弃</VarButton
         ><VarButton text @click="showDiscard = false">继续编辑</VarButton>
       </section></VarPopup
     >
@@ -771,7 +786,7 @@ onBeforeRouteLeave(() => {
         <h2 id="latest-title">服务器最新配置</h2>
         <p>版本 {{ latest?.site.configVersion }} · {{ latest?.site.siteName }}</p>
         <p>关闭可保留草稿；载入会明确放弃当前修改。</p>
-        <VarButton type="primary" @click="acceptLatest">放弃草稿并载入最新</VarButton
+        <VarButton text type="primary" @click="acceptLatest">放弃草稿并载入最新</VarButton
         ><VarButton text @click="showLatest = false">保留草稿</VarButton>
       </section></VarPopup
     >
