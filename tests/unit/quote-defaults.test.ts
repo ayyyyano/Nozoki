@@ -14,7 +14,11 @@ test('Yahoo defaults are enabled and bound, with no credential or deployment rou
   assert.equal(source.capabilities.quote!.verified, false)
   assert.equal(source.credentialState.configured, false)
   assert.deepEqual(publicTarget(source), { baseUrl: source.baseUrl, authentication: 'none' })
-  assert.equal(publicTarget({ ...source, baseUrl: 'https://query2.finance.yahoo.com/' }), undefined)
+  // The query2 mirror is equally approved so rate-limited deployments can switch hosts.
+  assert.deepEqual(publicTarget({ ...source, baseUrl: 'https://query2.finance.yahoo.com/' }), {
+    baseUrl: 'https://query2.finance.yahoo.com/',
+    authentication: 'none',
+  })
   assert.equal(
     publicTarget({ ...source, baseUrl: 'https://query1.finance.yahoo.com/other/' }),
     undefined,

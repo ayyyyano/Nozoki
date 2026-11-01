@@ -7,6 +7,12 @@ export const YAHOO_SERVICE = {
   authentication: 'none',
 } as const
 
+/** Mirror endpoint; equally approved so deployments can switch when one host is rate-limited. */
+export const YAHOO_SERVICE_MIRROR = {
+  ...YAHOO_SERVICE,
+  baseUrl: 'https://query2.finance.yahoo.com/',
+} as const
+
 export function createYahooSource(id = 'yahoo'): IntegrationSettings {
   return {
     id,

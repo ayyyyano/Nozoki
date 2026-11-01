@@ -24,6 +24,5 @@
     "AUTH_ALLOW_LOCAL_HTTP": "0",
     "AUTH_ORIGIN": "https://nozoki.nekro.top",
     "INTEGRATION_KEY_VERSION": "v1",
-    "NOZOKI_PUBLIC_ROUTES": "[{\"id\":\"yahoo\",\"provider\":\"quotes-custom\",\"protocolVersion\":\"yahoo-chart-v8\",\"baseUrl\":\"https://query1.finance.yahoo.com/\",\"authentication\":\"none\"}]",
   },
 }
