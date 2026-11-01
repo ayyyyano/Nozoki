@@ -120,6 +120,12 @@ test(
     })
     assert.equal((await command(cli, env, ['migrate'])).code, 0)
     assert.deepEqual(JSON.parse((await command(cli, env, ['migrate'])).out).applied, [])
+    const offlineDb = new SqliteDatabase(env.NOZOKI_SQLITE_PATH)
+    try {
+      await offlineDb.prepare("UPDATE integrations SET enabled=0 WHERE id='yahoo'").run()
+    } finally {
+      offlineDb.close()
+    }
     child = await start(entry, env)
     const fetchJson = async (path, init = {}) => {
       const response = await fetch(origin + path, init)
@@ -289,6 +295,7 @@ test(
         try {
           const current = await readConfig(db),
             config = editableConfig(current)
+          config.modules.find((m) => m.id === 'quotes').sources = {}
           config.integrations = [
             {
               id: 'saved-accounts',

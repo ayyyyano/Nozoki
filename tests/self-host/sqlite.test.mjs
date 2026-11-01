@@ -152,11 +152,11 @@ test('forward migration backs up existing data and rejects modified or failing m
     const folder = resolve(directory, 'migrations')
     await cp('migrations', folder, { recursive: true })
     await writeFile(
-      resolve(folder, '0012_test_upgrade.sql'),
+      resolve(folder, '9998_test_upgrade.sql'),
       'CREATE TABLE upgrade_test(id INTEGER PRIMARY KEY);',
     )
     const result = await migrateDatabase(db, folder, resolve(directory, 'backups'))
-    assert.deepEqual(result.applied, ['0012_test_upgrade.sql'])
+    assert.deepEqual(result.applied, ['9998_test_upgrade.sql'])
     const copy = new SqliteDatabase(result.backupPath)
     try {
       assert.deepEqual(await readConfig(copy), await readConfig(db))
@@ -172,7 +172,7 @@ test('forward migration backs up existing data and rejects modified or failing m
       copy.close()
     }
     await writeFile(
-      resolve(folder, '0013_test_failure.sql'),
+      resolve(folder, '9999_test_failure.sql'),
       'CREATE TABLE rolled_back(id INTEGER); INSERT INTO missing_table VALUES(1);',
     )
     await assert.rejects(migrateDatabase(db, folder, resolve(directory, 'backups')))
@@ -198,6 +198,7 @@ test('credential target guard, encryption, collector and ACL share the real SQLi
     v.config.integrations = [
       { ...settings, credential: { operation: 'replace', value: 'SYNTHETIC-CREDENTIAL-ONLY' } },
     ]
+    v.config.modules.find((m) => m.id === 'quotes').sources = {}
     const module = v.config.modules.find((m) => m.id === 'deepseek')
     module.visibility = 'public'
     module.sources.main = { sourceId: s.id, subject: 'main' }
@@ -277,6 +278,7 @@ test('SQLite collector fences competing workers, expired leases and changed conf
       s = source('sleepy')
     const { credentialState: _, ...settings } = s
     v.config.integrations = [{ ...settings, credential: { operation: 'keep' } }]
+    v.config.modules.find((m) => m.id === 'quotes').sources = {}
     for (const id of ['devices', 'codex'])
       v.config.modules.find((m) => m.id === id).sources.main = { sourceId: s.id, subject: 'main' }
     assert.equal((await saveConfig(db, v, { actor: { kind: 'system' } })).success, true)

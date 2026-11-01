@@ -20,7 +20,7 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 
 The admin interface controls module availability, ordering, titles and access permissions. The server filters data for the current session. Visitor requests read saved results from the database.
 
-Each source needs an address, a supported protocol version and any required credentials. Deployment administrators can approve public HTTPS sources for direct access. Private sources on Cloudflare use a fixed VPC Service and a read-only relay. Node.js can run the relay inside the server process. QQQM and VOO have no provider by default; Yahoo can be configured below. DeepSeek balance changes are separate from official billing records. Codex token usage and costs require a trusted source.
+Each source needs an address, a supported protocol version and any required credentials. Deployment administrators can approve public HTTPS sources for direct access. Private sources on Cloudflare use a fixed VPC Service and a read-only relay. Node.js can run the relay inside the server process. QQQM and VOO use the enabled Yahoo source by default. DeepSeek balance changes are separate from official billing records. Codex token usage and costs require a trusted source.
 
 ## Tech stack
 
@@ -293,18 +293,15 @@ Replace the example with your confirmed source. Matching includes the service ro
 
 Before approval, confirm that a trusted operator controls the domain, DNS and service, that the destination is on the public network, and that its TLS certificate is valid. Direct access uses fixed HTTPS roots and registered read-only endpoints. IP literals, local host names, nonstandard ports and redirects are rejected. Connections still resolve the approved host name at runtime; DNS/IP pinning is not provided. Use the constrained relay for DNS rebinding risks, split DNS into private networks, or uncertain network placement. Cloudflare proxying or Tunnel does not replace this check. Keep the full CLIProxyAPI management interface off the public internet.
 
-Increment `COLLECTOR_EPOCH` when upgrading an existing Collector to this policy, changing public routes or changing the built-in public service catalog. A changed configuration fingerprint under the same epoch fails the internal check, and the collection report returns `COLLECTION_UNAVAILABLE`. The official DeepSeek target has built-in approval. Other sources require an approved route; a route cannot enable an unknown protocol.
+Increment `COLLECTOR_EPOCH` when upgrading an existing Collector to this policy, changing public routes or changing the built-in public service catalog. A changed configuration fingerprint under the same epoch fails the internal check, and the collection report returns `COLLECTION_UNAVAILABLE`. The DeepSeek target and the default Yahoo root have built-in approval. Other sources require an approved route; a route cannot enable an unknown protocol.
 
-### Yahoo quotes (optional)
+### Default Yahoo quotes
 
-1. Apply new migrations. In Sources, add an enabled source with ID `yahoo`, provider `quotes-custom`, protocol `yahoo-chart-v8` and root `https://query1.finance.yahoo.com/`. No API key is needed.
-2. Add this entry to the `NOZOKI_PUBLIC_ROUTES` array in both Dashboard and Collector environments, incrementing an existing Collector's `COLLECTOR_EPOCH`:
+The default source is enabled: ID `yahoo`, provider `quotes-custom`, protocol `yahoo-chart-v8`, root `https://query1.finance.yahoo.com/`, refresh interval 300 seconds. QQQM, VOO and the Quotes module's `main` reference are bound to it. No API key or `NOZOKI_PUBLIC_ROUTES` entry is required for this exact root.
 
-   ```json
-   {"id":"yahoo","provider":"quotes-custom","protocolVersion":"yahoo-chart-v8","baseUrl":"https://query1.finance.yahoo.com/","authentication":"none"}
-   ```
-
-3. Select `yahoo` for QQQM and VOO in Symbols. In Dashboard modules → Quotes → Source references, add a `main` reference to that source and save. Manual connection tests are then available; the Collector reads on the source refresh interval.
+1. Apply database migrations, including `0013_default_yahoo_source.sql`, using the deployment steps above. Deploy the Dashboard and Collector together. For an existing Collector, increment `COLLECTOR_EPOCH` because the built-in target catalog has changed.
+2. After a scheduled run, the dashboard reads the collected quotes from the database. On Node.js, run `pnpm collector:node` manually or through the server's scheduler. No quotes are shown before a successful collection.
+3. In Sources → `yahoo`, you can disable collection, change its interval or run a read-only connection test. The test reads one symbol and saves no snapshot. Add symbols in Symbols and select `yahoo` as their Provider. The source interval controls collection frequency.
 
 Use `US / QQQM`, `CN / 600519.SS`, `CN / 000001.SZ` or `HK / 0700.HK`. Each symbol needs one request. A source supports up to 20 symbols, read sequentially within the 10-second source deadline. You may instead approve and configure `https://query2.finance.yahoo.com/`; there is no automatic mirror fallback or retry. Failures retain the last valid snapshot.
 

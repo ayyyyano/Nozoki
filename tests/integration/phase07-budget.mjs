@@ -252,6 +252,7 @@ try {
     config = editableConfig(stored),
     s = source('sleepy')
   const { credentialState, ...settings } = s
+  config.modules.find((m) => m.id === 'quotes').sources = {}
   config.integrations = [{ ...settings, credential: { operation: 'keep' } }]
   const mod = config.modules.find((m) => m.id === 'devices')
   mod.visibility = 'public'

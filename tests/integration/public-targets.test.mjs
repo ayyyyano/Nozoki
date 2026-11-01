@@ -77,6 +77,7 @@ test('native workerd/D1 public probe and collection, persistence and deployment 
   const current = await readConfig(db),
     config = editableConfig(current)
   const { credentialState: _, ...settings } = s
+  config.modules.find((m) => m.id === 'quotes').sources = {}
   config.integrations = [{ ...settings, credential: { operation: 'keep' } }]
   config.modules.find((m) => m.id === 'devices').sources.main = {
     sourceId: s.id,

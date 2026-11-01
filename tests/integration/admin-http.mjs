@@ -257,6 +257,7 @@ try {
     async () => {
       let i = await input()
       i.config.links = []
+      i.config.modules.find((m) => m.id === 'quotes').sources = {}
       i.config.integrations = [
         {
           id: 'sleepy',

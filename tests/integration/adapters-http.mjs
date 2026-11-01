@@ -196,6 +196,7 @@ try {
   const c = await readConfig(db),
     config = editableConfig(c),
     { credentialState: _, ...base } = source('deepseek')
+  config.modules.find((m) => m.id === 'quotes').sources = {}
   config.integrations = [
     {
       ...base,
