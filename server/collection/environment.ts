@@ -1,6 +1,7 @@
 import type { Database } from '../types/database.ts'
 import { canonical } from '../../shared/contracts/admin.ts'
 import { hashToken } from '../services/auth-crypto.ts'
+import { PUBLIC_SERVICES } from '../adapters/public-targets.ts'
 export interface CollectionEnvironment {
   epoch: number
   fingerprint: string
@@ -27,6 +28,7 @@ export async function collectionEnvironment(
     'INTEGRATION_KEY_VERSION',
     'INTEGRATION_DECRYPTION_KEYS',
     'COLLECTOR_BINDING_REVISION',
+    'NOZOKI_PUBLIC_ROUTES',
   ]
   const values = await Promise.all(
     keys.map(async (k) => [
@@ -37,6 +39,7 @@ export async function collectionEnvironment(
   const fingerprint = await hashToken(
     canonical({
       values,
+      publicServices: PUBLIC_SERVICES,
       relayBound:
         typeof (env.NOZOKI_PRIVATE_RELAY as { fetch?: unknown } | undefined)?.fetch === 'function',
     }),

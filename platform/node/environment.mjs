@@ -24,6 +24,7 @@ export async function nodeEnvironment(values = process.env, wire = fetch) {
     'COLLECTOR_EPOCH',
     'COLLECTOR_BINDING_REVISION',
     'NOZOKI_PRIVATE_ROUTES',
+    'NOZOKI_PUBLIC_ROUTES',
     'NOZOKI_PRIVATE_RELAY_TOKEN',
   ]
   const env = Object.fromEntries(

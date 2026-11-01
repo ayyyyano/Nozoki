@@ -1,5 +1,7 @@
 # Local-only template. Set in this Worker's private .dev.vars; never copy the admin password here.
 COLLECTOR_EPOCH="1"
+# Optional exact public HTTPS routes; configure the same routes on Dashboard and Collector.
+# NOZOKI_PUBLIC_ROUTES='[]'
 # Reuse the correct integration encryption key/version only when needed, via private Secrets.
 # INTEGRATION_ENCRYPTION_KEY=REPLACE_WITH_APPROVED_LOCAL_SECRET
 # INTEGRATION_KEY_VERSION=v1

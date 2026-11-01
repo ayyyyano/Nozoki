@@ -5,6 +5,7 @@ import { runAdapter, selectedAdapter } from '../adapters/registry.ts'
 import { credentialKeys } from '../services/credential-keys.ts'
 import { decryptCredential } from '../services/credentials.ts'
 import { AdapterError } from '../adapters/types.ts'
+import { publicTarget } from '../adapters/public-targets.ts'
 export interface ReadMetrics {
   requests: number
   responseBytes: number
@@ -20,7 +21,8 @@ export async function collectSource(
   const onRead = (bytes: number) => {
     metrics.responseBytes += bytes
   }
-  if (p.source.provider !== 'deepseek') {
+  const target = publicTarget(p.source, env)
+  if (!target) {
     const binding = env.NOZOKI_PRIVATE_RELAY as { fetch?: typeof fetch } | undefined
     const privateEnv = {
       ...env,
@@ -38,23 +40,33 @@ export async function collectSource(
     return readPrivateSource(p.source, privateEnv, 'read', now, { signal, onRead })
   }
   let secret: string | undefined
-  if (!p.envelope) throw new AdapterError('AUTH_REQUIRED')
-  try {
-    const ring = await credentialKeys(env)
-    if (!Object.hasOwn(ring.keys, p.envelope.keyVersion)) throw new Error()
-    secret = await decryptCredential(p.source.id, p.source.provider, p.envelope, ring)
-  } catch {
-    throw new AdapterError('CREDENTIAL_UNAVAILABLE')
+  if (target.authentication === 'bearer' && !p.envelope) throw new AdapterError('AUTH_REQUIRED')
+  if (target.authentication === 'bearer') {
+    try {
+      const ring = await credentialKeys(env)
+      if (!Object.hasOwn(ring.keys, p.envelope!.keyVersion)) throw new Error()
+      secret = await decryptCredential(p.source.id, p.source.provider, p.envelope!, ring)
+    } catch {
+      throw new AdapterError('CREDENTIAL_UNAVAILABLE')
+    }
   }
   try {
     const transport = productionTransport(p.source, secret, {
+      quoteSymbols: p.quoteSymbols,
+      environment: env,
       signal,
       onRead,
       onRequest: () => {
         metrics.requests++
       },
     })
-    return await runAdapter({ source: p.source, transport, now, signal })
+    return await runAdapter({
+      source: p.source,
+      transport,
+      now,
+      signal,
+      quoteSymbols: p.quoteSymbols,
+    })
   } finally {
     secret = undefined
   }
