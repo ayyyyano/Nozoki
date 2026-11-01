@@ -12,6 +12,7 @@
   background: none;
 }
 .management-page {
+  --button-normal-height: 40px;
   position: relative;
   z-index: 1;
   min-height: 100dvh;
@@ -62,7 +63,7 @@
   min-width: 0;
   flex: 1;
 }
-.admin-toolbar-title :is(h1, small, .admin-current-section) {
+.admin-toolbar-title :is(h1, small) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -70,11 +71,14 @@
 .admin-toolbar-title small {
   display: block;
 }
-.admin-current-section,
-.admin-dirty-dot,
-.admin-more-menu,
-.admin-more-trigger.var-button {
+.admin-dirty-dot {
   display: none;
+}
+.admin-more-menu {
+  display: block;
+}
+.admin-more-trigger.var-button {
+  display: inline-flex;
 }
 .admin-toolbar h1 {
   font-size: 20px;
@@ -111,17 +115,6 @@
   min-width: 44px;
   flex-shrink: 0;
 }
-.admin-actions a {
-  color: var(--color-primary);
-  text-decoration: none;
-  padding: 10px 8px;
-  border-radius: 12px;
-}
-.admin-dashboard-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
 .admin-workspace {
   flex: 1;
   min-width: 0;
@@ -152,8 +145,8 @@
   gap: 12px;
 }
 .admin-nav-active {
-  background: var(--color-primary-container) !important;
-  color: var(--color-on-primary-container) !important;
+  background: var(--color-secondary-container) !important;
+  color: var(--color-on-secondary-container) !important;
   font-weight: 600;
 }
 .admin-section-trigger.var-button {
@@ -216,9 +209,11 @@
 .admin-item {
   min-width: 0;
   display: grid;
-  gap: 16px;
-  border-bottom: 1px solid var(--color-outline-variant);
-  padding: 0 0 16px;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-outline-variant) 50%, transparent);
+  border-radius: 16px;
+  background: var(--color-surface-container-low, var(--color-surface-container));
+  padding: 8px;
 }
 .admin-item > header {
   display: flex;
@@ -238,7 +233,7 @@
   cursor: pointer;
   text-align: left;
   border-radius: 12px;
-  padding: 12px 4px;
+  padding: 12px;
   font: inherit;
 }
 .admin-item-toggle > .app-icon {
@@ -271,6 +266,7 @@
 .admin-item-actions {
   display: flex;
   flex-wrap: wrap;
+  padding-inline: 4px;
 }
 .admin-item-actions .var-button {
   min-width: 44px;
@@ -280,11 +276,21 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
-  padding: 8px 4px;
+  padding: 8px 12px 12px;
   min-width: 0;
 }
 .admin-item-body[style*='display: none'] {
   display: none;
+}
+.admin-form .admin-add-button.var-button {
+  --button-primary-icon-container-color: var(--color-secondary-container);
+  --button-primary-icon-color: var(--color-on-secondary-container);
+  min-height: 48px;
+  border-radius: 100px;
+  box-shadow: none;
+}
+.admin-add-button .var-button__content {
+  gap: 8px;
 }
 .admin-chevron-open {
   transform: rotate(90deg);
@@ -401,13 +407,14 @@
   cursor: pointer;
 }
 .admin-confirm {
+  --button-normal-height: 40px;
   display: grid;
   gap: 12px;
   width: min(420px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
   padding: 24px;
-  border-radius: 24px;
+  border-radius: 28px;
   background: var(--color-surface-container-high, var(--color-surface-container));
   color: var(--color-text);
 }
@@ -474,8 +481,7 @@
   outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
-.admin-item-toggle:hover,
-.admin-dashboard-link:hover {
+.admin-item-toggle:hover {
   background: color-mix(in srgb, var(--color-text) 6%, transparent);
 }
 .admin-item-toggle:active {
@@ -564,17 +570,15 @@
     padding: 8px max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left));
     gap: 4px;
   }
-  .admin-toolbar-title h1,
-  .admin-toolbar-title small,
-  .admin-desktop-action.var-button,
-  .admin-toolbar .admin-dashboard-link,
+  .admin-toolbar-title .admin-dirty,
   .admin-action-text {
     display: none;
   }
-  .admin-current-section {
-    display: block;
+  .admin-toolbar h1 {
     font-size: 16px;
-    font-weight: 600;
+  }
+  .admin-toolbar-title small {
+    font-size: 12px;
   }
   .admin-dirty-dot {
     display: block;
@@ -588,14 +592,7 @@
   .admin-toolbar .admin-actions {
     gap: 4px;
   }
-  .admin-more-trigger.var-button {
-    display: inline-flex;
-  }
-  .admin-more-menu {
-    display: block;
-  }
-  .admin-save.var-button,
-  .admin-toolbar .admin-dashboard-link {
+  .admin-save.var-button {
     width: 44px;
     height: 44px;
     min-width: 44px;
@@ -630,6 +627,15 @@
   }
   .admin-item > header {
     display: block;
+  }
+  .admin-item {
+    padding: 6px;
+  }
+  .admin-item-toggle {
+    padding: 12px 10px;
+  }
+  .admin-item-body {
+    padding: 8px 10px 10px;
   }
   .admin-item-toggle {
     width: 100%;

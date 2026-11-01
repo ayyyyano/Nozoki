@@ -21,6 +21,10 @@ import '@varlet/ui/es/progress/style/index'
 import '@varlet/ui/es/switch/style/index'
 import '@varlet/ui/es/menu/style/index'
 
+// Use flat filled/tonal actions and tonal menus; keep ripple and focus state layers.
+Button.setPropsDefaults({ elevation: false })
+Menu.setPropsDefaults({ elevation: false })
+
 export default defineNuxtPlugin((nuxt) => {
   for (const [name, component] of Object.entries({
     VarSelect: Select,

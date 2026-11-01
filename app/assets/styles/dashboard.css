@@ -36,6 +36,11 @@ button {
 svg {
   flex-shrink: 0;
 }
+/* Select teleports its menu to body and hard-codes Varlet elevation level 3. */
+.var-select__scroller.var-elevation--3 {
+  box-shadow: none;
+  background: var(--color-surface-container);
+}
 h1,
 h2,
 h3,
@@ -749,14 +754,14 @@ p {
   color: var(--n-muted);
 }
 .appearance-dialog {
+  --button-normal-height: 40px;
   width: min(520px, calc(100vw - 28px));
   max-height: calc(100dvh - 40px);
   margin: auto;
   padding: 24px;
-  border: 1px solid var(--n-outline);
   border-radius: 28px;
   color: var(--n-text);
-  background: var(--n-surface);
+  background: var(--color-surface-container-high);
 }
 .appearance-dialog > header {
   display: flex;

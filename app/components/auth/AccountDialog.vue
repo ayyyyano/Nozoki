@@ -158,6 +158,8 @@ defineExpose({ open })
 }
 .account-dialog .auth-card {
   width: 100%;
+  border: 0;
+  background: var(--color-surface-container-high);
 }
 .account-dialog .account-close {
   position: absolute;
