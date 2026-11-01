@@ -17,6 +17,7 @@ node_modules/
 /data/
 .cache/
 .wrangler/
+.temp/
 *.tsbuildinfo
 
 # Local databases
