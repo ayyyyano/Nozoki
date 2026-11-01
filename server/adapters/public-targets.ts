@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { IntegrationSettings } from '../../shared/contracts/config.ts'
 import { normalizeServiceTarget } from '../services/service-target.ts'
 import { AdapterError } from './types.ts'
+import { YAHOO_SERVICE } from '../../shared/quotes/defaults.ts'
 
 const PublicRoute = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
@@ -20,6 +21,7 @@ export interface PublicTarget {
 }
 /** Fixed, reviewed public services. Editable source metadata cannot extend this list. */
 export const PUBLIC_SERVICES = [
+  YAHOO_SERVICE,
   {
     provider: 'deepseek',
     protocolVersion: 'deepseek-balance-v1',

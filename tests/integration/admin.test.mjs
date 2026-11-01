@@ -176,6 +176,7 @@ test('phase 04 atomic HTTP-save core in real D1/workerd', async (t) => {
     'credential lifecycle, target binding and unverifiable capabilities reject atomically',
     async () => {
       let i = await input()
+      i.config.modules.find((m) => m.id === 'quotes').sources = {}
       i.config.integrations = [
         {
           id: 'sleepy',

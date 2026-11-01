@@ -159,6 +159,14 @@ function operation(value: unknown) {
   <p class="admin-note">
     公网直连须在部署环境中批准来源、协议和完整服务根地址；私有来源使用只读 Relay。
   </p>
+  <p
+    v-if="model.provider === 'quotes-custom' && model.protocolVersion === 'yahoo-chart-v8'"
+    class="admin-note"
+  >
+    Yahoo 默认地址 https://query1.finance.yahoo.com/ 已内置批准，无需密钥。 默认配置已启用并绑定
+    QQQM、VOO。新增标的时选择此来源；关闭来源可停止采集。 非官方接口的公开展示许可尚未确认。已有
+    Collector 升级时需递增 COLLECTOR_EPOCH。
+  </p>
   <div v-if="testResult" role="status" class="admin-note">
     <p>
       {{ testResult.status }} · {{ testResult.code ?? '协议校验通过' }} ·

@@ -185,6 +185,7 @@ try {
     )
   let i = await input()
   const { credentialState: _, ...sourceBase } = s
+  i.config.modules.find((m) => m.id === 'quotes').sources = {}
   i.config.integrations = [{ ...sourceBase, credential: { operation: 'keep' } }]
   i.config.modules.find((m) => m.id === 'codex').sources.main = {
     sourceId: s.id,

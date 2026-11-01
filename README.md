@@ -20,7 +20,7 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 
 后台可设置模块启停、顺序、标题和访问权限。服务端根据登录身份过滤数据，访客刷新页面时从数据库读取已保存的结果。
 
-数据源需要配置地址、协议版本及凭据。公开 HTTPS 来源可由部署管理员批准直连；私有来源通过固定 VPC Service 和只读 Relay 访问，Node.js 服务器可以运行内嵌只读 Relay。QQQM、VOO 默认不绑定供应商，可按下文配置 Yahoo 行情。DeepSeek 余额净变化与官方消费账单分别处理，Codex Token 用量和费用需要可信来源。
+数据源需要配置地址、协议版本及凭据。公开 HTTPS 来源可由部署管理员批准直连；私有来源通过固定 VPC Service 和只读 Relay 访问，Node.js 服务器可以运行内嵌只读 Relay。QQQM、VOO 默认使用已启用的 Yahoo 来源。DeepSeek 余额净变化与官方消费账单分别处理，Codex Token 用量和费用需要可信来源。
 
 ## 技术栈
 
@@ -293,18 +293,15 @@ Collector 的网页地址返回 404 是正常行为。采集结果在看板显�
 
 批准前需确认域名、DNS 和服务由可信运营者控制，最终目标位于公网，TLS 证书有效。直连采用固定 HTTPS 地址和适配器登记的只读端点，拒绝 IP 字面量、局域网主机名、非标准端口及重定向。运行时仍按域名建立连接，没有 DNS/IP 固定能力；DNS 重绑定、分流到私网或网络位置不明的来源应继续使用受限 Relay。Cloudflare 代理或 Tunnel 本身不替代这项确认。不要向公网开放完整 CLIProxyAPI 管理接口。
 
-已有 Collector 在升级到包含此策略的版本、修改公网路由或内置公网服务表后，需要递增 `COLLECTOR_EPOCH`。同一 epoch 下配置指纹变化会被内部检查拒绝，采集报告返回 `COLLECTION_UNAVAILABLE`。官方 DeepSeek 地址内置批准，其他来源默认不直连；添加路由不会启用未知协议。
+已有 Collector 在升级到包含此策略的版本、修改公网路由或内置公网服务表后，需要递增 `COLLECTOR_EPOCH`。同一 epoch 下配置指纹变化会被内部检查拒绝，采集报告返回 `COLLECTION_UNAVAILABLE`。DeepSeek 地址和默认 Yahoo 地址已内置批准，其他来源需要单独批准；添加路由不会启用未知协议。
 
-### Yahoo 行情（可选）
+### 默认 Yahoo 行情
 
-1. 应用新增迁移后，在后台「数据源」添加来源，ID 例如 `yahoo`，Provider 选择 `quotes-custom`，协议选择 `yahoo-chart-v8`，地址填写 `https://query1.finance.yahoo.com/`，启用来源。无需密钥。
-2. 在上述 `NOZOKI_PUBLIC_ROUTES` 数组中加入以下条目，Dashboard 与 Collector 保持一致，并递增已有 Collector 的 `COLLECTOR_EPOCH`：
+默认来源已启用：ID 为 `yahoo`，Provider 为 `quotes-custom`，协议为 `yahoo-chart-v8`，地址为 `https://query1.finance.yahoo.com/`，每 300 秒刷新。QQQM、VOO 和行情模块的 `main` 引用均已绑定。此固定地址无需 API Key，也无需设置 `NOZOKI_PUBLIC_ROUTES`。
 
-   ```json
-   {"id":"yahoo","provider":"quotes-custom","protocolVersion":"yahoo-chart-v8","baseUrl":"https://query1.finance.yahoo.com/","authentication":"none"}
-   ```
-
-3. 在「行情标的」将 QQQM、VOO 的 Provider 选为 `yahoo`；在「Dashboard 模块 → 行情 → 数据源引用」添加 `main` 引用，选择同一来源并保存。之后可手动测试连接，Collector 按来源刷新间隔采集。
+1. 按上文部署步骤执行数据库迁移，包含 `0013_default_yahoo_source.sql`，并更新 Dashboard 与 Collector。已有 Collector 需递增 `COLLECTOR_EPOCH`，因为内置服务表发生了变化。
+2. 等待 Collector 调度后，看板会读取已保存行情。Node.js 部署可执行 `pnpm collector:node`，或由服务器定时器运行该命令。首次采集成功前显示未配置数据状态。
+3. 在后台「数据源 → yahoo」可关闭采集、调整刷新间隔或执行只读连接测试。测试仅读取一个标的，不保存快照。新增标的时，在「行情标的」将 Provider 选为 `yahoo`。实际采集频率由来源刷新间隔控制。
 
 美股使用 `US / QQQM`，A 股可用 `CN / 600519.SS` 或 `CN / 000001.SZ`，港股可用 `HK / 0700.HK`。每标的一次请求，单来源最多 20 个标的，顺序读取且总采集时间受 10 秒上限约束。也可批准并配置 `https://query2.finance.yahoo.com/`，不会自动切换镜像或重试。失败时保留上次有效快照。
 

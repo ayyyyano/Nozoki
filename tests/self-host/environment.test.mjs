@@ -94,6 +94,7 @@ test('embedded fixed relay feeds the same SQLite collector and enforces routes a
       v = editableConfig(current)
     const { credentialState: _, ...settings } = s
     v.integrations = [{ ...settings, credential: { operation: 'keep' } }]
+    v.modules.find((m) => m.id === 'quotes').sources = {}
     const module = v.modules.find((m) => m.id === 'devices')
     module.visibility = 'public'
     module.sources.main = { sourceId: s.id, subject: 'main' }

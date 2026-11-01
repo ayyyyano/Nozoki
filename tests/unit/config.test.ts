@@ -13,7 +13,8 @@ import { PublicDashboardSchema } from '../../shared/contracts/public-dashboard.t
 import { getDatabase } from '../../server/utils/database.ts'
 import { projectGuestDashboard } from '../../server/services/dashboard.ts'
 import { DataSchemas } from '../../shared/contracts/snapshots.ts'
-const asWrite = () => ({ ...createDefaultConfig(), integrations: [] })
+import { editableConfig } from '../../shared/contracts/admin.ts'
+const asWrite = () => editableConfig(createDefaultConfig())
 test('D1 defaults keep M3/privacy while separating personal browser mode and wallpaper state', () => {
   const c = createDefaultConfig()
   assert.equal(c.site.siteName, 'Nozoki')
@@ -25,8 +26,13 @@ test('D1 defaults keep M3/privacy while separating personal browser mode and wal
   assert.ok(!('mode' in c.site.appearance))
   assert.ok(!('reduceMotion' in c.site.appearance))
   assert.ok(!('displayMode' in c.site))
-  assert.ok(c.quotes.every((q) => q.provider === null))
-  assert.equal(c.integrations.length, 0)
+  assert.ok(c.quotes.every((q) => q.provider === 'yahoo'))
+  assert.equal(c.integrations.length, 1)
+  assert.equal(c.integrations[0]!.enabled, true)
+  assert.deepEqual(c.modules.find((m) => m.id === 'quotes')!.sources.main, {
+    sourceId: 'yahoo',
+    subject: 'default',
+  })
   assert.deepEqual(
     c.links.map(({ id, title, url, visibility }) => ({ id, title, url, visibility })),
     [

@@ -163,6 +163,7 @@ test('phase 05 D1 connection-test admission and fail-closed services', async (t)
         i = source('sleepy'),
         { credentialState: _, ...base } = i,
         config = editableConfig(c)
+      config.modules.find((m) => m.id === 'quotes').sources = {}
       config.integrations = [{ ...base, credential: { operation: 'keep' } }]
       assert.equal(
         (

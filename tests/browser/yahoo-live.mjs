@@ -29,15 +29,7 @@ const env = {
   AUTH_ORIGIN: origin,
   AUTH_ALLOW_LOCAL_HTTP: '1',
   COLLECTOR_EPOCH: '1',
-  NOZOKI_PUBLIC_ROUTES: JSON.stringify([
-    {
-      id: 'yahoo-live',
-      provider: 'quotes-custom',
-      protocolVersion: 'yahoo-chart-v8',
-      baseUrl: 'https://query1.finance.yahoo.com/',
-      authentication: 'none',
-    },
-  ]),
+  NOZOKI_PUBLIC_ROUTES: '[]',
 }
 for (const key of [
   'NOZOKI_RELAY_CONFIG_FILE',
@@ -90,53 +82,30 @@ try {
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await page.waitForURL('**/admin')
   const section = (name) => page.getByRole('button', { name, exact: true }).click()
-  const select = async (scope, label, value) => {
-    await scope.getByLabel(label, { exact: true }).click()
-    const option = page
-      .locator('.var-menu__menu:visible .var-option')
-      .filter({ hasText: new RegExp('^' + value + '$') })
-    await expect(option).toHaveCount(1)
-    await option.click()
-    await expect(option).toHaveCount(0)
-  }
   await section('数据源')
-  await page.getByRole('button', { name: '添加来源', exact: true }).click()
-  const source = page.locator('fieldset:visible .admin-editor-item').last()
-  await source.locator('input[aria-label="来源 ID"]').fill('yahoo-live')
-  await select(source, 'Provider', 'quotes-custom')
+  const source = page.locator('fieldset:visible .admin-editor-item').first()
+  await source.locator('.admin-item-toggle').click()
+  await expect(source.locator('input[aria-label="来源 ID"]')).toHaveValue('yahoo')
   await expect(source.getByLabel('协议版本').locator('.var-select__label')).toHaveText(
     'yahoo-chart-v8',
   )
-  await source
-    .locator('input[aria-label="服务根 HTTPS 地址"]')
-    .fill('https://query1.finance.yahoo.com/')
-  const enabled = source.getByRole('switch', { name: '启用来源', exact: true })
-  if ((await enabled.getAttribute('aria-checked')) !== 'true') {
-    await enabled.locator('.var-switch__ripple').focus()
-    await page.keyboard.press('Space')
-  }
-  await expect(enabled).toHaveAttribute('aria-checked', 'true')
-  await section('行情标的')
-  for (let i = 0; i < 2; i++) {
-    const quote = page.locator('fieldset:visible .admin-editor-item').nth(i)
-    await quote.locator('.admin-item-toggle').click()
-    await select(quote, `标的 ${i + 1} Provider`, 'yahoo-live')
-  }
-  await section('Dashboard 模块')
-  const module = page.locator('[data-edit-module="quotes"]')
-  await module.locator('.admin-item-toggle').click()
-  await select(module, 'quotes 模块权限', '公开')
-  await module.locator('summary').filter({ hasText: '数据源引用' }).click()
-  await module.getByRole('button', { name: '添加 main 引用', exact: true }).click()
+  await expect(source.locator('input[aria-label="服务根 HTTPS 地址"]')).toHaveValue(
+    'https://query1.finance.yahoo.com/',
+  )
+  await expect(source.getByRole('switch', { name: '启用来源', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await source.locator('input[aria-label="来源刷新间隔（秒）"]').fill('600')
   await page.getByRole('button', { name: '保存配置', exact: true }).click()
   await page.getByText('已保存并确认持久化', { exact: true }).waitFor()
   await page.reload()
   const configResponse = await context.request.get(origin + '/api/admin/config')
   assert.equal(configResponse.status(), 200)
   const saved = await configResponse.json()
-  assert.equal(saved.integrations.find((s) => s.id === 'yahoo-live').enabled, true)
-  assert.equal(saved.quotes.filter((q) => q.provider === 'yahoo-live').length, 2)
-  assert.equal(saved.modules.find((m) => m.id === 'quotes').sources.main.sourceId, 'yahoo-live')
+  assert.equal(saved.integrations.find((s) => s.id === 'yahoo').enabled, true)
+  assert.equal(saved.quotes.filter((q) => q.provider === 'yahoo').length, 2)
+  assert.equal(saved.modules.find((m) => m.id === 'quotes').sources.main.sourceId, 'yahoo')
 
   const collection = (await command('collector.mjs'))
     .split('\n')

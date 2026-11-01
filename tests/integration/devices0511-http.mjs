@@ -102,6 +102,7 @@ try {
     { credentialState: _, ...settings } = s
   await save((c) => {
     c.site.siteName = '离线设备展示 · 演示数据'
+    c.modules.find((m) => m.id === 'quotes').sources = {}
     c.integrations = [{ ...settings, credential: { operation: 'keep' } }]
     const m = c.modules.find((m) => m.id === 'devices')
     m.visibility = 'public'
