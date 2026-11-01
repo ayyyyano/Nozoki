@@ -1,0 +1,212 @@
+{
+  "source": "Yahoo Finance v8 chart, live public read; unmodified response bodies",
+  "capturedAt": "2026-10-31T15:45:39.439Z",
+  "responses": {
+    "QQQM": {
+      "chart": {
+        "result": [
+          {
+            "meta": {
+              "currency": "USD",
+              "symbol": "QQQM",
+              "exchangeName": "NGM",
+              "fullExchangeName": "NasdaqGM",
+              "instrumentType": "ETF",
+              "firstTradeDate": 1602595800,
+              "regularMarketTime": 1793390400,
+              "hasPrePostMarketData": true,
+              "gmtoffset": -14400,
+              "timezone": "EDT",
+              "exchangeTimezoneName": "America/New_York",
+              "regularMarketPrice": 284.34,
+              "regularMarketChangePercent": -3.46,
+              "fulldayPrice": 284.34,
+              "fulldayChange": -9.228,
+              "fulldayChangePercent": -3.133,
+              "fiftyTwoWeekHigh": 314.115,
+              "fiftyTwoWeekLow": 228.75,
+              "regularMarketDayHigh": 287.65,
+              "regularMarketDayLow": 281.42,
+              "regularMarketVolume": 8459290,
+              "longName": "Invesco NASDAQ 100 ETF",
+              "shortName": "Invesco NASDAQ 100 ETF",
+              "chartPreviousClose": 290.06,
+              "priceHint": 2,
+              "currentTradingPeriod": {
+                "pre": {
+                  "timezone": "EDT",
+                  "start": 1793347200,
+                  "end": 1793367000,
+                  "gmtoffset": -14400
+                },
+                "regular": {
+                  "timezone": "EDT",
+                  "start": 1793367000,
+                  "end": 1793390400,
+                  "gmtoffset": -14400
+                },
+                "post": {
+                  "timezone": "EDT",
+                  "start": 1793390400,
+                  "end": 1793404800,
+                  "gmtoffset": -14400
+                }
+              },
+              "dataGranularity": "1d",
+              "range": "5d",
+              "validRanges": [
+                "1d",
+                "5d",
+                "1mo",
+                "3mo",
+                "6mo",
+                "1y",
+                "2y",
+                "5y",
+                "10y",
+                "ytd",
+                "max"
+              ]
+            },
+            "timestamp": [1793021400, 1793107800, 1793194200, 1793280600, 1793367000],
+            "indicators": {
+              "quote": [
+                {
+                  "low": [
+                    290.54998779296875, 293.8800048828125, 296.6499938964844, 293.07000732421875,
+                    281.4200134277344
+                  ],
+                  "close": [
+                    293.260009765625, 296.9599914550781, 298.7099914550781, 294.5299987792969,
+                    284.3399963378906
+                  ],
+                  "open": [
+                    291.1400146484375, 294.510009765625, 298.1600036621094, 295.0199890136719,
+                    287.05999755859375
+                  ],
+                  "volume": [3871900, 2155400, 2430300, 2519300, 8491800],
+                  "high": [
+                    294.5, 297.6499938964844, 298.9700012207031, 295.6400146484375,
+                    287.6499938964844
+                  ]
+                }
+              ],
+              "adjclose": [
+                {
+                  "adjclose": [
+                    293.260009765625, 296.9599914550781, 298.7099914550781, 294.5299987792969,
+                    284.3399963378906
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "error": null
+      }
+    },
+    "VOO": {
+      "chart": {
+        "result": [
+          {
+            "meta": {
+              "currency": "USD",
+              "symbol": "VOO",
+              "exchangeName": "PCX",
+              "fullExchangeName": "NYSEArca",
+              "instrumentType": "ETF",
+              "firstTradeDate": 1284039000,
+              "regularMarketTime": 1793390400,
+              "hasPrePostMarketData": true,
+              "gmtoffset": -14400,
+              "timezone": "EDT",
+              "exchangeTimezoneName": "America/New_York",
+              "regularMarketPrice": 694.81,
+              "regularMarketChangePercent": -1.769,
+              "fulldayPrice": 694.81,
+              "fulldayChange": -11.63,
+              "fulldayChangePercent": -1.644,
+              "fiftyTwoWeekHigh": 718.47,
+              "fiftyTwoWeekLow": 578.46,
+              "regularMarketDayHigh": 700,
+              "regularMarketDayLow": 689.76,
+              "regularMarketVolume": 9939777,
+              "longName": "Vanguard S&P 500 ETF",
+              "shortName": "Vanguard S&P 500 ETF",
+              "chartPreviousClose": 698.58,
+              "priceHint": 2,
+              "currentTradingPeriod": {
+                "pre": {
+                  "timezone": "EDT",
+                  "start": 1793347200,
+                  "end": 1793367000,
+                  "gmtoffset": -14400
+                },
+                "regular": {
+                  "timezone": "EDT",
+                  "start": 1793367000,
+                  "end": 1793390400,
+                  "gmtoffset": -14400
+                },
+                "post": {
+                  "timezone": "EDT",
+                  "start": 1793390400,
+                  "end": 1793404800,
+                  "gmtoffset": -14400
+                }
+              },
+              "dataGranularity": "1d",
+              "range": "5d",
+              "validRanges": [
+                "1d",
+                "5d",
+                "1mo",
+                "3mo",
+                "6mo",
+                "1y",
+                "2y",
+                "5y",
+                "10y",
+                "ytd",
+                "max"
+              ]
+            },
+            "timestamp": [1793021400, 1793107800, 1793194200, 1793280600, 1793367000],
+            "indicators": {
+              "quote": [
+                {
+                  "high": [
+                    705.6799926757812, 708.8099975585938, 710.8400268554688, 708.4400024414062,
+                    700.010009765625
+                  ],
+                  "close": [
+                    703.4099731445312, 707.52001953125, 709.9000244140625, 707.3200073242188,
+                    694.8099975585938
+                  ],
+                  "low": [
+                    700.0999755859375, 703.3800048828125, 707.0999755859375, 704.7000122070312,
+                    689.75
+                  ],
+                  "open": [
+                    700.6599731445312, 705.4000244140625, 709.1500244140625, 706.6599731445312,
+                    699.9199829101562
+                  ],
+                  "volume": [4924500, 5383500, 4783500, 5134000, 9959200]
+                }
+              ],
+              "adjclose": [
+                {
+                  "adjclose": [
+                    703.4099731445312, 707.52001953125, 709.9000244140625, 707.3200073242188,
+                    694.8099975585938
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "error": null
+      }
+    }
+  }
+}

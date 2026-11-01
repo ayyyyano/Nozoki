@@ -7,6 +7,7 @@ import type {
   SourceCapability,
 } from '../../shared/contracts/dashboard.ts'
 import type { AdapterCode } from '../../shared/contracts/adapter.ts'
+import type { QuoteSymbolInput } from '../../shared/quotes/yahoo-symbol.ts'
 export class AdapterError extends Error {
   code: AdapterCode
   retryAfterSeconds?: number
@@ -25,6 +26,7 @@ export interface ReadTransport {
 }
 export interface AdapterContext {
   identityKey?: CryptoKey
+  quoteSymbols?: readonly QuoteSymbolInput[]
   source: IntegrationSettings
   transport: ReadTransport
   now: Date

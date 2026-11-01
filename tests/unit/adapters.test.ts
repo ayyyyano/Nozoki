@@ -191,8 +191,8 @@ test('each implemented source rejects missing fields, wrong types, null, unsuppo
     assert.equal((await runAdapter({ source: s, now, transport })).status, 'unconfigured')
     assert.equal(calls, 0)
   }
-  for (const p of ['quotes-custom', 'deepseek-spend'] as const)
-    assert.equal((await perform(p)).status, 'unsupported')
+  assert.equal((await perform('deepseek-spend')).status, 'unsupported')
+  assert.equal((await perform('quotes-custom')).status, 'unconfigured')
 })
 test('HTTP fault matrix applies to every source; upstream failure never becomes down/offline', async () => {
   for (const p of providers)

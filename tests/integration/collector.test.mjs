@@ -221,7 +221,7 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
     'forward migration keeps a populated v9 configuration, ciphertext, snapshots and run IDs',
     async () => {
       const files = (await readdir('migrations')).filter((f) => f.endsWith('.sql')).sort()
-      for (const f of files.filter((f) => f !== '0010_collection.sql'))
+      for (const f of files.filter((f) => f < '0010_collection.sql'))
         await db.batch(
           unstable_splitSqlQuery(await readFile('migrations/' + f, 'utf8')).map((sql) =>
             db.prepare(sql),
@@ -271,6 +271,12 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
       assert.equal(after[0].collection_generation.length, 32)
       for (const key of Object.keys(oldViews[0]))
         assert.equal((await rows('integration_snapshot_views'))[0][key], oldViews[0][key])
+      for (const f of files.filter((f) => f > '0010_collection.sql'))
+        await db.batch(
+          unstable_splitSqlQuery(await readFile('migrations/' + f, 'utf8')).map((sql) =>
+            db.prepare(sql),
+          ),
+        )
       await reset()
     },
   )
@@ -523,7 +529,7 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
       const n = upstream
       await ca.scheduled({ scheduledTime: Date.now(), cron: '*/5 * * * *' })
       assert.equal(upstream, n)
-      assert.equal((await rows('collection_state'))[0].status, 'unsupported')
+      assert.equal((await rows('collection_state')).length, 0)
       assert.equal((await rows('integration_snapshot_views')).length, 0)
     },
   )

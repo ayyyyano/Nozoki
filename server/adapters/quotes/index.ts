@@ -1,6 +1,7 @@
 import type { Quote, SourceCapability } from '../../../shared/contracts/dashboard.ts'
 import type { ReadTransport } from '../types.ts'
-/** No licensed supplier has been selected. Registered implementations must return validated Quote DTOs. */
+import { yahooChart } from './yahoo-chart.ts'
+/** publicDisplay records confirmed display rights; false means those rights are unconfirmed. */
 export interface QuoteProvider {
   id: string
   licenseReference: string
@@ -12,4 +13,6 @@ export interface QuoteProvider {
     signal?: AbortSignal,
   ): Promise<Quote[]>
 }
-export const quoteProviders: ReadonlyMap<string, QuoteProvider> = new Map()
+export const quoteProviders: ReadonlyMap<string, QuoteProvider> = new Map([
+  [yahooChart.id, yahooChart],
+])

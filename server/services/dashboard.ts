@@ -1,6 +1,6 @@
 import type { Config, ModuleSettings } from '../../shared/contracts/config.ts'
 import type { ModuleId } from '../../shared/contracts/dashboard.ts'
-import { snapshotSchema } from '../../shared/contracts/snapshots.ts'
+import { snapshotSchema, DataSchemas } from '../../shared/contracts/snapshots.ts'
 import {
   PublicDashboardSchema,
   AdminDashboardSchema,
@@ -143,7 +143,26 @@ function rawSnapshot(state: StoredState, m: ModuleSettings, admin = false) {
         if (typeof row.snapshot_json !== 'string' || row.snapshot_json.length > 500000)
           return snapshot('error')
         const parsed = snapshotSchema(m.id).safeParse(JSON.parse(row.snapshot_json))
-        if (parsed.success && parsed.data.sourceId === source.sourceId) return parsed.data
+        if (parsed.success && parsed.data.sourceId === source.sourceId) {
+          if (m.id === 'quotes' && parsed.data.data) {
+            const quotes = DataSchemas.quotes.parse(parsed.data.data)
+            const identity = (q: { market: string; symbol: string; provider: string | null }) =>
+              JSON.stringify([q.market, q.symbol, q.provider])
+            const byId = new Map(quotes.items.map((q) => [identity(q), q]))
+            return {
+              ...parsed.data,
+              data: {
+                items: state.config.quotes
+                  .filter((q) => q.enabled && q.provider === source.sourceId)
+                  .flatMap((q) => {
+                    const item = byId.get(identity(q))
+                    return item ? [item] : []
+                  }),
+              },
+            }
+          }
+          return parsed.data
+        }
       } catch {
         /* Do not expose corrupt stored JSON or its source address. */
       }
