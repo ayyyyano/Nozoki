@@ -14,7 +14,7 @@ const known = {
   },
   'uptime-kuma': { monitors: true, status: true, latency: true, uptime: true, history: false },
   uptimeflare: { status: true, latency: true, history: false },
-  'quotes-custom': { quote: false },
+  'quotes-custom': { quote: true },
 }
 export function declaredCapabilities(provider: IntegrationSettings['provider']) {
   return Object.fromEntries(
