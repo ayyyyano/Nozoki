@@ -14,9 +14,8 @@
     },
   ],
   "vars": {
-    "COLLECTOR_EPOCH": "2",
+    "COLLECTOR_EPOCH": "5",
     "INTEGRATION_KEY_VERSION": "v1",
-    "NOZOKI_PUBLIC_ROUTES": "[{\"id\":\"yahoo\",\"provider\":\"quotes-custom\",\"protocolVersion\":\"yahoo-chart-v8\",\"baseUrl\":\"https://query1.finance.yahoo.com/\",\"authentication\":\"none\"}]",
   },
   "dev": { "ip": "127.0.0.1", "port": 8788 },
 }
