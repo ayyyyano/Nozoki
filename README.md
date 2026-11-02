@@ -297,10 +297,10 @@ Collector 的网页地址返回 404 是正常行为。采集结果在看板显�
 
 ### 默认腾讯行情
 
-默认来源 ID 为 `tencent`，Provider 为 `quotes-custom`，协议为 `tencent-us-v1`，服务根地址为 `https://web.ifzq.gtimg.cn/`。来源已启用，每 300 秒检查刷新；QQQM、VOO 和行情模块的 `main` 引用均已绑定。此地址已内置批准，无需 API Key 或 `NOZOKI_PUBLIC_ROUTES`。
+新数据库自动加载来源 `tencent`：Provider 为 `quotes-custom`，协议为 `tencent-us-v1`，服务根地址为 `https://web.ifzq.gtimg.cn/`。来源已启用，每 300 秒检查刷新；QQQM、VOO 和行情模块的 `main` 引用均已绑定。此地址已内置批准，无需 API Key 或 `NOZOKI_PUBLIC_ROUTES`。
 
-1. 执行数据库迁移，包含 `0014_default_tencent_source.sql`，并一起更新 Dashboard 与 Collector。已有 Collector 需递增 `COLLECTOR_EPOCH`，因为内置服务表发生了变化。
-2. 新数据库直接使用腾讯。已有保存过配置的站点，在后台添加 ID 为 `tencent` 的来源，按上面的协议和地址启用来源，再将 QQQM、VOO 的 Provider 及行情模块 `main` 引用改为 `tencent`，关闭 Yahoo 来源后保存。使用新的来源 ID 可以让腾讯独立调度，Yahoo 的限流退避仍保留在原来源。
+1. 备份数据库并执行迁移至 `0015_load_default_tencent_source.sql`。首次从 Yahoo 版本升级时，一起更新 Dashboard 与 Collector，并递增 `COLLECTOR_EPOCH` 以匹配腾讯内置服务表。若已部署腾讯适配器，仅补上默认来源迁移无需再次递增 epoch。
+2. 已有站点缺少 `tencent` 时，迁移会自动加载腾讯默认来源，将 QQQM/VOO 的默认 Yahoo 绑定和行情模块的默认 Yahoo 引用切换到腾讯。Yahoo 若已无其他启用引用，会被关闭；其凭据、快照和退避记录仍保留。已有同名来源、其他自定义绑定或达到 10 个来源上限的配置保持原状。配置变更会递增版本并记录系统审计，升级前打开的后台草稿需要重新读取。
 3. 可先执行只读连接测试，再等待 Collector 调度。测试读取一个标的；看板使用 Collector 保存的结果。Node.js 部署可执行 `pnpm collector:node`。
 
 腾讯协议目前支持美股。默认的 `US / QQQM`、`US / VOO` 分别使用来源返回的完整代码 `QQQM.OQ`、`VOO.AM`。其他标的需填写已核实的完整代码（如 `AAPL.OQ`），裸代码不会自动猜测交易所，A 股及港股尚未接入此协议。每标的一次请求，同时取得报价和五日历史，单来源最多 20 个标的，总读取时间受 10 秒上限约束。
