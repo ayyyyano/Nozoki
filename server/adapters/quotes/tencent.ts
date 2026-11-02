@@ -56,7 +56,7 @@ export function normalizeTencentQuote(input: QuoteSymbolInput, value: unknown): 
   if (payload.code !== 0) throw new AdapterError('UPSTREAM_UNAVAILABLE')
   const series = parse(Series, payload.data?.[code]),
     fields = parse(QuoteFields, series.qt[code])
-  if (fields[2] !== code.slice(2) || !['delay', '200'].includes(fields[0]!))
+  if (fields[2] !== code.slice(2) || !['delay', '200', 'real'].includes(fields[0]!))
     throw new AdapterError('INVALID_RESPONSE')
   const price = decimal(fields[3]!),
     previousClose = decimal(fields[4]!),
