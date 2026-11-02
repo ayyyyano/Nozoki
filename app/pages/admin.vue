@@ -10,6 +10,11 @@ import { editableConfig, canonical } from '../../shared/contracts/admin'
 import { defaultProtocol } from '../../shared/contracts/adapter'
 import { COLOR_PRESETS, parseSourceColor } from '../../shared/domain/color-input'
 import type { Appearance } from '../../shared/contracts/appearance'
+import {
+  defaultSectionPatch,
+  sectionResetIssue,
+  type AdminSection,
+} from '../../shared/domain/admin-reset'
 const { data: session, refresh: refreshSession } = await useFetch<SessionDto>('/api/auth/session', {
   key: 'admin-session',
 })
@@ -46,6 +51,45 @@ const sections = [
   { id: 'quotes', label: '行情标的', icon: 'chart' },
   { id: 'links', label: '常用链接', icon: 'link' },
 ] as const
+const currentSection = computed(
+  () => sections.find((item) => item.id === section.value) ?? sections[0],
+)
+const showReset = ref(false)
+const resetTarget = ref<(typeof sections)[number]>(sections[0])
+const resetIssue = computed(() =>
+  draft.value ? sectionResetIssue(draft.value, resetTarget.value.id) : null,
+)
+const resetDescriptions: Record<AdminSection, string> = {
+  site: '恢复默认站点名称、主题色和背景。日程与浏览器个人偏好保持当前值。',
+  modules: '恢复七个模块的启停、标题、顺序、权限和来源引用。',
+  integrations:
+    '恢复腾讯默认来源，移除其他来源及其凭据配置。已有历史记录的来源可能受删除保护限制。',
+  schedule: '恢复默认时区、工作时间和休息日规则，移除自定义周计划、模板及日期例外。',
+  quotes: '恢复 QQQM、VOO 默认标的，移除其他标的。',
+  links: '恢复默认的博客、项目、主页和关于链接。',
+}
+function requestReset() {
+  if (busy.value || !draft.value) return
+  resetTarget.value = currentSection.value
+  showReset.value = true
+}
+function resetCurrentSection() {
+  if (busy.value || !draft.value || resetIssue.value) return
+  const target = resetTarget.value.id
+  const patch = defaultSectionPatch(draft.value, target)
+  if (target === 'integrations') clearSecrets()
+  Object.assign(draft.value, patch)
+  if (target === 'site') preview.value = false
+  if (target === 'schedule') scheduleDraftReset.value++
+  if (target === 'links') expandedLinks.value = {}
+  if (target === 'quotes') expandedQuotes.value = {}
+  if (target === 'modules') expandedModules.value = {}
+  if (target === 'integrations') expandedSources.value = {}
+  pending = null
+  errors.value = []
+  message.value = `已恢复${resetTarget.value.label}默认设置，保存配置后生效`
+  showReset.value = false
+}
 const navigation = useTemplateRef('navigation')
 const scheduleDraftReset = ref(0)
 const showActions = ref(false)
@@ -329,9 +373,11 @@ async function logout() {
   }
 }
 const confirmPanel = useTemplateRef<HTMLElement>('confirmPanel'),
-  latestPanel = useTemplateRef<HTMLElement>('latestPanel')
+  latestPanel = useTemplateRef<HTMLElement>('latestPanel'),
+  resetPanel = useTemplateRef<HTMLElement>('resetPanel')
 const discardFocus = useModalFocus(showDiscard, confirmPanel),
-  latestFocus = useModalFocus(showLatest, latestPanel)
+  latestFocus = useModalFocus(showLatest, latestPanel),
+  resetFocus = useModalFocus(showReset, resetPanel)
 function beforeUnload(event: BeforeUnloadEvent) {
   if (dirty.value) {
     event.preventDefault()
@@ -499,8 +545,22 @@ onBeforeRouteLeave(() => {
       <div v-else class="admin-workspace">
         <AdminSectionNav ref="navigation" v-model="section" :sections="sections" />
         <form class="admin-form" @submit.prevent="save">
+          <div class="admin-section-heading">
+            <h2>{{ currentSection.label }}</h2>
+            <VarButton
+              text
+              round
+              class="admin-icon-button"
+              :disabled="busy"
+              :aria-label="`重置${currentSection.label}为默认设置`"
+              title="重置为默认设置"
+              @click="requestReset"
+            >
+              <CommonAppIcon name="restore" />
+            </VarButton>
+          </div>
           <fieldset v-show="section === 'site'">
-            <legend>站点与外观</legend>
+            <legend class="sr-only">站点与外观</legend>
             <AdminText v-model="draft.site.siteName" label="站点名称" :max="100" />
             <div class="palette-presets">
               <VarButton
@@ -531,7 +591,7 @@ onBeforeRouteLeave(() => {
             ><AdminBackgroundEditor v-model="draft.site.background" />
           </fieldset>
           <fieldset v-show="section === 'modules'">
-            <legend>Dashboard 模块</legend>
+            <legend class="sr-only">Dashboard 模块</legend>
             <AdminEditorItem
               v-for="(m, index) in draft.modules"
               :key="m.id"
@@ -612,7 +672,7 @@ onBeforeRouteLeave(() => {
             </AdminEditorItem>
           </fieldset>
           <fieldset v-show="section === 'integrations'">
-            <legend>数据源</legend>
+            <legend class="sr-only">数据源</legend>
             <AdminEditorItem
               v-for="(i, index) in draft.integrations"
               :key="index"
@@ -641,11 +701,11 @@ onBeforeRouteLeave(() => {
             >
           </fieldset>
           <fieldset v-show="section === 'schedule'">
-            <legend>日程安排</legend>
+            <legend class="sr-only">日程安排</legend>
             <AdminScheduleEditor v-model="draft.site.schedule" :reset-token="scheduleDraftReset" />
           </fieldset>
           <fieldset v-show="section === 'quotes'">
-            <legend>行情标的</legend>
+            <legend class="sr-only">行情标的</legend>
             <AdminEditorItem
               v-for="(q, index) in draft.quotes"
               :key="index"
@@ -702,7 +762,7 @@ onBeforeRouteLeave(() => {
             >
           </fieldset>
           <fieldset v-show="section === 'links'">
-            <legend>常用链接</legend>
+            <legend class="sr-only">常用链接</legend>
             <AdminEditorItem
               v-for="(l, index) in draft.links"
               :key="l.id"
@@ -750,6 +810,32 @@ onBeforeRouteLeave(() => {
         </form>
       </div>
     </div>
+    <VarPopup
+      v-model:show="showReset"
+      position="center"
+      :default-style="false"
+      :close-on-key-escape="true"
+      @closed="resetFocus.restoreFocus"
+    >
+      <section
+        ref="resetPanel"
+        class="admin-confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reset-title"
+        aria-describedby="reset-description"
+        tabindex="-1"
+      >
+        <h2 id="reset-title">恢复{{ resetTarget.label }}默认设置？</h2>
+        <p id="reset-description">{{ resetDescriptions[resetTarget.id] }}</p>
+        <p>确认后仅修改本分区草稿，点击“保存配置”后生效。</p>
+        <p v-if="resetIssue" role="alert">{{ resetIssue }}</p>
+        <VarButton text @click="showReset = false">取消</VarButton>
+        <VarButton text type="primary" :disabled="busy || !!resetIssue" @click="resetCurrentSection"
+          >恢复默认</VarButton
+        >
+      </section>
+    </VarPopup>
     <VarPopup
       v-model:show="showDiscard"
       position="center"

@@ -14,7 +14,7 @@
     },
   ],
   "vars": {
-    "COLLECTOR_EPOCH": "5",
+    "COLLECTOR_EPOCH": "6",
     "INTEGRATION_KEY_VERSION": "v1",
   },
   "dev": { "ip": "127.0.0.1", "port": 8788 },
