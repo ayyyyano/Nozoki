@@ -7,6 +7,7 @@ import {
   isYahooChartEndpoint,
   type QuoteSymbolInput,
 } from '../../shared/quotes/yahoo-symbol.ts'
+import { tencentChartEndpoint, isTencentChartEndpoint } from '../../shared/quotes/tencent-symbol.ts'
 export const RESPONSE_LIMIT = 131072
 export interface TransportOptions {
   quoteSymbols?: readonly QuoteSymbolInput[]
@@ -39,10 +40,18 @@ export function endpointCatalog(
       return [`api/status-page/${slug}`, `api/status-page/heartbeat/${slug}`]
     }
     case 'quotes-custom': {
-      if (source.protocolVersion !== 'yahoo-chart-v8') return []
+      if (!['yahoo-chart-v8', 'tencent-us-v1'].includes(source.protocolVersion)) return []
       if (quoteSymbols.length > 20) throw new AdapterError('REQUEST_BUDGET')
       try {
-        return [...new Set(quoteSymbols.map(yahooChartEndpoint))]
+        return [
+          ...new Set(
+            quoteSymbols.map(
+              source.protocolVersion === 'tencent-us-v1'
+                ? tencentChartEndpoint
+                : yahooChartEndpoint,
+            ),
+          ),
+        ]
       } catch {
         throw new AdapterError('TARGET_NOT_APPROVED')
       }
@@ -66,7 +75,11 @@ export function serviceEndpoint(base: string, endpoint: string): string {
   } catch {
     throw new AdapterError('TARGET_NOT_APPROVED')
   }
-  if (!/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(endpoint) && !isYahooChartEndpoint(endpoint))
+  if (
+    !/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(endpoint) &&
+    !isYahooChartEndpoint(endpoint) &&
+    !isTencentChartEndpoint(endpoint)
+  )
     throw new AdapterError('TARGET_NOT_APPROVED')
   const resolved = new URL(endpoint, target),
     root = new URL(target)
@@ -181,6 +194,10 @@ export function boundedReadTransport(
         if (
           !/^application\/(?:[a-z0-9.-]+\+)?json(?:\s*;|$)/i.test(
             response.headers.get('content-type') ?? '',
+          ) &&
+          !(
+            isTencentChartEndpoint(endpoint) &&
+            /^text\/html\s*;\s*charset=utf-8\s*$/i.test(response.headers.get('content-type') ?? '')
           )
         )
           throw new AdapterError('INVALID_RESPONSE')

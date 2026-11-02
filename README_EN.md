@@ -14,13 +14,13 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 | Devices  | Sleepy status text, identifiable foreground applications, optional battery and external power information |
 | Codex    | CLIProxyAPI account status and passive quota observations supplied by the source                          |
 | Activity | Weekly schedules, multiple periods, templates, date exceptions, countdowns and progress                   |
-| Quotes   | Yahoo prices, daily changes, volume and five-day history                                                   |
+| Quotes   | Tencent prices, daily changes, volume and five-day history                                                   |
 | Links    | Bookmarks, ordering and Material icons                                                                    |
 | Services | Uptime Kuma and UptimeFlare monitor status and latency                                                    |
 
 The admin interface controls module availability, ordering, titles and access permissions. The server filters data for the current session. Visitor requests read saved results from the database.
 
-Each source needs an address, a supported protocol version and any required credentials. Deployment administrators can approve public HTTPS sources for direct access. Private sources on Cloudflare use a fixed VPC Service and a read-only relay. Node.js can run the relay inside the server process. QQQM and VOO use the enabled Yahoo source by default. DeepSeek balance changes are separate from official billing records. Codex token usage and costs require a trusted source.
+Each source needs an address, a supported protocol version and any required credentials. Deployment administrators can approve public HTTPS sources for direct access. Private sources on Cloudflare use a fixed VPC Service and a read-only relay. Node.js can run the relay inside the server process. QQQM and VOO use the enabled Tencent source by default. DeepSeek balance changes are separate from official billing records. Codex token usage and costs require a trusted source.
 
 ## Tech stack
 
@@ -293,21 +293,21 @@ Replace the example with your confirmed source. Matching includes the service ro
 
 Before approval, confirm that a trusted operator controls the domain, DNS and service, that the destination is on the public network, and that its TLS certificate is valid. Direct access uses fixed HTTPS roots and registered read-only endpoints. IP literals, local host names, nonstandard ports and redirects are rejected. Connections still resolve the approved host name at runtime; DNS/IP pinning is not provided. Use the constrained relay for DNS rebinding risks, split DNS into private networks, or uncertain network placement. Cloudflare proxying or Tunnel does not replace this check. Keep the full CLIProxyAPI management interface off the public internet.
 
-Increment `COLLECTOR_EPOCH` when upgrading an existing Collector to this policy, changing public routes or changing the built-in public service catalog. A changed configuration fingerprint under the same epoch fails the internal check, and the collection report returns `COLLECTION_UNAVAILABLE`. The DeepSeek target and the default Yahoo root have built-in approval. Other sources require an approved route; a route cannot enable an unknown protocol.
+Increment `COLLECTOR_EPOCH` when upgrading an existing Collector to this policy, changing public routes or changing the built-in public service catalog. A changed configuration fingerprint under the same epoch fails the internal check, and the collection report returns `COLLECTION_UNAVAILABLE`. The fixed DeepSeek, Tencent and Yahoo roots have built-in approval. Other sources require an approved route; a route cannot enable an unknown protocol.
 
-### Default Yahoo quotes
+### Default Tencent quotes
 
-The default source is enabled: ID `yahoo`, provider `quotes-custom`, protocol `yahoo-chart-v8`, root `https://query1.finance.yahoo.com/`, refresh interval 300 seconds. QQQM, VOO and the Quotes module's `main` reference are bound to it. No API key or `NOZOKI_PUBLIC_ROUTES` entry is required for this exact root.
+The enabled default source has ID `tencent`, provider `quotes-custom`, protocol `tencent-us-v1`, root `https://web.ifzq.gtimg.cn/` and a 300-second refresh interval. QQQM, VOO and the Quotes module's `main` reference are bound to it. The exact root has built-in approval and requires no API key or `NOZOKI_PUBLIC_ROUTES` entry.
 
-1. Apply database migrations, including `0013_default_yahoo_source.sql`, using the deployment steps above. Deploy the Dashboard and Collector together. For an existing Collector, increment `COLLECTOR_EPOCH` because the built-in target catalog has changed.
-2. After a scheduled run, the dashboard reads the collected quotes from the database. On Node.js, run `pnpm collector:node` manually or through the server's scheduler. No quotes are shown before a successful collection.
-3. In Sources → `yahoo`, you can disable collection, change its interval or run a read-only connection test. The test reads one symbol and saves no snapshot. Add symbols in Symbols and select `yahoo` as their Provider. The source interval controls collection frequency.
+1. Apply migrations including `0014_default_tencent_source.sql`, then update the Dashboard and Collector together. Increment `COLLECTOR_EPOCH` for an existing Collector because the built-in target catalog changed.
+2. Fresh databases use Tencent. On a site with saved configuration, add and enable a source with ID `tencent` using the protocol and root above. Set QQQM and VOO's Provider and the Quotes module's `main` reference to `tencent`, disable Yahoo, then save. The new source has its own schedule; Yahoo's rate-limit cooldown remains attached to the old source.
+3. Run the read-only connection test, then wait for collection. The test reads one symbol; the dashboard reads persisted Collector results. Node.js deployments can run `pnpm collector:node`.
 
-Use `US / QQQM`, `CN / 600519.SS`, `CN / 000001.SZ` or `HK / 0700.HK`. Each symbol needs one request. A source supports up to 20 symbols, read sequentially within the 10-second source deadline. You may instead approve and configure `https://query2.finance.yahoo.com/`; there is no automatic mirror fallback or retry. Failures retain the last valid snapshot.
+This Tencent protocol supports US symbols. `US / QQQM` and `US / VOO` map to the observed exchange-qualified codes `QQQM.OQ` and `VOO.AM`. Other symbols require a verified full code, such as `AAPL.OQ`; unknown bare tickers, Chinese and Hong Kong markets are unsupported. Each symbol uses one request for both quotes and five daily bars. A source supports at most 20 symbols within a 10-second total read deadline.
 
-Daily changes use an explicit previous close or the previous trading session's historical close. The five-day range baseline is never treated as yesterday's close. Missing reliable values remain unknown. Quotes retain upstream observation times and are marked stale when old, including market closures.
+Daily changes use the response's previous close. Prices remain decimal strings. US quote timestamps use `America/New_York` and are stored as UTC; pages format them in the site timezone. History contains forward-adjusted daily closes, with local midnight anchoring each trading date. The quote's observation time comes from its separate upstream timestamp. Unknown delay durations remain unknown. Old quotes become stale and failed reads retain the last valid snapshot.
 
-This is an unofficial Yahoo Finance v8 chart endpoint with no confirmed public display license. Its `licenseReference` is `Unofficial Yahoo Finance v8 chart endpoint; no public license`. Confirm usage rights before enabling public display. After building the Node release, run `node --experimental-strip-types tests/browser/yahoo-live.mjs` for an opt-in live collection check using a temporary database and a real browser. Routine tests do not contact Yahoo.
+The endpoint is an unversioned Tencent stock-page service with unconfirmed public display rights. Protocol parsing and local fixture collection are implemented; deployed Workers connectivity and sustained data behavior still need verification. Yahoo's `yahoo-chart-v8` protocol and both mirrors remain available for manual selection, with no automatic fallback. Remove or update any `NOZOKI_PUBLIC_ROUTES` override that conflicts with the new source.
 
 ### Updates and troubleshooting
 

@@ -10,6 +10,10 @@ import { resolve, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { chromium } from 'playwright'
 import { expect } from 'playwright/test'
+import { SqliteDatabase } from '../../platform/node/sqlite.mjs'
+import { readConfig, saveConfig } from '../../server/services/config.ts'
+import { editableConfig } from '../../shared/contracts/admin.ts'
+import { createYahooSource } from '../../shared/quotes/defaults.ts'
 
 const folder = await mkdtemp(join(tmpdir(), 'nozoki-yahoo-live-'))
 const server = createServer()
@@ -59,6 +63,30 @@ async function command(file, args) {
   return c.output()
 }
 await command('database.mjs', ['migrate'])
+const seedDb = new SqliteDatabase(env.NOZOKI_SQLITE_PATH)
+try {
+  const current = await readConfig(seedDb),
+    config = editableConfig(current)
+  const { credentialState: _, ...settings } = createYahooSource()
+  config.integrations = [{ ...settings, credential: { operation: 'keep' } }]
+  config.quotes.forEach((q) => (q.provider = 'yahoo'))
+  config.modules.find((m) => m.id === 'quotes').sources.main = {
+    sourceId: 'yahoo',
+    subject: 'default',
+  }
+  assert.equal(
+    (
+      await saveConfig(
+        seedDb,
+        { expectedVersion: current.site.configVersion, config },
+        { actor: { kind: 'system' } },
+      )
+    ).success,
+    true,
+  )
+} finally {
+  seedDb.close()
+}
 const running = child('start.mjs')
 let browser
 try {

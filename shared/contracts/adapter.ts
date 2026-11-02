@@ -7,7 +7,7 @@ export const ADAPTER_PROTOCOLS = {
   'cliproxy-bridge': ['cliproxy-v8-toggle', 'cliproxy-v8-accounts'],
   'uptime-kuma': ['kuma-public-2.0.2'],
   uptimeflare: ['uptimeflare-data-2024'],
-  'quotes-custom': ['yahoo-chart-v8'],
+  'quotes-custom': ['tencent-us-v1', 'yahoo-chart-v8'],
 } as const
 export function defaultProtocol(provider: keyof typeof ADAPTER_PROTOCOLS): string {
   return ADAPTER_PROTOCOLS[provider][0] ?? 'unverified'

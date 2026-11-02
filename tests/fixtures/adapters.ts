@@ -8,7 +8,10 @@ export function source(provider: IntegrationSettings['provider']): IntegrationSe
   return {
     id: 'fixture',
     provider,
-    protocolVersion: ADAPTER_PROTOCOLS[provider][0] ?? 'unselected',
+    protocolVersion:
+      provider === 'quotes-custom'
+        ? 'yahoo-chart-v8'
+        : (ADAPTER_PROTOCOLS[provider][0] ?? 'unselected'),
     baseUrl: 'https://example.invalid/service/',
     enabled: true,
     refreshInterval: 60,

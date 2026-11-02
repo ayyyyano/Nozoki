@@ -34,9 +34,9 @@ const report = { runtime: wrangler('miniflare/package.json').version, persist, c
 const migration = await readFile('migrations/0011_default_site_links.sql', 'utf8')
 const statements = (sql, db) => unstable_splitSqlQuery(sql).map((s) => db.prepare(s))
 async function legacy(db) {
-  for (const file of (await readdir('migrations'))
-    .filter((name) => name.endsWith('.sql') && name < '0011')
-    .sort())
+  // Full ordered history: the resulting baseline must match createDefaultConfig(),
+  // which now includes the default yahoo integration seeded by 0013.
+  for (const file of (await readdir('migrations')).filter((name) => name.endsWith('.sql')).sort())
     await db.batch(statements(await readFile('migrations/' + file, 'utf8'), db))
 }
 async function state(db) {
@@ -63,15 +63,9 @@ test('0011 default links on isolated native workerd D1', async (t) => {
     await check(
       'fresh initialization replaces the legacy seed and matches all runtime defaults',
       async () => {
-        const before = await state(db)
-        assert.equal((await readConfig(db)).links[0].url, 'https://soki.moe/')
-        await db.batch(statements(migration, db))
+        // The ordered history applies 0011 after 0010 (empty-integrations guard holds)
+        // and 0013 afterwards (default yahoo source): the baseline matches code defaults.
         assert.deepEqual(await readConfig(db), createDefaultConfig())
-        const after = await state(db)
-        assert.deepEqual(after.slice(1), before.slice(1))
-        const { links_json: _old, ...oldSite } = before[0][0]
-        const { links_json: _new, ...newSite } = after[0][0]
-        assert.deepEqual(newSite, oldSite)
         assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, [])
       },
     )

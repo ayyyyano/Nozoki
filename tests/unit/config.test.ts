@@ -26,11 +26,11 @@ test('D1 defaults keep M3/privacy while separating personal browser mode and wal
   assert.ok(!('mode' in c.site.appearance))
   assert.ok(!('reduceMotion' in c.site.appearance))
   assert.ok(!('displayMode' in c.site))
-  assert.ok(c.quotes.every((q) => q.provider === 'yahoo'))
+  assert.ok(c.quotes.every((q) => q.provider === 'tencent'))
   assert.equal(c.integrations.length, 1)
   assert.equal(c.integrations[0]!.enabled, true)
   assert.deepEqual(c.modules.find((m) => m.id === 'quotes')!.sources.main, {
-    sourceId: 'yahoo',
+    sourceId: 'tencent',
     subject: 'default',
   })
   assert.deepEqual(

@@ -624,6 +624,7 @@ onBeforeRouteLeave(() => {
             >
               <AdminIntegrationEditor
                 v-model="draft.integrations[index]!"
+                :timezone="baseline?.site.timezone ?? 'Asia/Shanghai'"
                 :state="baseline?.integrations.find((v) => v.id === i.id)?.credentialState"
                 :saved="baseline?.integrations.find((v) => v.id === i.id)"
               /><VarButton text @click="draft.integrations.splice(index, 1)"
