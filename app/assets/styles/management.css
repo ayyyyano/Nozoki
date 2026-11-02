@@ -183,6 +183,25 @@
   padding: 0;
   margin-bottom: 24px;
 }
+.admin-form legend.sr-only {
+  margin: -1px;
+}
+.admin-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 1200px;
+  margin-bottom: 24px;
+  min-width: 0;
+}
+.admin-section-heading h2 {
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
 .admin-fields {
   min-width: 0;
   display: grid;

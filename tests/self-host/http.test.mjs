@@ -13,6 +13,7 @@ import { chromium } from 'playwright'
 import { expect } from 'playwright/test'
 import { existsSync } from 'node:fs'
 import { formatTimestamp } from '../../shared/domain/format.ts'
+import { exerciseSectionResets, verifyResetSave } from '../browser/admin-reset.mjs'
 
 async function portNumber() {
   const server = createServer()
@@ -342,6 +343,7 @@ test(
         await page.getByLabel('密码', { exact: true }).fill(env.ADMIN_PASSWORD)
         await page.getByRole('button', { name: '登录', exact: true }).click()
         await page.waitForURL('**/admin')
+        await exerciseSectionResets(page, context, origin)
         await page.getByRole('button', { name: '数据源', exact: true }).click()
         const item = (id) =>
           page.locator('.admin-editor-item').filter({ has: page.getByText(id, { exact: true }) })
@@ -520,6 +522,7 @@ test(
           .getByRole('button', { name: '只读测试连接', exact: true })
           .click()
         await expect(item('saved-accounts').locator('time')).toHaveText('2026-07-02 01:02')
+        await verifyResetSave(page, context, origin)
         await page.getByRole('button', { name: '更多管理操作', exact: true }).click()
         await page.getByRole('menuitem', { name: '注销', exact: true }).click()
         await page.waitForURL(origin + '/login')

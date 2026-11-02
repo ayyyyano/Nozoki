@@ -27,6 +27,7 @@ import SaveRound from '@vicons/material/es/SaveRound.js'
 import MoreVertRound from '@vicons/material/es/MoreVertRound.js'
 import LogOutRound from '@vicons/material/es/LogOutRound.js'
 import UndoRound from '@vicons/material/es/UndoRound.js'
+import RestoreRound from '@vicons/material/es/RestoreRound.js'
 export const coreIcons: Record<
   string,
   { component: Component; name: string; symbol: string; filled?: Component }
@@ -59,4 +60,5 @@ export const coreIcons: Record<
   more: { component: MoreVertRound, name: 'MoreVertRound', symbol: 'more_vert' },
   logout: { component: LogOutRound, name: 'LogOutRound', symbol: 'logout' },
   undo: { component: UndoRound, name: 'UndoRound', symbol: 'undo' },
+  restore: { component: RestoreRound, name: 'RestoreRound', symbol: 'restore' },
 }
