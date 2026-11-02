@@ -30,6 +30,7 @@ export function createUnconfiguredDashboard(): DashboardSnapshots {
   return {
     deepseek: snapshot('unconfigured'),
     devices: snapshot('unconfigured'),
+    tailscale: snapshot('unconfigured'),
     codex: snapshot('unconfigured'),
     activity: snapshot(
       'ok',
@@ -97,25 +98,36 @@ export function createUnconfiguredDashboard(): DashboardSnapshots {
   }
 }
 export function defaultModules(): ModuleConfig[] {
-  return (['deepseek', 'devices', 'codex', 'activity', 'quotes', 'links', 'services'] as const).map(
-    (id, i) => ({
-      id,
-      title: {
-        deepseek: 'DeepSeek',
-        devices: '设备',
-        codex: 'Codex',
-        activity: '在干嘛',
-        quotes: '自选行情',
-        links: '常用链接',
-        services: '服务状态',
-      }[id],
-      enabled: true,
-      sortOrder: i,
-      visibility: ['activity', 'quotes', 'links'].includes(id) ? 'public' : 'admin',
-      guestBehavior: 'login_hint',
-      fields: {},
-    }),
-  )
+  return (
+    [
+      'deepseek',
+      'devices',
+      'tailscale',
+      'codex',
+      'activity',
+      'quotes',
+      'links',
+      'services',
+    ] as const
+  ).map((id, i) => ({
+    id,
+    title: {
+      deepseek: 'DeepSeek',
+      devices: '设备',
+      tailscale: 'Tailscale',
+      codex: 'Codex',
+      activity: '在干嘛',
+      quotes: '自选行情',
+      links: '常用链接',
+      services: '服务状态',
+    }[id],
+    enabled: id !== 'tailscale',
+    ...(id === 'tailscale' ? { ipVisibility: 'admin' as const } : {}),
+    sortOrder: i,
+    visibility: ['activity', 'quotes', 'links'].includes(id) ? 'public' : 'admin',
+    guestBehavior: 'login_hint',
+    fields: {},
+  }))
 }
 /** Layout only: production role/field authorization must be implemented server-side in phase 03. */
 export function layoutModules(modules: ModuleConfig[]): ModuleConfig[] {

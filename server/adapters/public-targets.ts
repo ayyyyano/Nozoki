@@ -21,13 +21,19 @@ const Routes = z
   .refine((routes) => new Set(routes.map((route) => route.id)).size === routes.length)
 export interface PublicTarget {
   baseUrl: string
-  authentication: 'none' | 'bearer'
+  authentication: 'none' | 'bearer' | 'tailscale-oauth'
 }
 /** Fixed, reviewed public services. Editable source metadata cannot extend this list. */
 export const PUBLIC_SERVICES = [
   TENCENT_SERVICE,
   YAHOO_SERVICE,
   YAHOO_SERVICE_MIRROR,
+  {
+    provider: 'tailscale',
+    protocolVersion: 'tailscale-devices-v2',
+    baseUrl: 'https://api.tailscale.com/',
+    authentication: 'tailscale-oauth',
+  },
   {
     provider: 'deepseek',
     protocolVersion: 'deepseek-balance-v1',

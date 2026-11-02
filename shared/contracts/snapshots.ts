@@ -71,6 +71,19 @@ export const DataSchemas = {
       )
       .max(100),
   }),
+  tailscale: z.strictObject({
+    devices: z
+      .array(
+        z.strictObject({
+          id: text,
+          name: text,
+          connectedToControl: z.boolean().nullable(),
+          lastSeen: stamp,
+          addresses: z.array(z.union([z.ipv4(), z.ipv6()])).max(10),
+        }),
+      )
+      .max(100),
+  }),
   codex: z.strictObject({
     accounts: z
       .array(

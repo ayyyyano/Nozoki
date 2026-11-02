@@ -54,10 +54,6 @@ const { state, view, legacy } = useScheduleEvaluation(
         计划状态 · {{ state.timezone
         }}<span v-if="view.exceptionName"> · {{ view.exceptionName }}</span>
       </p>
-      <details class="capability-note">
-        <summary>能力限制</summary>
-        按计划计算，不代表实际考勤或在线状态。位置 / 音乐 / PS5：未支持
-      </details>
     </template>
     <DashboardDataState v-else :status="snapshot.data ? 'error' : snapshot.status" empty />
   </DashboardModuleCard>

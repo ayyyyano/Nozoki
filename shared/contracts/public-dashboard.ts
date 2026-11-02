@@ -49,7 +49,7 @@ export const PublicDashboardSchema = z.strictObject({
         }),
       ]),
     )
-    .max(7),
+    .max(8),
   summary: z.strictObject({
     services: z
       .strictObject({ up: z.number().int().min(0), down: z.number().int().min(0) })

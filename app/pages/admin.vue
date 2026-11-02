@@ -61,7 +61,7 @@ const resetIssue = computed(() =>
 )
 const resetDescriptions: Record<AdminSection, string> = {
   site: '恢复默认站点名称、主题色和背景。日程与浏览器个人偏好保持当前值。',
-  modules: '恢复七个模块的启停、标题、顺序、权限和来源引用。',
+  modules: '恢复各模块的启停、标题、顺序、权限和来源引用。Tailscale 默认关闭。',
   integrations:
     '恢复腾讯默认来源，移除其他来源及其凭据配置。已有历史记录的来源可能受删除保护限制。',
   schedule: '恢复默认时区、工作时间和休息日规则，移除自定义周计划、模板及日期例外。',
@@ -611,7 +611,7 @@ onBeforeRouteLeave(() => {
                   >上移</VarButton
                 ><VarButton
                   text
-                  :disabled="index === 6"
+                  :disabled="index === draft.modules.length - 1"
                   :aria-label="`下移 ${m.id}`"
                   @click="move(draft.modules, index, 1)"
                   >下移</VarButton
@@ -639,6 +639,18 @@ onBeforeRouteLeave(() => {
                     value="login_hint"
                 /></VarSelect>
               </div>
+              <VarSelect
+                v-if="m.id === 'tailscale'"
+                v-model="m.ipVisibility"
+                aria-label="Tailscale IP 显示"
+                placeholder="IP 显示"
+                variant="outlined"
+              >
+                <VarOption label="显示" value="public" /><VarOption
+                  label="不显示"
+                  value="hidden"
+                /><VarOption label="登录后显示" value="admin" />
+              </VarSelect>
               <details class="admin-details">
                 <summary>数据源引用</summary>
                 <div v-for="(s, key) in m.sources" :key="key" class="admin-fields">

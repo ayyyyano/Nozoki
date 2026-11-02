@@ -65,7 +65,9 @@ test('0011 default links on isolated native workerd D1', async (t) => {
       async () => {
         // The ordered history applies 0011 after 0010 (empty-integrations guard holds)
         // and 0013 afterwards (default yahoo source): the baseline matches code defaults.
-        assert.deepEqual(await readConfig(db), createDefaultConfig())
+        const defaults = createDefaultConfig()
+        defaults.site.configVersion = 2
+        assert.deepEqual(await readConfig(db), defaults)
         assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, [])
       },
     )
@@ -88,7 +90,7 @@ test('0011 default links on isolated native workerd D1', async (t) => {
         const first = await saveConfig(db, input, options)
         const second = await saveConfig(db, input, options)
         assert.equal(first.success, true)
-        assert.equal(first.configVersion, 2)
+        assert.equal(first.configVersion, current.site.configVersion + 1)
         assert.deepEqual(second, { success: false, code: 'CONFIG_CONFLICT' })
         assert.deepEqual((await readConfig(db)).links, createDefaultConfig().links)
       },
@@ -106,7 +108,7 @@ test('0011 default links on isolated native workerd D1', async (t) => {
           (
             await saveConfig(
               edited,
-              { expectedVersion: 1, config },
+              { expectedVersion: original.site.configVersion, config },
               { actor: { kind: 'system', id: 'customization-test' } },
             )
           ).success,

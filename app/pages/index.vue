@@ -9,6 +9,7 @@ const shared = useSharedDashboard()
 const moduleIcons: Record<import('../../shared/contracts/dashboard').ModuleId, string> = {
   deepseek: 'spark',
   devices: 'devices',
+  tailscale: 'network',
   codex: 'code',
   activity: 'clock',
   quotes: 'chart',
@@ -156,6 +157,11 @@ const DevPreview = import.meta.dev
           v-else-if="module.id === 'devices'"
           :title="module.title"
           :snapshot="data.devices"
+        />
+        <DashboardTailscaleCard
+          v-else-if="module.id === 'tailscale'"
+          :title="module.title"
+          :snapshot="data.tailscale"
         />
         <DashboardCodexCard
           v-else-if="module.id === 'codex'"

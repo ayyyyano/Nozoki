@@ -78,7 +78,13 @@ test('phase 04 atomic HTTP-save core in real D1/workerd', async (t) => {
       ),
     )
     assert.deepEqual(
-      (await db.prepare('select * from integration_audit order by id').all()).results,
+      (
+        await db
+          .prepare(
+            "select * from integration_audit where id!='migration-0016-tailscale' order by id",
+          )
+          .all()
+      ).results,
       before,
     )
     assert.deepEqual((await db.prepare('pragma foreign_key_check').all()).results, [])

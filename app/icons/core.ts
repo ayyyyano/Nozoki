@@ -28,6 +28,7 @@ import MoreVertRound from '@vicons/material/es/MoreVertRound.js'
 import LogOutRound from '@vicons/material/es/LogOutRound.js'
 import UndoRound from '@vicons/material/es/UndoRound.js'
 import RestoreRound from '@vicons/material/es/RestoreRound.js'
+import HubRound from '@vicons/material/es/HubRound.js'
 export const coreIcons: Record<
   string,
   { component: Component; name: string; symbol: string; filled?: Component }
@@ -36,6 +37,7 @@ export const coreIcons: Record<
   eyeOff: { component: VisibilityOffRound, name: 'VisibilityOffRound', symbol: 'visibility_off' },
   spark: { component: AutoAwesomeRound, name: 'AutoAwesomeRound', symbol: 'auto_awesome' },
   devices: { component: DevicesRound, name: 'DevicesRound', symbol: 'devices' },
+  network: { component: HubRound, name: 'HubRound', symbol: 'hub' },
   code: { component: CodeRound, name: 'CodeRound', symbol: 'code' },
   clock: { component: ScheduleRound, name: 'ScheduleRound', symbol: 'schedule' },
   chart: { component: ShowChartRound, name: 'ShowChartRound', symbol: 'monitoring' },

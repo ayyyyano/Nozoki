@@ -67,7 +67,9 @@ test('fresh D1 collects bound default quotes without a public route or secret; d
           db.prepare(sql),
         ),
       )
-    assert.deepEqual(await readConfig(db), createDefaultConfig())
+    const defaults = createDefaultConfig()
+    defaults.site.configVersion = 2
+    assert.deepEqual(await readConfig(db), defaults)
     // Like 0011, the backfill migration leaves no audit row on an untouched baseline.
     assert.equal(
       (
@@ -158,20 +160,17 @@ test('Tencent seed upgrade preserves saved Yahoo configuration and encrypted cre
           ),
         )
       if (binding === 'SAVED') {
-        const current = await readConfig(db),
-          config = editableConfig(current)
-        config.site.siteName = 'User configuration to preserve'
-        config.integrations[0].baseUrl = 'https://query2.finance.yahoo.com/'
-        assert.equal(
-          (
-            await saveConfig(
-              db,
-              { expectedVersion: current.site.configVersion, config },
-              { actor: { kind: 'system' } },
-            )
-          ).success,
-          true,
-        )
+        // Seed the historical schema directly; current services require 0016.
+        await db
+          .prepare(
+            "UPDATE site_settings SET settings_json=json_set(settings_json,'$.siteName','User configuration to preserve')",
+          )
+          .run()
+        await db
+          .prepare(
+            "UPDATE integrations SET base_url='https://query2.finance.yahoo.com/' WHERE id='yahoo'",
+          )
+          .run()
       } else {
         const encrypted = await encryptCredential(
           'yahoo',
@@ -193,14 +192,21 @@ test('Tencent seed upgrade preserves saved Yahoo configuration and encrypted cre
           )
           .run()
       }
-      const before = await readConfig(db),
+      const historical = async () =>
+        Promise.all(
+          ['site_settings', 'dashboard_modules', 'quote_symbols', 'integrations'].map(
+            async (table) =>
+              (await db.prepare('SELECT * FROM ' + table + ' ORDER BY 1').all()).results,
+          ),
+        )
+      const before = await historical(),
         envelope = await db.prepare("SELECT * FROM integrations WHERE id='yahoo'").first()
       await db.batch(
         unstable_splitSqlQuery(
           await readFile('migrations/0014_default_tencent_source.sql', 'utf8'),
         ).map((sql) => db.prepare(sql)),
       )
-      assert.deepEqual(await readConfig(db), before)
+      assert.deepEqual(await historical(), before)
       assert.deepEqual(
         await db.prepare("SELECT * FROM integrations WHERE id='yahoo'").first(),
         envelope,

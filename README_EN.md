@@ -12,6 +12,7 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 | -------- | --------------------------------------------------------------------------------------------------------- |
 | DeepSeek | Account balances, currencies, topped-up balances and granted balances                                     |
 | Devices  | Sleepy status text, identifiable foreground applications, optional battery and external power information |
+| Tailscale | Device names, control-plane connection status and IP visibility based on login |
 | Codex    | CLIProxyAPI account status and passive quota observations supplied by the source                          |
 | Activity | Weekly schedules, multiple periods, templates, date exceptions, countdowns and progress                   |
 | Quotes   | Tencent prices, daily changes, volume and five-day history                                                   |
@@ -294,6 +295,19 @@ Replace the example with your confirmed source. Matching includes the service ro
 Before approval, confirm that a trusted operator controls the domain, DNS and service, that the destination is on the public network, and that its TLS certificate is valid. Direct access uses fixed HTTPS roots and registered read-only endpoints. IP literals, local host names, nonstandard ports and redirects are rejected. Connections still resolve the approved host name at runtime; DNS/IP pinning is not provided. Use the constrained relay for DNS rebinding risks, split DNS into private networks, or uncertain network placement. Cloudflare proxying or Tunnel does not replace this check. Keep the full CLIProxyAPI management interface off the public internet.
 
 Increment `COLLECTOR_EPOCH` when upgrading an existing Collector to this policy, changing public routes or changing the built-in public service catalog. A changed configuration fingerprint under the same epoch fails the internal check, and the collection report returns `COLLECTION_UNAVAILABLE`. The fixed DeepSeek, Tencent and Yahoo roots have built-in approval. Other sources require an approved route; a route cannot enable an unknown protocol.
+
+### Tailscale devices
+
+Tailscale and Sleepy are independent modules. Tailscale is disabled by default and ordered between Devices and Codex.
+
+1. Create an OAuth Client in Tailscale Trust credentials with only `devices:core:read`.
+2. Add an integration in the admin panel and select `tailscale`. The protocol and official URL are filled automatically. Choose `replace`, enter the Client ID and Client Secret, enable the source, and save.
+3. Enable the Tailscale Dashboard module and bind its main source to that integration. Set the module to public if guests should see the devices.
+4. Choose whether IP addresses are visible, hidden, or visible after login. The default is after login. Hidden addresses appear as `****`; the server does not send their real values to unauthorized viewers.
+
+Connection status uses `connectedToControl`. It describes the control-plane connection and does not prove service reachability. This API does not supply foreground apps or battery data; Sleepy continues to handle those. The Collector calls the official API without joining the tailnet, using at most two requests per run and no device management operations.
+
+For existing installations, apply `0016_tailscale_module.sql` and increment `COLLECTOR_EPOCH` before updating the Collector, since the built-in service approval table changes. The migration preserves existing settings and snapshots and adds a disabled Tailscale module. OAuth secrets use the existing encrypted credential storage.
 
 ### Default Tencent quotes
 

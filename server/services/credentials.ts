@@ -100,7 +100,7 @@ export function isIntegrationConfigured(i: IntegrationSettings): boolean {
   return (
     i.enabled &&
     i.baseUrl !== null &&
-    (!['deepseek', 'cliproxy-bridge'].includes(i.provider) ||
+    (!['deepseek', 'cliproxy-bridge', 'tailscale'].includes(i.provider) ||
       (i.provider === 'cliproxy-bridge' && i.protocolVersion === 'cliproxy-v8-accounts') ||
       i.credentialState.configured)
   )

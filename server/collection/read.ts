@@ -40,8 +40,8 @@ export async function collectSource(
     return readPrivateSource(p.source, privateEnv, 'read', now, { signal, onRead })
   }
   let secret: string | undefined
-  if (target.authentication === 'bearer' && !p.envelope) throw new AdapterError('AUTH_REQUIRED')
-  if (target.authentication === 'bearer') {
+  if (target.authentication !== 'none' && !p.envelope) throw new AdapterError('AUTH_REQUIRED')
+  if (target.authentication !== 'none') {
     try {
       const ring = await credentialKeys(env)
       if (!Object.hasOwn(ring.keys, p.envelope!.keyVersion)) throw new Error()

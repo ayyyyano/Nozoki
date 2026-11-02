@@ -62,7 +62,9 @@ async function workers(path, requests) {
 }
 test('SQLite uses all unchanged migrations, defaults, FK and persistent storage', async () => {
   const { db, directory, path } = await fresh()
-  assert.deepEqual(await readConfig(db), createDefaultConfig())
+  const defaults = createDefaultConfig()
+  defaults.site.configVersion = 2 // 0016 adds the independent module through CAS.
+  assert.deepEqual(await readConfig(db), defaults)
   assert.equal((await db.prepare('PRAGMA foreign_keys').first()).foreign_keys, 1)
   assert.equal((await db.prepare('PRAGMA journal_mode').first()).journal_mode, 'wal')
   assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, [])
@@ -133,11 +135,13 @@ test('separate SQLite connections serialize writes and reject one competing CAS 
     const results = await workers(path, [{ input: a }, { input: b }])
     assert.equal(results.filter((r) => r.success).length, 1)
     assert.equal(results.filter((r) => r.code === 'CONFIG_CONFLICT').length, 1)
-    assert.equal((await readConfig(db)).site.configVersion, 2)
+    assert.equal((await readConfig(db)).site.configVersion, a.expectedVersion + 1)
     assert.equal(
       (
         await db
-          .prepare("SELECT count(*) AS n FROM integration_audit WHERE operation='config_save'")
+          .prepare(
+            "SELECT count(*) AS n FROM integration_audit WHERE operation='config_save' AND actor_id IS NULL",
+          )
           .first()
       ).n,
       1,

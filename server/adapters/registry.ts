@@ -1,6 +1,7 @@
 import { declaredCapabilities } from './capabilities.ts'
 import { deepseek } from './deepseek.ts'
 import { sleepy } from './sleepy.ts'
+import { tailscale } from './tailscale.ts'
 import { cliproxy } from './cliproxyapi.ts'
 import { kuma } from './uptime-kuma.ts'
 import { uptimeflare } from './uptimeflare.ts'
@@ -8,7 +9,10 @@ import { quotesAdapter } from './quotes/adapter.ts'
 import { AdapterError, type Adapter, type AdapterContext, type AdapterRead } from './types.ts'
 import { sourceResult } from './common.ts'
 export const adapters: ReadonlyMap<string, Adapter> = new Map(
-  [deepseek, sleepy, cliproxy, kuma, uptimeflare, quotesAdapter].map((a) => [a.provider, a]),
+  [deepseek, sleepy, tailscale, cliproxy, kuma, uptimeflare, quotesAdapter].map((a) => [
+    a.provider,
+    a,
+  ]),
 )
 export function selectedAdapter(source: AdapterContext['source']): Adapter {
   const adapter = adapters.get(source.provider)

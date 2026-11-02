@@ -2,6 +2,7 @@ import type { DeviceState } from '../device-state/types.ts'
 export const MODULE_IDS = [
   'deepseek',
   'devices',
+  'tailscale',
   'codex',
   'activity',
   'quotes',
@@ -37,6 +38,7 @@ export interface ModuleConfig {
   visibility: 'public' | 'admin'
   guestBehavior: 'hidden' | 'login_hint'
   fields: Record<string, { enabled: boolean; visibility: 'public' | 'admin' }>
+  ipVisibility?: 'public' | 'hidden' | 'admin'
 }
 export interface DeepSeekData {
   balances: { currency: string; total: Decimal; toppedUp: Decimal; granted: Decimal }[]
@@ -49,6 +51,16 @@ export interface Device extends DeviceState {
 }
 export interface DevicesData {
   devices: Device[]
+}
+export interface TailscaleData {
+  devices: {
+    id: string
+    name: string
+    connectedToControl: boolean | null
+    lastSeen: string | null
+    addresses: string[]
+    addressesHidden?: boolean
+  }[]
 }
 export interface CodexData {
   accounts?: {
@@ -175,6 +187,7 @@ export interface ServicesData {
 export interface ModuleData {
   deepseek: DeepSeekData
   devices: DevicesData
+  tailscale: TailscaleData
   codex: CodexData
   activity: ActivityData
   quotes: QuotesData

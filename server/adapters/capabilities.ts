@@ -4,6 +4,7 @@ const known = {
   deepseek: { balance: true, spend: false },
   'deepseek-spend': { spend: false },
   sleepy: { metadata: true, devices: true, battery: false, heartbeat: false },
+  tailscale: { devices: true, connection: true, addresses: true },
   'cliproxy-bridge': {
     accounts: true,
     executionCounts: true,

@@ -63,7 +63,7 @@ export async function testIntegration(
       result = await readPrivateSource(source, env, 'probe', now)
     } else {
       assertProductionTarget(source, env)
-      requiresAuthentication = target.authentication === 'bearer'
+      requiresAuthentication = target.authentication !== 'none'
       let credential: string | undefined
       if (requiresAuthentication && record.envelope) {
         let ring

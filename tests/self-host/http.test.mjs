@@ -14,6 +14,7 @@ import { expect } from 'playwright/test'
 import { existsSync } from 'node:fs'
 import { formatTimestamp } from '../../shared/domain/format.ts'
 import { exerciseSectionResets, verifyResetSave } from '../browser/admin-reset.mjs'
+import { exerciseTailscale } from '../browser/tailscale.mjs'
 
 async function portNumber() {
   const server = createServer()
@@ -113,6 +114,8 @@ test(
       'NOZOKI_PRIVATE_RELAY_TOKEN',
     ])
       delete env[key]
+    env.INTEGRATION_ENCRYPTION_KEY = randomBytes(32).toString('base64url')
+    env.INTEGRATION_KEY_VERSION = 'v1'
     const cli = resolve(release, 'database.mjs'),
       entry = resolve(release, 'start.mjs')
     let child, browser
@@ -254,7 +257,9 @@ test(
         const db = new SqliteDatabase(env.NOZOKI_SQLITE_PATH)
         try {
           const audit = await db
-            .prepare("SELECT * FROM integration_audit WHERE operation='config_save'")
+            .prepare(
+              "SELECT * FROM integration_audit WHERE operation='config_save' AND actor_kind='admin'",
+            )
             .all()
           assert.equal(audit.results.length, 1)
           assert.equal(audit.results[0].actor_kind, 'admin')
@@ -523,11 +528,18 @@ test(
           .click()
         await expect(item('saved-accounts').locator('time')).toHaveText('2026-07-02 01:02')
         await verifyResetSave(page, context, origin)
+        await exerciseTailscale(page, context, origin, env.NOZOKI_SQLITE_PATH)
         await page.getByRole('button', { name: '更多管理操作', exact: true }).click()
         await page.getByRole('menuitem', { name: '注销', exact: true }).click()
         await page.waitForURL(origin + '/login')
         const res = await context.request.get(origin + '/api/auth/session')
         assert.equal((await res.json()).viewer, 'guest')
+        assert.ok(
+          !JSON.stringify(
+            await (await context.request.get(origin + '/api/dashboard')).json(),
+          ).includes('100.64.1.2'),
+        )
+        assert.ok(!(await (await context.request.get(origin)).text()).includes('100.64.1.2'))
         assert.deepEqual(errors, [])
         await context.close()
       },

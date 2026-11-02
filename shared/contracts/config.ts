@@ -109,12 +109,19 @@ export const ModuleSettingsSchema = z
     visibility: VisibilitySchema,
     guestBehavior: z.enum(['hidden', 'login_hint']),
     fields: z.record(FieldPathSchema, FieldPolicySchema),
+    ipVisibility: z.enum(['public', 'hidden', 'admin']).optional(),
     sources: z.record(
       IdSchema,
       z.strictObject({ sourceId: IdSchema, subject: z.string().min(1).max(128) }),
     ),
   })
   .superRefine((value, ctx) => {
+    if (value.id !== 'tailscale' && value.ipVisibility !== undefined)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ipVisibility'],
+        message: 'Only Tailscale supports IP visibility',
+      })
     for (const [path, policy] of Object.entries(value.fields)) {
       const segments = parseFieldPath(value.id, path)
       if (!segments) {
@@ -181,6 +188,7 @@ const IntegrationSettingsBaseSchema = z.strictObject({
     'deepseek',
     'deepseek-spend',
     'sleepy',
+    'tailscale',
     'cliproxy-bridge',
     'uptime-kuma',
     'uptimeflare',
@@ -235,7 +243,10 @@ function validatePackage(
   },
   ctx: z.RefinementCtx,
 ) {
-  if (value.modules.length !== 7 || new Set(value.modules.map((m) => m.id)).size !== 7)
+  if (
+    value.modules.length !== MODULE_IDS.length ||
+    new Set(value.modules.map((m) => m.id)).size !== MODULE_IDS.length
+  )
     ctx.addIssue({
       code: 'custom',
       path: ['modules'],
@@ -255,7 +266,7 @@ function validatePackage(
 const common = {
   contractVersion: z.literal(1),
   site: SiteSettingsSchema,
-  modules: z.array(ModuleSettingsSchema).length(7),
+  modules: z.array(ModuleSettingsSchema).length(MODULE_IDS.length),
   quotes: z.array(QuoteSymbolSchema).max(20),
   links: z.array(LinkSettingsSchema).max(100),
 }
