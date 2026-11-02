@@ -70,6 +70,12 @@ function projectValue(
   rules = fieldRules(module),
 ): Json | undefined {
   if (!allowed(module, path, admin, rules)) return undefined
+  if (
+    module.id === 'tailscale' &&
+    path.includes('addresses') &&
+    (module.ipVisibility === 'hidden' || (module.ipVisibility !== 'public' && !admin))
+  )
+    return undefined
   const g = group(module, path)
   if (g && !allowed(module, [g], admin, rules)) return undefined
   // A window title may exist in either alias, including old snapshots. Apply the stricter
@@ -98,6 +104,13 @@ function projectValue(
       if (['sourceId', 'capabilities', 'reason'].includes(key)) continue
       const next = projectValue(v, module, [...path, key], admin, rules)
       if (next !== undefined) out[key] = next
+    }
+    if (module.id === 'tailscale' && path[0] === 'devices' && path.length === 2) {
+      out.addressesHidden = !Array.isArray(out.addresses)
+      // A hostname can itself contain an IP. Do not leak a hidden address via its tooltip.
+      if (out.addressesHidden && typeof out.name === 'string' && Array.isArray(value.addresses))
+        for (const address of value.addresses)
+          if (typeof address === 'string') out.name = out.name.replaceAll(address, '****')
     }
     return out
   }

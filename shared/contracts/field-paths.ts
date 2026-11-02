@@ -42,6 +42,12 @@ export const FIELD_MODEL: Record<ModuleId, FieldNode> = {
       true,
     ),
   },
+  tailscale: {
+    devices: array(
+      { ...leaf('id', 'name', 'connectedToControl', 'lastSeen'), addresses: array(null) },
+      true,
+    ),
+  },
   codex: {
     accounts: array(
       {
@@ -128,6 +134,7 @@ export const FIELD_MODEL: Record<ModuleId, FieldNode> = {
 export const FIELD_GROUPS: Record<ModuleId, readonly string[]> = {
   deepseek: ['balance', 'balanceBreakdown'],
   devices: ['battery', 'usage', 'stateText'],
+  tailscale: [],
   codex: [],
   activity: [],
   quotes: ['quote', 'history'],

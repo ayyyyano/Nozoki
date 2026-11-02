@@ -22,6 +22,7 @@ const provider = computed({
     if (value === model.value.provider) return
     model.value.provider = value
     model.value.protocolVersion = defaultProtocol(value)
+    if (value === 'tailscale') model.value.baseUrl = 'https://api.tailscale.com/'
   },
 })
 const testing = ref(false),
@@ -81,6 +82,7 @@ const providers = [
   'deepseek',
   'deepseek-spend',
   'sleepy',
+  'tailscale',
   'cliproxy-bridge',
   'uptime-kuma',
   'uptimeflare',
@@ -89,6 +91,37 @@ const providers = [
 const fieldName = ref(''),
   mapping = ref(''),
   capName = ref('')
+function oauthField(key: 'clientId' | 'clientSecret') {
+  return computed({
+    get: () => {
+      if (model.value.credential.operation !== 'replace') return ''
+      try {
+        const value = JSON.parse(model.value.credential.value)[key]
+        return typeof value === 'string' ? value : ''
+      } catch {
+        return ''
+      }
+    },
+    set: (value: string) => {
+      if (model.value.credential.operation !== 'replace') return
+      let current: Record<string, unknown> = {}
+      try {
+        const parsed: unknown = JSON.parse(model.value.credential.value)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+          current = parsed as Record<string, unknown>
+      } catch {
+        /* A new replacement starts empty. */
+      }
+      model.value.credential.value = JSON.stringify({
+        clientId: typeof current.clientId === 'string' ? current.clientId : '',
+        clientSecret: typeof current.clientSecret === 'string' ? current.clientSecret : '',
+        [key]: value,
+      })
+    },
+  })
+}
+const oauthClientId = oauthField('clientId'),
+  oauthClientSecret = oauthField('clientSecret')
 function operation(value: unknown) {
   model.value.credential =
     value === 'replace'
@@ -143,14 +176,22 @@ function operation(value: unknown) {
       label="replace · 替换"
       value="replace" /><VarOption label="clear · 明确清除" value="clear"
   /></VarSelect>
+  <template v-if="model.credential.operation === 'replace' && model.provider === 'tailscale'">
+    <AdminText v-model="oauthClientId" label="OAuth Client ID" :max="4096" />
+    <AdminText v-model="oauthClientSecret" label="OAuth Client Secret" secret :max="4096" />
+  </template>
   <AdminText
-    v-if="model.credential.operation === 'replace'"
+    v-else-if="model.credential.operation === 'replace'"
     v-model="model.credential.value"
     label="新凭据"
     secret
     :max="8192"
   />
   <p v-if="model.credential.operation === 'clear'" class="admin-note">保存后将清除该来源的凭据。</p>
+  <p v-if="model.provider === 'tailscale'" class="admin-note">
+    使用 Tailscale OAuth Client，仅授予 devices:core:read。保存后，在 Dashboard 模块中启用 Tailscale
+    并绑定此来源；IP 显示策略单独配置。
+  </p>
   <div class="admin-actions">
     <VarButton :loading="testing" :disabled="testing || !savedMatches" @click="testConnection"
       >只读测试连接</VarButton

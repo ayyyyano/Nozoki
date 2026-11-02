@@ -12,7 +12,7 @@ import { createFixture, SCENARIOS } from '../fixtures/dashboard.ts'
 
 test('default production data has no invented telemetry or quotation history', () => {
   const data = createUnconfiguredDashboard()
-  assert.equal(Object.keys(data).length, 7)
+  assert.equal(Object.keys(data).length, 8)
   for (const id of ['deepseek', 'devices', 'codex', 'services'] as const) {
     assert.equal(data[id].status, 'unconfigured')
     assert.equal(data[id].data, null)
@@ -30,7 +30,7 @@ test('default production data has no invented telemetry or quotation history', (
 test('layout removes disabled modules and stably fills their spaces', () => {
   const modules = defaultModules()
   modules[0]!.enabled = false
-  modules[6]!.sortOrder = -1
+  modules.find((module) => module.id === 'services')!.sortOrder = -1
   const result = layoutModules(modules)
   assert.equal(result.length, 6)
   assert.equal(result[0]!.id, 'services')
@@ -74,7 +74,7 @@ test('fixture scenarios preserve zero, distinguish down from collection error an
   assert.equal(edge.services.data!.monitors[1]!.state, 'down')
   assert.equal(createFixture('error').services.data, null)
   assert.equal(createFixture('stale').devices.status, 'stale')
-  for (const scenario of SCENARIOS) assert.equal(Object.keys(createFixture(scenario)).length, 7)
+  for (const scenario of SCENARIOS) assert.equal(Object.keys(createFixture(scenario)).length, 8)
   assert.equal(createUnconfiguredDashboard().devices.data, null)
 })
 test('upstream empty and failure fixtures preserve independent local navigation', () => {

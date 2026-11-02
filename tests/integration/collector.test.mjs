@@ -10,7 +10,7 @@ import { source, balance } from '../fixtures/adapters.ts'
 import { sleepyDevicesFixture } from '../fixtures/devices0511.ts'
 import { createPrivateRelay, privateRoute } from '../../server/adapters/private-relay.ts'
 import { randomToken } from '../../server/services/auth-crypto.ts'
-import { importCredentialKey } from '../../server/services/credentials.ts'
+import { importCredentialKey, encryptCredential } from '../../server/services/credentials.ts'
 import { readBalanceChanges } from '../../server/services/balance-observations.ts'
 import { fieldPointer } from '../../shared/contracts/field-paths.ts'
 import { cleanupCollection } from '../../server/repositories/collection.ts'
@@ -227,12 +227,33 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
             db.prepare(sql),
           ),
         )
-      await save((c) => {
-        const { credentialState: _, ...settings } = s
-        c.integrations = [
-          { ...settings, credential: { operation: 'replace', value: 'SYNTHETIC-LEGACY-KEY' } },
-        ]
-      })
+      const credential = await encryptCredential(
+        s.id,
+        s.provider,
+        'SYNTHETIC-LEGACY-KEY',
+        keys,
+        iso(at),
+      )
+      await db
+        .prepare(
+          'INSERT INTO integrations(id,provider,protocol_version,base_url,enabled,refresh_interval,field_mappings_json,capabilities_json,credential_ciphertext,credential_iv,credential_key_version,credential_algorithm,credential_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        )
+        .bind(
+          s.id,
+          s.provider,
+          s.protocolVersion,
+          s.baseUrl,
+          Number(s.enabled),
+          s.refreshInterval,
+          JSON.stringify(s.fieldMappings),
+          JSON.stringify(s.capabilities),
+          credential.ciphertext,
+          credential.iv,
+          credential.keyVersion,
+          credential.algorithm,
+          credential.updatedAt,
+        )
+        .run()
       await db
         .prepare(
           "INSERT INTO collection_runs(id,source_id,config_version,status,started_at,finished_at) VALUES('legacy',?,1,'success',?,?)",

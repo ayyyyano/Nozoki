@@ -101,8 +101,10 @@ test('phase 02 uses real local workerd D1, not an SQLite mock', async (t) => {
           db.prepare(sql),
         ),
       )
-    assert.deepEqual(await readConfig(db), createDefaultConfig())
-    assert.equal(await rowCount('dashboard_modules'), 7)
+    const defaults = createDefaultConfig()
+    defaults.site.configVersion = 2
+    assert.deepEqual(await readConfig(db), defaults)
+    assert.equal(await rowCount('dashboard_modules'), 8)
     assert.equal(await rowCount('quote_symbols'), 2)
     assert.equal((await db.prepare('PRAGMA foreign_keys').first()).foreign_keys, 1)
     assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, [])

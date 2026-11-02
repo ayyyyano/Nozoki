@@ -4,10 +4,9 @@ import { snapshot, unavailableCapability } from './dashboard.ts'
 /** UI nulls mean withheld/unknown. Never reconstruct private values or zero financial metrics. */
 export function dashboardView(dto: PublicDashboard | AdminDashboard): DashboardSnapshots {
   const result = Object.fromEntries(
-    ['deepseek', 'devices', 'codex', 'activity', 'quotes', 'links', 'services'].map((id) => [
-      id,
-      snapshot('unconfigured'),
-    ]),
+    ['deepseek', 'devices', 'tailscale', 'codex', 'activity', 'quotes', 'links', 'services'].map(
+      (id) => [id, snapshot('unconfigured')],
+    ),
   ) as DashboardSnapshots
   for (const m of dto.modules) {
     if (m.kind !== 'data') continue
@@ -42,6 +41,18 @@ export function dashboardView(dto: PublicDashboard | AdminDashboard): DashboardS
             statusUpdatedAt: null,
             ...v,
             capabilities: {},
+          })),
+        }
+      if (m.id === 'tailscale')
+        data = {
+          devices: (raw.devices ?? []).map((v: any, i: number) => ({
+            id: `visible-${i}`,
+            name: '设备',
+            connectedToControl: null,
+            lastSeen: null,
+            ...v,
+            addresses: v.addresses ?? [],
+            addressesHidden: v.addressesHidden === true,
           })),
         }
       if (m.id === 'codex')

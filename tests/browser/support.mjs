@@ -38,9 +38,11 @@ export async function geometry(page) {
     height: innerHeight,
     scrollHeight: document.documentElement.scrollHeight,
     scrollWidth: document.documentElement.scrollWidth,
-    columns: getComputedStyle(document.querySelector('.dashboard-grid')).gridTemplateColumns.split(
-      ' ',
-    ).length,
+    columns: (() => {
+      const cards = [...document.querySelectorAll('.dashboard-grid > [data-module]')]
+      const top = cards[0]?.getBoundingClientRect().top
+      return cards.filter((card) => Math.abs(card.getBoundingClientRect().top - top) < 2).length
+    })(),
     cards: [...document.querySelectorAll('[data-module]')].map((e) => {
       const r = e.getBoundingClientRect(),
         s = getComputedStyle(e)

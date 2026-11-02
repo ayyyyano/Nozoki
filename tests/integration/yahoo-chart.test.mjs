@@ -87,7 +87,7 @@ test('Yahoo approved route, real workerd/D1 collection, ACL, failure retention, 
   })
   let db = await mf.getD1Database('DB')
   for (const file of (await readdir('migrations'))
-    .filter((f) => f.endsWith('.sql') && f < '0012')
+    .filter((f) => f.endsWith('.sql') && !f.startsWith('0012'))
     .sort())
     await db.batch(
       unstable_splitSqlQuery(await readFile('migrations/' + file, 'utf8')).map((sql) =>

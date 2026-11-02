@@ -4,6 +4,7 @@ export const ADAPTER_PROTOCOLS = {
   deepseek: ['deepseek-balance-v1'],
   'deepseek-spend': [],
   sleepy: ['sleepy-v5-status'],
+  tailscale: ['tailscale-devices-v2'],
   'cliproxy-bridge': ['cliproxy-v8-toggle', 'cliproxy-v8-accounts'],
   'uptime-kuma': ['kuma-public-2.0.2'],
   uptimeflare: ['uptimeflare-data-2024'],
@@ -48,7 +49,7 @@ export const ProbeResultSchema = z.strictObject({
   retryAfterSeconds: z.number().int().min(1).max(31536000).optional(),
   summary: z.strictObject({
     items: z.number().int().min(0).max(10000),
-    views: z.number().int().min(0).max(7),
+    views: z.number().int().min(0).max(8),
   }),
 })
 export type ProbeResult = z.infer<typeof ProbeResultSchema>

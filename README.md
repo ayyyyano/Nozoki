@@ -12,6 +12,7 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 | -------- | --------------------------------------------------------- |
 | DeepSeek | 账户余额、币种及充值余额、赠金余额                        |
 | Devices  | Sleepy 设备状态文字、可确认的前台应用、可选电量和供电信息 |
+| Tailscale | 设备名称、控制面连接状态及可按登录身份隐藏的 Tailnet IP |
 | Codex    | CLIProxyAPI 账户状态及来源提供的被动额度观测              |
 | Activity | 每周日程、多时段、模板、日期例外、倒计时和进度            |
 | Quotes   | 腾讯行情、日涨跌、成交量与 5 日走势                     |
@@ -294,6 +295,19 @@ Collector 的网页地址返回 404 是正常行为。采集结果在看板显�
 批准前需确认域名、DNS 和服务由可信运营者控制，最终目标位于公网，TLS 证书有效。直连采用固定 HTTPS 地址和适配器登记的只读端点，拒绝 IP 字面量、局域网主机名、非标准端口及重定向。运行时仍按域名建立连接，没有 DNS/IP 固定能力；DNS 重绑定、分流到私网或网络位置不明的来源应继续使用受限 Relay。Cloudflare 代理或 Tunnel 本身不替代这项确认。不要向公网开放完整 CLIProxyAPI 管理接口。
 
 已有 Collector 在升级到包含此策略的版本、修改公网路由或内置公网服务表后，需要递增 `COLLECTOR_EPOCH`。同一 epoch 下配置指纹变化会被内部检查拒绝，采集报告返回 `COLLECTION_UNAVAILABLE`。DeepSeek、腾讯及 Yahoo 固定地址已内置批准，其他来源需要单独批准；添加路由不会启用未知协议。
+
+### Tailscale 设备列表
+
+Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 Devices 与 Codex 之间。
+
+1. 在 Tailscale 的 Trust credentials 中创建 OAuth Client，仅授予 `devices:core:read`。
+2. 后台「数据源」添加来源，Provider 选择 `tailscale`。协议和官方地址会自动填入；凭据选择 `replace`，填写 Client ID 和 Client Secret，启用来源并保存。
+3. 在「Dashboard 模块」启用 Tailscale，添加 main 来源引用并选择刚才保存的来源。需要向访客展示设备时，将模块权限设为公开。
+4. IP 可以选择「显示」「不显示」「登录后显示」，默认登录后显示。无权查看时仍保留设备和 IP 行，以 `****` 代替地址；真实地址不会发送给该访问者。
+
+在线状态来自 `connectedToControl`，表示 Tailscale 控制面连接状态，不保证设备上的服务可达。接口不提供前台应用或电量；这些信息继续由 Sleepy 提供。Collector 访问官方 API，无需加入 Tailnet。每轮最多两次请求，不执行设备管理操作。
+
+升级已有站点时需应用 `0016_tailscale_module.sql`，并在更新 Collector 前递增 `COLLECTOR_EPOCH`，因为内置服务批准表发生变化。迁移保留原有配置和快照，并新增一个关闭的 Tailscale 模块。OAuth Secret 使用现有凭据加密机制保存。
 
 ### 默认腾讯行情
 

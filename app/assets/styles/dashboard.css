@@ -232,10 +232,18 @@ p {
   display: none;
 }
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
+}
+.dashboard-grid > * {
+  flex: 1 1 calc((100% - 32px) / 3);
+  min-width: 0;
+}
+.module-card,
+.links-module {
+  container-type: inline-size;
 }
 .dashboard-grid-container {
   container-type: inline-size;
@@ -593,6 +601,51 @@ p {
 .quote-time {
   font-size: 10px;
 }
+.quote-extra {
+  margin-top: 10px;
+}
+.tailnet-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 8px;
+}
+.tailnet-device {
+  min-width: 0;
+}
+.tailnet-device-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tailnet-device h3 {
+  font-size: 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tailnet-connection {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+.tailnet-connection[data-state='up'] {
+  color: var(--color-success, #218359);
+}
+.tailnet-connection[data-state='down'] {
+  color: var(--color-danger);
+}
+.tailnet-connection[data-state='stale'],
+.tailnet-device small {
+  color: var(--n-muted);
+}
+.tailnet-address {
+  margin-top: 4px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.tailnet-device small {
+  font-size: 11px;
+}
 .links-module {
   min-width: 0;
 }
@@ -664,14 +717,10 @@ p {
   transform: scale(0.98);
 }
 [data-module='services'] {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  column-gap: 24px;
-  padding-block: 14px;
+  display: block;
 }
 [data-module='services'] .module-header {
-  margin: 0;
+  margin-bottom: 14px;
   align-self: start;
 }
 [data-module='services'] .sync-time {
@@ -843,18 +892,26 @@ p {
   }
 }
 @media (max-width: 1100px) {
-  .dashboard-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .monitor-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 /* Actual content width, including embedded browser panels and page gutters. */
 @container (max-width: 1040px) {
-  .dashboard-grid {
+  .dashboard-grid > * {
+    flex-basis: calc((100% - 16px) / 2);
+  }
+}
+@container (max-width: 700px) {
+  .dashboard-grid > * {
+    flex-basis: 100%;
+  }
+}
+@container (max-width: 400px) {
+  .device-list,
+  .quote-list,
+  .monitor-list {
     grid-template-columns: minmax(0, 1fr);
-    align-items: start;
   }
 }
 @media (max-width: 650px) {
@@ -865,8 +922,10 @@ p {
     padding: 82px 14px 60px;
   }
   .dashboard-grid {
-    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
+  }
+  .dashboard-grid > * {
+    flex-basis: 100%;
   }
   .module-card {
     padding: 18px;

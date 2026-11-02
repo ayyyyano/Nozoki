@@ -89,6 +89,7 @@ export async function readStoredState(
         guestBehavior: m.guest_behavior,
         fields: parseJson(m.fields_json),
         sources: parseJson(m.sources_json),
+        ...(m.id === 'tailscale' ? { ipVisibility: m.ip_visibility } : {}),
       })),
       quotes: results[2]!.results.map((q) => ({
         market: q.market,
@@ -188,8 +189,8 @@ export async function commitConfig(
     statements.push(
       db
         .prepare(
-          `INSERT INTO dashboard_modules(id,enabled,title,sort_order,visibility,guest_behavior,fields_json,sources_json) VALUES(?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,title=excluded.title,sort_order=excluded.sort_order,visibility=excluded.visibility,guest_behavior=excluded.guest_behavior,fields_json=excluded.fields_json,sources_json=excluded.sources_json`,
+          `INSERT INTO dashboard_modules(id,enabled,title,sort_order,visibility,guest_behavior,fields_json,sources_json,ip_visibility) VALUES(?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,title=excluded.title,sort_order=excluded.sort_order,visibility=excluded.visibility,guest_behavior=excluded.guest_behavior,fields_json=excluded.fields_json,sources_json=excluded.sources_json,ip_visibility=excluded.ip_visibility`,
         )
         .bind(
           m.id,
@@ -200,6 +201,7 @@ export async function commitConfig(
           m.guestBehavior,
           JSON.stringify(m.fields),
           JSON.stringify(m.sources),
+          m.ipVisibility ?? 'admin',
         ),
     )
   statements.push(db.prepare('DELETE FROM quote_symbols'))

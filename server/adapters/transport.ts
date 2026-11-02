@@ -2,6 +2,7 @@ import type { IntegrationSettings } from '../../shared/contracts/config.ts'
 import { normalizeServiceTarget } from '../services/service-target.ts'
 import { AdapterError, type ReadTransport } from './types.ts'
 import { publicTarget } from './public-targets.ts'
+import { tailscaleTransport } from './tailscale-transport.ts'
 import {
   yahooChartEndpoint,
   isYahooChartEndpoint,
@@ -24,6 +25,8 @@ export function endpointCatalog(
   quoteSymbols: readonly QuoteSymbolInput[] = [],
 ): readonly string[] {
   switch (source.provider) {
+    case 'tailscale':
+      return ['api/v2/tailnet/-/devices']
     case 'deepseek':
       return ['user/balance']
     case 'sleepy':
@@ -261,6 +264,8 @@ export function productionTransport(
 ): ReadTransport {
   if (!source.enabled) throw new AdapterError('SOURCE_DISABLED')
   const target = assertProductionTarget(source, options.environment)
+  if (target.authentication === 'tailscale-oauth')
+    return tailscaleTransport(source, credential, options)
   if (target.authentication === 'bearer' && !credential) throw new AdapterError('AUTH_REQUIRED')
   if (target.authentication === 'bearer' && /[\r\n\u0000]/.test(credential!))
     throw new AdapterError('CREDENTIAL_INVALID')

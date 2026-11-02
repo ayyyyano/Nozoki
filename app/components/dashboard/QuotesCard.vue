@@ -17,13 +17,7 @@ function chartPoints(quote: Quote): string | null {
 }
 </script>
 <template>
-  <DashboardModuleCard
-    id="quotes"
-    :title="title"
-    icon="chart"
-    :status="snapshot.status"
-    :observed-at="snapshot.observedAt"
-  >
+  <DashboardModuleCard id="quotes" :title="title" icon="chart" :status="snapshot.status">
     <DashboardDataState
       :status="snapshot.status"
       :empty="!snapshot.data?.items.length"
@@ -70,32 +64,43 @@ function chartPoints(quote: Quote): string | null {
             stroke-width="2"
           />
         </svg>
-        <dl
+        <details
           v-if="
-            quote.previousClose !== null || quote.amplitudePercent !== null || quote.volume !== null
+            quote.previousClose !== null ||
+            quote.amplitudePercent !== null ||
+            quote.volume !== null ||
+            quote.asOf ||
+            snapshot.observedAt ||
+            quote.delayedMinutes !== null
           "
-          class="quote-details"
+          class="capability-note quote-extra"
         >
-          <div v-if="quote.previousClose !== null">
-            <dt>昨收</dt>
-            <dd>{{ decimalText(quote.previousClose) }}</dd>
-          </div>
-          <div v-if="quote.amplitudePercent !== null">
-            <dt>振幅</dt>
-            <dd>
-              {{ decimalText(quote.amplitudePercent)
-              }}{{ quote.amplitudePercent !== null ? '%' : '' }}
-            </dd>
-          </div>
-          <div v-if="quote.volume !== null">
-            <dt>成交</dt>
-            <dd>{{ decimalText(quote.volume) }} {{ quote.volumeUnit }}</dd>
-          </div>
-        </dl>
-        <p v-if="quote.asOf || quote.delayedMinutes !== null" class="quote-time">
-          {{ quote.asOf ? formatTimestamp(quote.asOf, timezone) : '报价时间未知' }} ·
-          {{ quote.delayedMinutes === null ? '延迟未知' : `延迟 ${quote.delayedMinutes} 分钟` }}
-        </p>
+          <summary>行情明细</summary>
+          <dl class="quote-details">
+            <div v-if="quote.previousClose !== null">
+              <dt>昨收</dt>
+              <dd>{{ decimalText(quote.previousClose) }}</dd>
+            </div>
+            <div v-if="quote.amplitudePercent !== null">
+              <dt>振幅</dt>
+              <dd>
+                {{ decimalText(quote.amplitudePercent)
+                }}{{ quote.amplitudePercent !== null ? '%' : '' }}
+              </dd>
+            </div>
+            <div v-if="quote.volume !== null">
+              <dt>成交</dt>
+              <dd>{{ decimalText(quote.volume) }} {{ quote.volumeUnit }}</dd>
+            </div>
+          </dl>
+          <p v-if="quote.asOf || quote.delayedMinutes !== null" class="quote-time">
+            {{ quote.asOf ? formatTimestamp(quote.asOf, timezone) : '报价时间未知' }} ·
+            {{ quote.delayedMinutes === null ? '延迟未知' : `延迟 ${quote.delayedMinutes} 分钟` }}
+          </p>
+          <p v-if="!quote.asOf && snapshot.observedAt" class="quote-time">
+            观测于 {{ formatTimestamp(snapshot.observedAt, timezone) }}
+          </p>
+        </details>
       </article>
     </div>
   </DashboardModuleCard>
