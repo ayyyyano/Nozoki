@@ -14,13 +14,13 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 | Devices  | Sleepy 设备状态文字、可确认的前台应用、可选电量和供电信息 |
 | Codex    | CLIProxyAPI 账户状态及来源提供的被动额度观测              |
 | Activity | 每周日程、多时段、模板、日期例外、倒计时和进度            |
-| Quotes   | Yahoo 行情、日涨跌、成交量与 5 日走势                     |
+| Quotes   | 腾讯行情、日涨跌、成交量与 5 日走势                     |
 | Links    | 常用链接、排序与 Material 图标                            |
 | Services | Uptime Kuma、UptimeFlare 监控状态和延迟                   |
 
 后台可设置模块启停、顺序、标题和访问权限。服务端根据登录身份过滤数据，访客刷新页面时从数据库读取已保存的结果。
 
-数据源需要配置地址、协议版本及凭据。公开 HTTPS 来源可由部署管理员批准直连；私有来源通过固定 VPC Service 和只读 Relay 访问，Node.js 服务器可以运行内嵌只读 Relay。QQQM、VOO 默认使用已启用的 Yahoo 来源。DeepSeek 余额净变化与官方消费账单分别处理，Codex Token 用量和费用需要可信来源。
+数据源需要配置地址、协议版本及凭据。公开 HTTPS 来源可由部署管理员批准直连；私有来源通过固定 VPC Service 和只读 Relay 访问，Node.js 服务器可以运行内嵌只读 Relay。QQQM、VOO 默认使用已启用的腾讯来源。DeepSeek 余额净变化与官方消费账单分别处理，Codex Token 用量和费用需要可信来源。
 
 ## 技术栈
 
@@ -293,21 +293,21 @@ Collector 的网页地址返回 404 是正常行为。采集结果在看板显�
 
 批准前需确认域名、DNS 和服务由可信运营者控制，最终目标位于公网，TLS 证书有效。直连采用固定 HTTPS 地址和适配器登记的只读端点，拒绝 IP 字面量、局域网主机名、非标准端口及重定向。运行时仍按域名建立连接，没有 DNS/IP 固定能力；DNS 重绑定、分流到私网或网络位置不明的来源应继续使用受限 Relay。Cloudflare 代理或 Tunnel 本身不替代这项确认。不要向公网开放完整 CLIProxyAPI 管理接口。
 
-已有 Collector 在升级到包含此策略的版本、修改公网路由或内置公网服务表后，需要递增 `COLLECTOR_EPOCH`。同一 epoch 下配置指纹变化会被内部检查拒绝，采集报告返回 `COLLECTION_UNAVAILABLE`。DeepSeek 地址和默认 Yahoo 地址已内置批准，其他来源需要单独批准；添加路由不会启用未知协议。
+已有 Collector 在升级到包含此策略的版本、修改公网路由或内置公网服务表后，需要递增 `COLLECTOR_EPOCH`。同一 epoch 下配置指纹变化会被内部检查拒绝，采集报告返回 `COLLECTION_UNAVAILABLE`。DeepSeek、腾讯及 Yahoo 固定地址已内置批准，其他来源需要单独批准；添加路由不会启用未知协议。
 
-### 默认 Yahoo 行情
+### 默认腾讯行情
 
-默认来源已启用：ID 为 `yahoo`，Provider 为 `quotes-custom`，协议为 `yahoo-chart-v8`，地址为 `https://query1.finance.yahoo.com/`，每 300 秒刷新。QQQM、VOO 和行情模块的 `main` 引用均已绑定。此固定地址无需 API Key，也无需设置 `NOZOKI_PUBLIC_ROUTES`。
+默认来源 ID 为 `tencent`，Provider 为 `quotes-custom`，协议为 `tencent-us-v1`，服务根地址为 `https://web.ifzq.gtimg.cn/`。来源已启用，每 300 秒检查刷新；QQQM、VOO 和行情模块的 `main` 引用均已绑定。此地址已内置批准，无需 API Key 或 `NOZOKI_PUBLIC_ROUTES`。
 
-1. 按上文部署步骤执行数据库迁移，包含 `0013_default_yahoo_source.sql`，并更新 Dashboard 与 Collector。已有 Collector 需递增 `COLLECTOR_EPOCH`，因为内置服务表发生了变化。
-2. 等待 Collector 调度后，看板会读取已保存行情。Node.js 部署可执行 `pnpm collector:node`，或由服务器定时器运行该命令。首次采集成功前显示未配置数据状态。
-3. 在后台「数据源 → yahoo」可关闭采集、调整刷新间隔或执行只读连接测试。测试仅读取一个标的，不保存快照。新增标的时，在「行情标的」将 Provider 选为 `yahoo`。实际采集频率由来源刷新间隔控制。
+1. 执行数据库迁移，包含 `0014_default_tencent_source.sql`，并一起更新 Dashboard 与 Collector。已有 Collector 需递增 `COLLECTOR_EPOCH`，因为内置服务表发生了变化。
+2. 新数据库直接使用腾讯。已有保存过配置的站点，在后台添加 ID 为 `tencent` 的来源，按上面的协议和地址启用来源，再将 QQQM、VOO 的 Provider 及行情模块 `main` 引用改为 `tencent`，关闭 Yahoo 来源后保存。使用新的来源 ID 可以让腾讯独立调度，Yahoo 的限流退避仍保留在原来源。
+3. 可先执行只读连接测试，再等待 Collector 调度。测试读取一个标的；看板使用 Collector 保存的结果。Node.js 部署可执行 `pnpm collector:node`。
 
-美股使用 `US / QQQM`，A 股可用 `CN / 600519.SS` 或 `CN / 000001.SZ`，港股可用 `HK / 0700.HK`。每标的一次请求，单来源最多 20 个标的，顺序读取且总采集时间受 10 秒上限约束。也可批准并配置 `https://query2.finance.yahoo.com/`，不会自动切换镜像或重试。失败时保留上次有效快照。
+腾讯协议目前支持美股。默认的 `US / QQQM`、`US / VOO` 分别使用来源返回的完整代码 `QQQM.OQ`、`VOO.AM`。其他标的需填写已核实的完整代码（如 `AAPL.OQ`），裸代码不会自动猜测交易所，A 股及港股尚未接入此协议。每标的一次请求，同时取得报价和五日历史，单来源最多 20 个标的，总读取时间受 10 秒上限约束。
 
-日涨跌使用明确昨收或上一交易日历史收盘计算；5 日区间基准不会冒充昨收，缺失可靠值时留空。时间保留上游报价时刻，休市旧数据会标记过期。
+日涨跌按响应中的昨收计算，金额保存为十进制字符串。美股报价时间按 `America/New_York` 转为 UTC，页面再按站点时区显示。五日走势使用前复权收盘价，历史日期以纽约当地零点记录日期位置，报价观测时间使用独立的上游时间。延迟分钟数未知时显示“延迟未知”。休市旧数据会标记过期，失败时保留最后合法快照。
 
-此来源是未公开授权的非官方 Yahoo Finance v8 chart 接口，`licenseReference` 为 `Unofficial Yahoo Finance v8 chart endpoint; no public license`。代码可用不代表已取得公开展示许可，启用前需自行确认使用权利。可在构建 Node 版本后运行 `node --experimental-strip-types tests/browser/yahoo-live.mjs`，以临时数据库和真实浏览器执行一次实际 Yahoo 采集验证；该检查不会自动加入日常测试。
+这是腾讯自选股页面使用的未版本化端点，公开展示权利尚未确认。当前已实现协议解析和本地离线采集验证，云端 Workers 的出口连通性及长期数据表现待验证。Yahoo 的 `yahoo-chart-v8` 协议与两个镜像保留为手动选择，不自动回退。旧的 `NOZOKI_PUBLIC_ROUTES` 如覆盖同名来源，需要与新来源设置一致或移除该覆盖。
 
 ### 后续更新与常见问题
 

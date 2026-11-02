@@ -20,7 +20,7 @@ test('new or changed providers select a registered protocol without inventing un
   assert.equal(defaultProtocol('deepseek'), 'deepseek-balance-v1')
   assert.equal(defaultProtocol('cliproxy-bridge'), 'cliproxy-v8-toggle')
   assert.equal(defaultProtocol('deepseek-spend'), 'unverified')
-  assert.equal(defaultProtocol('quotes-custom'), 'yahoo-chart-v8')
+  assert.equal(defaultProtocol('quotes-custom'), 'tencent-us-v1')
 })
 test('request keys are UUIDv4; canonical comparison ignores keys and declared collection order', () => {
   assert.ok(validRequestKey(crypto.randomUUID()))

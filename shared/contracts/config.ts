@@ -10,7 +10,7 @@ import { parseSourceColor } from '../domain/color-input.ts'
 import { normalizeSchedule, ScheduleInputSchema, type ScheduleInput } from '../schedule/index.ts'
 import { parseFieldPath, pathPrefix } from './field-paths.ts'
 import { isMaterialLinkIcon } from '../icons/material.ts'
-import { createYahooSource } from '../quotes/defaults.ts'
+import { createTencentSource } from '../quotes/defaults.ts'
 
 export const VisibilitySchema = z.enum(['public', 'admin'])
 export const ModuleIdSchema = z.enum(MODULE_IDS)
@@ -299,7 +299,7 @@ export function createDefaultConfig(): Config {
     },
     modules: defaultModules().map((m) => ({
       ...m,
-      sources: m.id === 'quotes' ? { main: { sourceId: 'yahoo', subject: 'default' } } : {},
+      sources: m.id === 'quotes' ? { main: { sourceId: 'tencent', subject: 'default' } } : {},
       fields:
         m.id === 'activity'
           ? {
@@ -313,12 +313,12 @@ export function createDefaultConfig(): Config {
       market: 'US',
       symbol,
       displayName: symbol === 'QQQM' ? '纳斯达克 100 ETF' : '标普 500 ETF',
-      provider: 'yahoo',
+      provider: 'tencent',
       sortOrder,
       enabled: true,
       refreshInterval: 300,
     })),
-    integrations: [createYahooSource()],
+    integrations: [createTencentSource()],
     links: legacy.links.data!.items.map((l) => ({ ...l, enabled: true, visibility: 'public' })),
   })
 }

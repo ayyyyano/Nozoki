@@ -2,7 +2,11 @@ import { z } from 'zod'
 import type { IntegrationSettings } from '../../shared/contracts/config.ts'
 import { normalizeServiceTarget } from '../services/service-target.ts'
 import { AdapterError } from './types.ts'
-import { YAHOO_SERVICE, YAHOO_SERVICE_MIRROR } from '../../shared/quotes/defaults.ts'
+import {
+  YAHOO_SERVICE,
+  YAHOO_SERVICE_MIRROR,
+  TENCENT_SERVICE,
+} from '../../shared/quotes/defaults.ts'
 
 const PublicRoute = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
@@ -21,6 +25,7 @@ export interface PublicTarget {
 }
 /** Fixed, reviewed public services. Editable source metadata cannot extend this list. */
 export const PUBLIC_SERVICES = [
+  TENCENT_SERVICE,
   YAHOO_SERVICE,
   YAHOO_SERVICE_MIRROR,
   {

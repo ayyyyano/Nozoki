@@ -1,6 +1,7 @@
 import type { Quote, SourceCapability } from '../../../shared/contracts/dashboard.ts'
 import type { ReadTransport } from '../types.ts'
 import { yahooChart } from './yahoo-chart.ts'
+import { tencentQuotes } from './tencent.ts'
 /** publicDisplay records confirmed display rights; false means those rights are unconfirmed. */
 export interface QuoteProvider {
   id: string
@@ -15,4 +16,5 @@ export interface QuoteProvider {
 }
 export const quoteProviders: ReadonlyMap<string, QuoteProvider> = new Map([
   [yahooChart.id, yahooChart],
+  [tencentQuotes.id, tencentQuotes],
 ])

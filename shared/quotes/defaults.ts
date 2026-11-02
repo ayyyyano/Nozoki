@@ -1,5 +1,20 @@
 import type { IntegrationSettings } from '../contracts/config.ts'
 
+export const TENCENT_SERVICE = {
+  provider: 'quotes-custom',
+  protocolVersion: 'tencent-us-v1',
+  baseUrl: 'https://web.ifzq.gtimg.cn/',
+  authentication: 'none',
+} as const
+
+export function createTencentSource(id = 'tencent'): IntegrationSettings {
+  return {
+    ...createYahooSource(id),
+    protocolVersion: TENCENT_SERVICE.protocolVersion,
+    baseUrl: TENCENT_SERVICE.baseUrl,
+  }
+}
+
 export const YAHOO_SERVICE = {
   provider: 'quotes-custom',
   protocolVersion: 'yahoo-chart-v8',

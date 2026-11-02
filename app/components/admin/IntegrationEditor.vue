@@ -7,9 +7,11 @@ import {
 import { canonical } from '../../../shared/contracts/admin'
 import type { CsrfDto } from '../../../shared/contracts/auth'
 import type { ConfigWrite, IntegrationSettings } from '../../../shared/contracts/config'
+import { formatTimestamp } from '../../../shared/domain/format'
 type Integration = ConfigWrite['integrations'][number]
 const model = defineModel<Integration>({ required: true })
 const props = defineProps<{
+  timezone: string
   state?: IntegrationSettings['credentialState']
   saved?: IntegrationSettings
 }>()
@@ -181,7 +183,11 @@ function operation(value: unknown) {
           .filter(([, c]) => c.verified)
           .map(([name]) => name)
           .join('、') || '无'
-      }}；测试时间 {{ testResult.collectedAt }}
+      }}；测试时间
+      <time :datetime="testResult.collectedAt">{{
+        formatTimestamp(testResult.collectedAt, timezone)
+      }}</time
+      >（{{ timezone }}）
     </p>
     <p v-if="testResult.retryAfterSeconds">
       请至少等待 {{ testResult.retryAfterSeconds }} 秒后重试。

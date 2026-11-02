@@ -12,6 +12,7 @@ import { editableConfig, CONFIG_BODY_LIMIT } from '../../shared/contracts/admin.
 import { chromium } from 'playwright'
 import { expect } from 'playwright/test'
 import { existsSync } from 'node:fs'
+import { formatTimestamp } from '../../shared/domain/format.ts'
 
 async function portNumber() {
   const server = createServer()
@@ -122,7 +123,9 @@ test(
     assert.deepEqual(JSON.parse((await command(cli, env, ['migrate'])).out).applied, [])
     const offlineDb = new SqliteDatabase(env.NOZOKI_SQLITE_PATH)
     try {
-      await offlineDb.prepare("UPDATE integrations SET enabled=0 WHERE id='yahoo'").run()
+      await offlineDb
+        .prepare("UPDATE integrations SET enabled=0 WHERE provider='quotes-custom'")
+        .run()
     } finally {
       offlineDb.close()
     }
@@ -330,7 +333,7 @@ test(
           headless: true,
           ...(existsSync(edge) ? { executablePath: edge } : {}),
         })
-        const context = await browser.newContext()
+        const context = await browser.newContext({ timezoneId: 'America/Los_Angeles' })
         const page = await context.newPage(),
           errors = []
         page.on('pageerror', (e) => errors.push(e.message))
@@ -352,6 +355,21 @@ test(
             .textContent(),
           'cliproxy-v8-accounts',
         )
+        const testStarted = Date.now()
+        const probeResponse = page.waitForResponse((response) =>
+          response.url().endsWith('/api/admin/integrations/saved-accounts/test'),
+        )
+        await accounts.getByRole('button', { name: '只读测试连接', exact: true }).click()
+        const probe = await (await probeResponse).json()
+        assert.equal(probe.code, 'SOURCE_DISABLED')
+        assert.ok(probe.collectedAt.endsWith('Z'))
+        assert.ok(Date.parse(probe.collectedAt) >= testStarted - 1000)
+        assert.ok(Date.parse(probe.collectedAt) <= Date.now() + 1000)
+        await expect(accounts.locator('time')).toHaveText(
+          formatTimestamp(probe.collectedAt, 'Asia/Shanghai'),
+        )
+        await expect(accounts.locator('time')).toHaveAttribute('datetime', probe.collectedAt)
+        await expect(accounts.getByRole('status')).toContainText('（Asia/Shanghai）')
         await legacy.locator('.admin-item-toggle').click()
         assert.equal(
           await legacy
@@ -433,7 +451,7 @@ test(
         await select('Provider', 'cliproxy-bridge')
         await expect(protocol).toHaveText('cliproxy-v8-accounts')
         await select('Provider', 'quotes-custom')
-        await expect(protocol).toHaveText('yahoo-chart-v8')
+        await expect(protocol).toHaveText('tencent-us-v1')
         await select('Provider', 'sleepy')
         await expect(protocol).toHaveText('sleepy-v5-status')
         assert.equal(
@@ -466,6 +484,42 @@ test(
           persisted.find((i) => i.id.startsWith('source-')).protocolVersion,
           'sleepy-v5-status',
         )
+        // Fixed probe fixtures exercise display only; disabled sources never contact an upstream.
+        let collectedAt = '2026-11-02T05:02:48.141Z'
+        await page.route('**/api/admin/integrations/saved-accounts/test', (route) =>
+          route.fulfill({ json: { ...probe, collectedAt } }),
+        )
+        const verifyProbeTime = async (expected, timezone) => {
+          await page.getByRole('button', { name: '数据源', exact: true }).click()
+          const source = item('saved-accounts')
+          await source.locator('.admin-item-toggle').click()
+          await source.getByRole('button', { name: '只读测试连接', exact: true }).click()
+          await expect(source.locator('time')).toHaveText(expected)
+          await expect(source.locator('time')).toHaveAttribute('datetime', collectedAt)
+          await expect(source.getByRole('status')).toContainText(`（${timezone}）`)
+        }
+        await verifyProbeTime('2026-11-02 13:02', 'Asia/Shanghai')
+        const current = await (await context.request.get(origin + '/api/admin/config')).json()
+        const timezoneDraft = editableConfig(current)
+        timezoneDraft.site.timezone = 'America/New_York'
+        timezoneDraft.site.schedule.timezone = 'America/New_York'
+        const browserCsrf = await (await context.request.get(origin + '/api/auth/csrf')).json()
+        const timezoneSave = await context.request.put(origin + '/api/admin/config', {
+          headers: {
+            Origin: origin,
+            'X-Nozoki-CSRF': browserCsrf.token,
+            'Idempotency-Key': randomUUID(),
+          },
+          data: { expectedVersion: current.site.configVersion, config: timezoneDraft },
+        })
+        assert.equal(timezoneSave.status(), 200)
+        await page.reload()
+        await verifyProbeTime('2026-11-02 00:02', 'America/New_York')
+        collectedAt = '2026-07-02T05:02:48.141Z'
+        await item('saved-accounts')
+          .getByRole('button', { name: '只读测试连接', exact: true })
+          .click()
+        await expect(item('saved-accounts').locator('time')).toHaveText('2026-07-02 01:02')
         await page.getByRole('button', { name: '更多管理操作', exact: true }).click()
         await page.getByRole('menuitem', { name: '注销', exact: true }).click()
         await page.waitForURL(origin + '/login')
