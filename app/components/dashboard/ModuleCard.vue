@@ -13,6 +13,7 @@ defineProps<{
 <template>
   <section
     class="module-card"
+    data-layout-flexible="surface"
     :data-module="id"
     :data-status="status"
     :aria-labelledby="`heading-${id}`"

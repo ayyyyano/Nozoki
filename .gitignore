@@ -58,3 +58,6 @@ __pycache__/
 /archives/
 /nozoki-backup-*/
 /nozoki-docs-archive-*/
+
+# Local test evidence (screenshots, measurements, logs) kept outside version control
+/docs/

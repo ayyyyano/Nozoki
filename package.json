@@ -13,7 +13,7 @@
     "predev": "pnpm dx:generate",
     "prebuild": "node scripts/build-prepaint.mjs",
     "test:sliders": "node tests/browser/sliders.mjs",
-    "test:layout": "node tests/browser/layout012.mjs",
+    "test:layout": "node --experimental-strip-types tests/browser/layout-suite.mjs",
     "test:wallpaper": "node tests/browser/wallpaper012.mjs",
     "test:palette": "node tests/browser/palette012.mjs",
     "test:icons": "node tests/browser/icons012.mjs",

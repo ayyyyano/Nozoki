@@ -10,10 +10,15 @@ const items = computed(() =>
 const hostname = (url: string) => new URL(url).hostname
 </script>
 <template>
-  <section class="links-module" data-module="links" aria-labelledby="heading-links">
+  <section
+    class="links-module"
+    data-module="links"
+    data-layout-flexible="rows"
+    aria-labelledby="heading-links"
+  >
     <h2 id="heading-links" class="sr-only">{{ title }}</h2>
     <DashboardDataState :status="snapshot.status" :empty="items.length === 0" />
-    <nav class="link-grid" aria-label="常用外部链接">
+    <nav class="link-grid" data-layout-rows aria-label="常用外部链接">
       <a
         v-for="item in items"
         :key="item.id"

@@ -32,7 +32,7 @@ function chartPoints(quote: Quote): string | null {
       >
         <div class="quote-title">
           <h3>{{ quote.symbol }}</h3>
-          <span>{{ quote.name }}</span>
+          <span :title="quote.name" tabindex="0">{{ quote.name }}</span>
         </div>
         <div class="quote-price">
           <strong>{{ decimalText(quote.price) }}</strong
