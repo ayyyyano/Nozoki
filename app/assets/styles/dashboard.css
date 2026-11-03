@@ -233,10 +233,11 @@ p {
 }
 .dashboard-grid {
   --dashboard-gap: 16px;
+  --dashboard-track-min: calc((100% - 2 * var(--dashboard-gap)) / 3);
   display: grid;
   grid-template-columns: repeat(
     auto-fit,
-    minmax(min(100%, max(340px, calc((100% - 2 * var(--dashboard-gap)) / 3))), 1fr)
+    minmax(min(100%, max(340px, var(--dashboard-track-min))), 1fr)
   );
   gap: var(--dashboard-gap);
   align-items: start;
@@ -255,7 +256,14 @@ p {
 }
 .dashboard-grid-container {
   container-type: inline-size;
+  container-name: dashboard;
   min-width: 0;
+}
+/* Three 394px cards leave 352px of content per card after padding and borders. */
+@container dashboard (width < 1214px) {
+  .dashboard-grid {
+    --dashboard-track-min: calc((100% - var(--dashboard-gap)) / 2);
+  }
 }
 .module-card,
 .link-grid a {
