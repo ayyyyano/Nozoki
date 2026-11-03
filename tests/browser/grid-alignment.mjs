@@ -141,6 +141,18 @@ try {
     if (width <= 600) assert.equal(g.columnCount, 1)
     if (width <= 600) assert.ok(g.cards.every((c) => c.rowGrowth === 0 && c.surfaceGrowth === 0))
   }
+  for (const width of [1115, 1200, 1240, 1260, 1276, 1277]) {
+    const g = await show(
+      'three-column-admission',
+      { guest: true, quotes: 2, stale: true, longNames: true },
+      width,
+      900,
+      [1200, 1240, 1276, 1277].includes(width),
+    )
+    assert.equal(g.columnCount, g.grid.width < 1214 ? 2 : 3)
+    assert.equal(g.quotes[0].y, g.quotes[1].y)
+    assert.ok(g.cards.find((c) => c.id === 'quotes').height < 400)
+  }
   const fitted = await show('three-column-detail-baseline', { guest: true, stale: true }, 1440, 900)
   await page.locator('.quote-extra summary').first().click()
   await stable(page)
