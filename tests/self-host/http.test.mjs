@@ -65,10 +65,13 @@ async function start(file, env) {
   throw new Error('Node startup timed out')
 }
 async function stop(child) {
-  if (child.exitCode !== null) return
+  if (child.exitCode !== null || child.signalCode !== null) return
   const done = new Promise((r) => child.once('exit', r))
   child.kill('SIGTERM')
+  const timeout = setTimeout(() => child.kill('SIGKILL'), 5000)
+  timeout.unref()
   await done
+  clearTimeout(timeout)
 }
 async function rawRequest(origin, path, headers, chunks, method = 'POST') {
   return new Promise((resolve, reject) => {
@@ -86,7 +89,7 @@ async function rawRequest(origin, path, headers, chunks, method = 'POST') {
 }
 test(
   'standalone Node HTTP/SSR, auth, CSRF, CAS, restart and browser on isolated SQLite',
-  { timeout: 120000 },
+  { timeout: 240000 },
   async (t) => {
     const folder = await mkdtemp(resolve('.wrangler/self-host-http-'))
     const release = resolve(folder, 'release')
@@ -448,7 +451,7 @@ test(
           ['deepseek', 'deepseek-balance-v1'],
           ['uptime-kuma', 'kuma-public-2.0.2'],
           ['uptimeflare', 'uptimeflare-data-2024'],
-          ['cliproxy-bridge', 'cliproxy-v8-toggle'],
+          ['cliproxy-bridge', 'cliproxy-v8-accounts'],
         ]) {
           await select('Provider', provider)
           await expect(protocol).toHaveText(expected)

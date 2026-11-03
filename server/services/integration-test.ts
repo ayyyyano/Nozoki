@@ -18,6 +18,8 @@ import {
 } from './integration-test-limits.ts'
 import type { AuthSession } from './sessions.ts'
 import { AuthError } from './auth-settings.ts'
+import { readManagedSource } from '../collection/managed-read.ts'
+import { environmentFingerprint } from '../collection/environment.ts'
 export async function testIntegration(
   db: Database,
   id: string,
@@ -58,8 +60,29 @@ export async function testIntegration(
             .slice(0, 1)
         : undefined
     let result: AdapterRead
-    const target = publicTarget(source, env)
-    if (!target) {
+    const target =
+      source.access?.mode && source.access.mode !== 'legacy' ? undefined : publicTarget(source, env)
+    if (source.access && source.access.mode !== 'legacy') {
+      const prior = await db
+        .prepare('SELECT epoch,fingerprint FROM collector_environment WHERE id=1')
+        .first()
+      if (
+        prior &&
+        (prior.epoch !== Number(env.COLLECTOR_EPOCH) ||
+          prior.fingerprint !== (await environmentFingerprint(env)))
+      )
+        throw new AdapterError('CONNECTOR_UNAVAILABLE')
+      requiresAuthentication = source.access.authentication === 'bearer'
+      result = await readManagedSource(
+        source,
+        record.envelope,
+        record.identityEnvelope,
+        env,
+        now,
+        'probe',
+        { quoteSymbols },
+      )
+    } else if (!target) {
       result = await readPrivateSource(source, env, 'probe', now)
     } else {
       assertProductionTarget(source, env)

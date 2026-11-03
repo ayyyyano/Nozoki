@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { UtcSchema, type IntegrationSettings } from '../../shared/contracts/config.ts'
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 export const CredentialEnvelopeSchema = z.strictObject({
   algorithm: z.literal('AES-GCM'),
   ciphertext: z
@@ -97,6 +98,14 @@ export function credentialState(envelope: CredentialEnvelope | null) {
 }
 /** Configuration completeness, never a claim of verified network/API capabilities. */
 export function isIntegrationConfigured(i: IntegrationSettings): boolean {
+  if (i.access && i.access.mode !== 'legacy')
+    return (
+      i.enabled &&
+      i.baseUrl !== null &&
+      i.access.approved &&
+      i.access.approvedTarget === sourceTargetKey(i, i.access) &&
+      (i.access.authentication === 'none' || i.credentialState.configured)
+    )
   return (
     i.enabled &&
     i.baseUrl !== null &&

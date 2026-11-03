@@ -1,6 +1,8 @@
 import { stat, readFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { createPrivateRelay } from '../../server/adapters/private-relay.ts'
+import { createSourceConnector } from './source-connector.mjs'
+import { createHash } from 'node:crypto'
 
 export function databasePath(env = process.env) {
   const path = env.NOZOKI_SQLITE_PATH
@@ -26,12 +28,27 @@ export async function nodeEnvironment(values = process.env, wire = fetch) {
     'NOZOKI_PRIVATE_ROUTES',
     'NOZOKI_PUBLIC_ROUTES',
     'NOZOKI_PRIVATE_RELAY_TOKEN',
+    'NOZOKI_CONNECTOR_URL',
+    'NOZOKI_CONNECTOR_TOKEN',
+    'NOZOKI_CONNECTOR_REVISION',
   ]
   const env = Object.fromEntries(
     names.filter((k) => typeof values[k] === 'string').map((k) => [k, values[k]]),
   )
   // A Node deployment never has Cloudflare's authenticated request.cf metadata.
   env.AUTH_TRUST_CF_IP = '0'
+  if (!env.NOZOKI_CONNECTOR_URL && typeof values.AUTH_RATE_LIMIT_SECRET === 'string') {
+    env.NOZOKI_CONNECTOR_TOKEN = createHash('sha256')
+      .update('nozoki-node-connector-v1:' + values.AUTH_RATE_LIMIT_SECRET)
+      .digest('base64url')
+    const handler = createSourceConnector(env.NOZOKI_CONNECTOR_TOKEN, {
+      privateCidrs: values.NOZOKI_CONNECTOR_PRIVATE_CIDRS ?? '',
+    })
+    env.NOZOKI_SOURCE_CONNECTOR = { fetch: (request) => handler(request) }
+    env.NOZOKI_CONNECTOR_REVISION = createHash('sha256')
+      .update(values.NOZOKI_CONNECTOR_PRIVATE_CIDRS ?? '')
+      .digest('hex')
+  }
   if (values.NOZOKI_RELAY_CONFIG_FILE) {
     const file = values.NOZOKI_RELAY_CONFIG_FILE
     if (!isAbsolute(file) || (await stat(file)).size > 65536)

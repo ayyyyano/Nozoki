@@ -38,6 +38,7 @@ export function createYahooSource(id = 'yahoo'): IntegrationSettings {
     refreshInterval: 300,
     fieldMappings: {},
     capabilities: { quote: { supported: true, verified: false } },
+    access: { mode: 'legacy' },
     credentialState: { configured: false, keyVersion: null, lastUpdatedAt: null },
   }
 }

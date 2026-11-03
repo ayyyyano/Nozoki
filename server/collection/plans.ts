@@ -3,10 +3,12 @@ import type { IntegrationSettings } from '../../shared/contracts/config.ts'
 import type { ModuleId } from '../../shared/contracts/dashboard.ts'
 import { credentialState } from '../services/credentials.ts'
 import type { QuoteSymbolInput } from '../../shared/quotes/yahoo-symbol.ts'
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 export interface CollectionPlan {
   source: IntegrationSettings
   revision: string
   envelope: StoredIntegration['envelope']
+  identityEnvelope?: StoredIntegration['identityEnvelope']
   configVersion: number
   references: { moduleId: ModuleId; subject: string }[]
   quoteSymbols?: readonly QuoteSymbolInput[]
@@ -14,6 +16,13 @@ export interface CollectionPlan {
 export function collectionPlans(state: StoredState): CollectionPlan[] {
   return state.integrations.flatMap((i) => {
     if (!i.settings.enabled || !i.revision) return []
+    const access = i.settings.access
+    if (
+      access &&
+      access.mode !== 'legacy' &&
+      (!access.approved || access.approvedTarget !== sourceTargetKey(i.settings, access))
+    )
+      return []
     const refs = state.config.modules
       .filter((m) => m.enabled && m.sources.main?.sourceId === i.settings.id)
       .map((m) => ({ moduleId: m.id, subject: m.sources.main!.subject }))
@@ -32,6 +41,7 @@ export function collectionPlans(state: StoredState): CollectionPlan[] {
         source: { ...i.settings, credentialState: credentialState(i.envelope) },
         revision: i.revision,
         envelope: i.envelope,
+        identityEnvelope: i.identityEnvelope,
         configVersion: state.config.site.configVersion,
         references: refs.filter((r) => r.moduleId !== 'links'),
         ...(quoteSymbols ? { quoteSymbols } : {}),

@@ -327,6 +327,7 @@ function addSource() {
     id,
     provider: 'sleepy',
     protocolVersion: defaultProtocol('sleepy'),
+    access: { mode: 'public', authentication: 'none', approved: false, approvedTarget: null },
     baseUrl: null,
     enabled: false,
     refreshInterval: 300,

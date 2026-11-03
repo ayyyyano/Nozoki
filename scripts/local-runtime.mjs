@@ -32,6 +32,12 @@ const commands = {
     '--test-concurrency=1',
     'tests/integration/*.test.mjs',
   ],
+  'access-tests': [
+    '--experimental-strip-types',
+    '--test',
+    '--test-concurrency=1',
+    'tests/integration/source-access.test.mjs',
+  ],
 }
 const args = commands[process.argv[2]]
 if (!args || process.argv.length !== 3) throw new Error('Unknown local runtime command')

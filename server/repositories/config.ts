@@ -14,6 +14,7 @@ import { DataLayerError, type Database, type D1Statement } from '../types/databa
 import { storageMode, requireWritableStorage, type StorageMode } from './storage-status.ts'
 export interface StoredIntegration {
   revision?: string
+  identityEnvelope?: CredentialEnvelope | null
   settings: Omit<IntegrationSettings, 'credentialState'>
   envelope: CredentialEnvelope | null
 }
@@ -47,13 +48,21 @@ export async function readStoredState(
           : 'SELECT * FROM integration_snapshot_views WHERE 0',
       ),
       db.prepare('PRAGMA table_info(dashboard_modules)'),
+      db.prepare('PRAGMA table_info(integrations)'),
     ])
-    const mode = storageMode(results[5]!.results)
+    const moduleMode = storageMode(results[5]!.results)
+    const mode =
+      moduleMode === 'ready' &&
+      ['access_json', 'identity_envelope_json'].every((name) =>
+        results[6]!.results.some((c) => c.name === name),
+      )
+        ? 'ready'
+        : 'read-only'
     const modules = results[1]!.results
     // The only supported legacy shape is the intact seven-module configuration.
     // Add a disabled in-memory module; never persist or loosen existing ACLs here.
     const legacyIds = ['deepseek', 'devices', 'codex', 'activity', 'quotes', 'links', 'services']
-    if (mode === 'read-only') {
+    if (moduleMode === 'read-only') {
       if (
         modules.length !== legacyIds.length ||
         !legacyIds.every((id) => modules.some((m) => m.id === id))
@@ -90,7 +99,11 @@ export async function readStoredState(
         refreshInterval: i.refresh_interval as number,
         fieldMappings: parseJson(i.field_mappings_json) as IntegrationSettings['fieldMappings'],
         capabilities: parseJson(i.capabilities_json) as IntegrationSettings['capabilities'],
+        access: i.access_json ? JSON.parse(String(i.access_json)) : { mode: 'legacy' },
       },
+      identityEnvelope: i.identity_envelope_json
+        ? CredentialEnvelopeSchema.parse(JSON.parse(String(i.identity_envelope_json)))
+        : null,
       envelope:
         i.credential_ciphertext === null
           ? null
@@ -183,8 +196,8 @@ export async function commitConfig(
     statements.push(
       db
         .prepare(
-          `INSERT INTO integrations(id,provider,protocol_version,base_url,enabled,refresh_interval,field_mappings_json,capabilities_json,credential_ciphertext,credential_iv,credential_key_version,credential_algorithm,credential_updated_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,protocol_version=excluded.protocol_version,base_url=excluded.base_url,enabled=excluded.enabled,refresh_interval=excluded.refresh_interval,field_mappings_json=excluded.field_mappings_json,capabilities_json=excluded.capabilities_json,credential_ciphertext=excluded.credential_ciphertext,credential_iv=excluded.credential_iv,credential_key_version=excluded.credential_key_version,credential_algorithm=excluded.credential_algorithm,credential_updated_at=excluded.credential_updated_at`,
+          `INSERT INTO integrations(id,provider,protocol_version,base_url,enabled,refresh_interval,field_mappings_json,capabilities_json,credential_ciphertext,credential_iv,credential_key_version,credential_algorithm,credential_updated_at,access_json,identity_envelope_json)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,protocol_version=excluded.protocol_version,base_url=excluded.base_url,enabled=excluded.enabled,refresh_interval=excluded.refresh_interval,field_mappings_json=excluded.field_mappings_json,capabilities_json=excluded.capabilities_json,credential_ciphertext=excluded.credential_ciphertext,credential_iv=excluded.credential_iv,credential_key_version=excluded.credential_key_version,credential_algorithm=excluded.credential_algorithm,credential_updated_at=excluded.credential_updated_at,access_json=excluded.access_json,identity_envelope_json=excluded.identity_envelope_json`,
         )
         .bind(
           i.settings.id,
@@ -200,6 +213,8 @@ export async function commitConfig(
           i.envelope?.keyVersion ?? null,
           i.envelope?.algorithm ?? null,
           i.envelope?.updatedAt ?? null,
+          JSON.stringify(i.settings.access ?? { mode: 'legacy' }),
+          i.identityEnvelope ? JSON.stringify(i.identityEnvelope) : null,
         ),
     )
   // Only allow-list SQL is constructed here; every dynamic ID/value remains bound.

@@ -6,21 +6,7 @@ export interface CollectionEnvironment {
   epoch: number
   fingerprint: string
 }
-export async function collectionEnvironment(
-  db: Database,
-  env: Record<string, unknown>,
-): Promise<CollectionEnvironment> {
-  const epoch = Number(env.COLLECTOR_EPOCH)
-  if (!Number.isSafeInteger(epoch) || epoch < 1) throw new Error('COLLECTOR_EPOCH_REQUIRED')
-  const relayBound =
-    typeof (env.NOZOKI_PRIVATE_RELAY as { fetch?: unknown } | undefined)?.fetch === 'function'
-  if (
-    relayBound &&
-    (typeof env.COLLECTOR_BINDING_REVISION !== 'string' ||
-      !env.COLLECTOR_BINDING_REVISION ||
-      env.COLLECTOR_BINDING_REVISION.length > 128)
-  )
-    throw new Error('COLLECTOR_BINDING_REVISION_REQUIRED')
+export async function environmentFingerprint(env: Record<string, unknown>) {
   const keys = [
     'NOZOKI_PRIVATE_ROUTES',
     'NOZOKI_PRIVATE_RELAY_TOKEN',
@@ -36,14 +22,45 @@ export async function collectionEnvironment(
       await hashToken(typeof env[k] === 'string' ? (env[k] as string) : 'absent'),
     ]),
   )
-  const fingerprint = await hashToken(
-    canonical({
-      values,
-      publicServices: PUBLIC_SERVICES,
-      relayBound:
-        typeof (env.NOZOKI_PRIVATE_RELAY as { fetch?: unknown } | undefined)?.fetch === 'function',
-    }),
+  const fingerprint: Record<string, unknown> = {
+    values,
+    publicServices: PUBLIC_SERVICES,
+    relayBound: typeof (env.NOZOKI_PRIVATE_RELAY as { fetch?: unknown })?.fetch === 'function',
+  }
+  if (
+    env.NOZOKI_CONNECTOR_TOKEN !== undefined ||
+    env.NOZOKI_CONNECTOR_URL !== undefined ||
+    env.NOZOKI_SOURCE_CONNECTOR !== undefined
+  ) {
+    fingerprint.connector = await Promise.all(
+      ['NOZOKI_CONNECTOR_TOKEN', 'NOZOKI_CONNECTOR_URL', 'NOZOKI_CONNECTOR_REVISION'].map(
+        async (k) => [
+          k,
+          await hashToken(typeof env[k] === 'string' ? (env[k] as string) : 'absent'),
+        ],
+      ),
+    )
+    fingerprint.connectorBound =
+      typeof (env.NOZOKI_SOURCE_CONNECTOR as { fetch?: unknown })?.fetch === 'function'
+  }
+  return hashToken(canonical(fingerprint))
+}
+export async function collectionEnvironment(
+  db: Database,
+  env: Record<string, unknown>,
+): Promise<CollectionEnvironment> {
+  const epoch = Number(env.COLLECTOR_EPOCH)
+  if (!Number.isSafeInteger(epoch) || epoch < 1) throw new Error('COLLECTOR_EPOCH_REQUIRED')
+  const relayBound =
+    typeof (env.NOZOKI_PRIVATE_RELAY as { fetch?: unknown } | undefined)?.fetch === 'function'
+  if (
+    relayBound &&
+    (typeof env.COLLECTOR_BINDING_REVISION !== 'string' ||
+      !env.COLLECTOR_BINDING_REVISION ||
+      env.COLLECTOR_BINDING_REVISION.length > 128)
   )
+    throw new Error('COLLECTOR_BINDING_REVISION_REQUIRED')
+  const fingerprint = await environmentFingerprint(env)
   const [r] = await db.batch([
     db
       .prepare(

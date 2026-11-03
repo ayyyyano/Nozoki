@@ -21,7 +21,7 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 
 The admin interface controls module availability, ordering, titles and access permissions. The server filters data for the current session. Visitor requests read saved results from the database.
 
-Each source needs an address, a supported protocol version and any required credentials. Deployment administrators can approve public HTTPS sources for direct access. Private sources on Cloudflare use a fixed VPC Service and a read-only relay. Node.js can run the relay inside the server process. QQQM and VOO use the enabled Tencent source by default. DeepSeek balance changes are separate from official billing records. Codex token usage and costs require a trusted source.
+The admin page manages source addresses, protocols, credentials and access approvals. Custom HTTPS sources use a constrained connector. Node.js embeds it; Cloudflare requires a one-time connector setup. QQQM and VOO use the enabled Tencent source by default. Codex displays account status and confirmed passive quota observations.
 
 ## Tech stack
 
@@ -276,29 +276,40 @@ This enables the configured five-minute Cron. Each source keeps its own refresh 
 
 For automatic updates on GitHub pushes, commit the Collector configuration, then open **nozoki-collector → Settings → Builds → Connect** and connect the same repository. Keep the repository root, use build command `pnpm collector:build` and deploy command `pnpm collector:deploy`.
 
-A 404 at the Collector's web address is expected. Results appear on the dashboard; execution details are in the Worker's logs. DeepSeek needs your API key. Public Sleepy, Kuma and Flare sources can use the direct routes below. CLIProxyAPI management interfaces and private network sources use a fixed VPC Service and read-only relay. Increment `COLLECTOR_EPOCH` when changing collection keys, routes or binding revisions.
+A 404 at the Collector's web address is expected. Results appear on the dashboard; execution details are in Worker logs. DeepSeek needs your API key. Fixed Tencent, Yahoo, DeepSeek and Tailscale roots have built-in approval.
 
-### Approving public HTTPS sources
+### Adding custom sources in the admin page
 
-Save the source in the admin page and note its ID, provider, protocol version and full service root. Set the same `NOZOKI_PUBLIC_ROUTES` JSON string in the Dashboard and Collector runtime variables. For Node.js, use the environment file shared by the server and collection processes. Example:
+1. Add a source under Data sources and choose its provider. The protocol follows the provider. Enter the full HTTPS service root, such as `https://alive.example.com/` or `https://example.com/sleepy/`.
+2. Choose managed public HTTPS access. Select no credentials for a public status endpoint. For a service that requires a Bearer Key, select Bearer and enter the key with credential operation `replace`.
+3. Enable the source, approve its target, review the address and credential use, then save the configuration. Approval and revocation take effect after saving.
+4. Run the read-only connection test. Bind the source to the corresponding Dashboard module's `main` reference and save. The Collector reads it at the configured interval.
 
-```json
-[
-  {
-    "id": "my-sleepy",
-    "provider": "sleepy",
-    "protocolVersion": "sleepy-v5-status",
-    "baseUrl": "https://sleepy.example.com/",
-    "authentication": "none"
-  }
-]
-```
+Changes to the source ID, provider, protocol, root, network scope or authentication require approval again. Changing the root or provider also requires replacing or clearing a saved credential. Credentials are encrypted in the database; admin reads return their configuration status. Each configuration supports up to 10 sources.
 
-Replace the example with your confirmed source. Matching includes the service root path: `/service-a/` and `/service-b/` are different targets. A configuration can contain up to 10 sources. Update the deployment variable after changing a source address, provider or protocol. Mismatched targets are rejected. Use `none` for public status interfaces. Use `bearer` when your own read-only proxy requires a Bearer Token, and save that source credential separately in the admin page. The `none` mode sends no stored credential.
+Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI uses `cliproxy-bridge` / `cliproxy-v8-accounts`, with its Management Key as the Bearer credential. A stable account identity key is generated and stored encrypted. Use a reverse proxy to expose only the protocol's `v8/management/credentials` endpoint. The admin page accepts registered protocols rather than arbitrary endpoint URLs.
 
-Before approval, confirm that a trusted operator controls the domain, DNS and service, that the destination is on the public network, and that its TLS certificate is valid. Direct access uses fixed HTTPS roots and registered read-only endpoints. IP literals, local host names, nonstandard ports and redirects are rejected. Connections still resolve the approved host name at runtime; DNS/IP pinning is not provided. Use the constrained relay for DNS rebinding risks, split DNS into private networks, or uncertain network placement. Cloudflare proxying or Tunnel does not replace this check. Keep the full CLIProxyAPI management interface off the public internet.
+Node.js embeds the connector. Cloudflare Workers cannot pin a checked DNS address into an HTTPS connection, so custom domains need the one-time setup below. See the `lookup` limitation in [Cloudflare's HTTP documentation](https://developers.cloudflare.com/workers/runtime-apis/nodejs/http/).
 
-Increment `COLLECTOR_EPOCH` when upgrading an existing Collector to this policy, changing public routes or changing the built-in public service catalog. A changed configuration fingerprint under the same epoch fails the internal check, and the collection report returns `COLLECTION_UNAVAILABLE`. The fixed DeepSeek, Tencent and Yahoo roots have built-in approval. Other sources require an approved route; a route cannot enable an unknown protocol.
+### One-time connector setup for Cloudflare
+
+The connector runs on a Node.js 24 server with network access. Subsequent source additions, edits and revocations are managed in the admin page.
+
+1. Install the project dependencies on that server and run `pnpm connector:build`.
+2. Generate an independent secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. Put `NOZOKI_CONNECTOR_TOKEN=your-generated-secret` in its protected `.env` file, together with `HOST=127.0.0.1` and `PORT=3100`.
+3. Run `pnpm connector:start` and configure a process manager. It listens on `127.0.0.1:3100` by default. Expose it through an HTTPS reverse proxy or Tunnel at a dedicated root such as `https://connector.example.com/`. Forward `/v1/read` to the local service, limit request bodies to 32KB, and use a valid TLS certificate.
+4. Set matching runtime values in both Dashboard and Collector Workers: `NOZOKI_CONNECTOR_URL=https://connector.example.com/`, `NOZOKI_CONNECTOR_TOKEN` and `NOZOKI_CONNECTOR_REVISION=1`. Store the token as a Secret. The operator must trust the connector's domain, DNS, host and TLS proxy.
+5. Back up the database, apply `0017_source_access.sql` with the migration and deployment commands in this README, increment the Collector's `COLLECTOR_EPOCH`, and update both Workers. The admin page should report that the connector is configured.
+
+Requests are signed with their body, timestamp and nonce. The connector rejects tampering and replay. It validates every DNS result, pins an allowed address into the HTTPS connection and verifies the certificate against the source hostname. Public access rejects private, loopback, link-local, metadata, reserved and mixed DNS destinations. Requests use HTTPS 443 and registered GET endpoints, with no redirects and a 128KB response limit. Source credentials go only to approved source endpoints. Protect the connector host and its administration access.
+
+Once configured, source edits require no Worker route variables or epoch changes. Changes to connector infrastructure require matching settings in both Workers and a higher Collector epoch. Update `NOZOKI_CONNECTOR_REVISION` when changing its network policy. Tests and collection reject mismatched execution environments.
+
+For private services, the operator can set `NOZOKI_CONNECTOR_PRIVATE_CIDRS`, for example `10.20.0.0/24,fd12::/64`, and select managed private HTTPS in the admin page. These ranges must be within RFC1918/ULA space. Loopback and metadata addresses remain blocked. Without configured ranges, private access is denied. Certificates must be trusted by Node.js; use `NODE_EXTRA_CA_CERTS` for an internal CA instead of disabling verification.
+
+### Compatibility for existing sources
+
+Upgraded sources retain built-in / legacy access mode. Built-in services continue to work. Existing `NOZOKI_PUBLIC_ROUTES`, `NOZOKI_PRIVATE_ROUTES` and relays retain their deployment allowlists. Legacy public routes rely on the operator's DNS and network checks. To migrate a custom source, configure the connector, change its access mode in the admin page, approve the target and save. Each source can then be managed without a deployment route entry. Moving Codex from a legacy relay changes its anonymous account IDs. If the module has field permissions for specific account IDs, saving refuses this transition. Review those permissions in Dashboard modules and use wildcard rules before approving and saving the source.
 
 ### Tailscale devices
 
@@ -325,7 +336,7 @@ This Tencent protocol supports US symbols. `US / QQQM` and `US / VOO` map to the
 
 Daily changes use the response's previous close. Prices remain decimal strings. US quote timestamps use `America/New_York` and are stored as UTC; pages format them in the site timezone. History contains forward-adjusted daily closes, with local midnight anchoring each trading date. The quote's observation time comes from its separate upstream timestamp. Unknown delay durations remain unknown. Old quotes become stale and failed reads retain the last valid snapshot.
 
-The endpoint is an unversioned Tencent stock-page service with unconfirmed public display rights. Protocol parsing and local fixture collection are implemented; deployed Workers connectivity and sustained data behavior still need verification. Yahoo's `yahoo-chart-v8` protocol and both mirrors remain available for manual selection, with no automatic fallback. Remove or update any `NOZOKI_PUBLIC_ROUTES` override that conflicts with the new source.
+The endpoint is an unversioned Tencent stock-page service with unconfirmed public display rights. Yahoo's `yahoo-chart-v8` protocol and both mirrors remain available for manual selection, with no automatic fallback. Remove or update any `NOZOKI_PUBLIC_ROUTES` override that conflicts with the new source.
 
 ### Updates and troubleshooting
 
@@ -414,7 +425,7 @@ Run one collection pass:
 pnpm collector:node
 ```
 
-The web and collection processes must share `NOZOKI_SQLITE_PATH`, decryption keys and relay settings. Set `COLLECTOR_EPOCH` to a positive integer and increment it when changing collection keys, relay routes or binding revisions. Each invocation checks due sources within a five-minute scheduling window, using the same leases, revision checks, backoff and commit guards as the D1 implementation.
+The web and collection processes must share `NOZOKI_SQLITE_PATH`, decryption keys and connector settings. Set `COLLECTOR_EPOCH` to a positive integer and increment it when changing deployment encryption keys, the connector or legacy relay routes. Credential edits in the admin page take effect through source revisions. Each invocation checks due sources within a five-minute scheduling window, using the same leases, revision checks, backoff and commit guards as the D1 implementation.
 
 To automate collection, the runtime account can add a system Cron entry with the actual environment and installation paths:
 
@@ -422,9 +433,9 @@ To automate collection, the runtime account can add a system Cron entry with the
 */5 * * * * /usr/bin/node --env-file=/etc/nozoki/nozoki.env /opt/nozoki/.output-node/collector.mjs
 ```
 
-Collection also performs bounded hourly retention cleanup. The deployment bundle does not install or enable scheduled tasks. Configure public access with `NOZOKI_PUBLIC_ROUTES` as described above. Private sources require a statically configured read-only relay.
+Collection also performs bounded hourly retention cleanup. Configure scheduled tasks on the server. Approved custom sources use the embedded connector. Set private ranges with `NOZOKI_CONNECTOR_PRIVATE_CIDRS`. Increment `COLLECTOR_EPOCH` when enabling the embedded connector during an upgrade or changing its network policy.
 
-For the embedded relay, point `NOZOKI_RELAY_CONFIG_FILE` to a protected JSON file shaped as `{"sources":[{"source":{...},"credential":"..."}]}`. Each `source` follows IntegrationSettings validation: `id`, `provider`, `protocolVersion`, normalized HTTPS `baseUrl`, `enabled`, `refreshInterval`, `fieldMappings`, `capabilities` and `credentialState`. Upstream management secrets belong in the relay's `credential` field. Register the same source in `NOZOKI_PRIVATE_ROUTES` with `id`, `provider`, `protocolVersion`, `baseUrl`, `refreshInterval` and `fieldMappings`. These values must match the saved D1/SQLite configuration. Set an independent `NOZOKI_PRIVATE_RELAY_TOKEN` and a `COLLECTOR_BINDING_REVISION`. Codex account protocols also require a stable `NOZOKI_RELAY_ID_KEY`; put its SHA-256 hex digest in the route's `identityVersion`.
+For legacy sources using the embedded relay, point `NOZOKI_RELAY_CONFIG_FILE` to a protected JSON file shaped as `{"sources":[{"source":{...},"credential":"..."}]}`. Each `source` follows IntegrationSettings validation: `id`, `provider`, `protocolVersion`, normalized HTTPS `baseUrl`, `enabled`, `refreshInterval`, `fieldMappings`, `capabilities` and `credentialState`. Upstream management secrets belong in the relay's `credential` field. Register the same source in `NOZOKI_PRIVATE_ROUTES` with `id`, `provider`, `protocolVersion`, `baseUrl`, `refreshInterval` and `fieldMappings`. These values must match the saved D1/SQLite configuration. Set an independent `NOZOKI_PRIVATE_RELAY_TOKEN` and a `COLLECTOR_BINDING_REVISION`. Codex account protocols also require a stable `NOZOKI_RELAY_ID_KEY`; put its SHA-256 hex digest in the route's `identityVersion`.
 
 The embedded relay handles fixed requests inside the process, with no extra HTTP listener. TLS certificate verification remains enabled, and upstream requests use registered read-only paths. Sources without matching public approval or relay configuration return `TARGET_NOT_APPROVED`.
 
