@@ -229,6 +229,13 @@ test(
         viewsBefore,
       )
       await apply('0016_tailscale_module.sql')
+      assert.equal(
+        (await json('/api/admin/config', { headers: { Cookie: cookie } })).response.headers.get(
+          'X-Nozoki-Storage-Mode',
+        ),
+        'read-only',
+      )
+      for (const file of files.filter((f) => f > '0016_tailscale_module.sql')) await apply(file)
       const recovered = await json('/api/admin/config', { headers: { Cookie: cookie } })
       assert.equal(recovered.response.headers.get('X-Nozoki-Storage-Mode'), 'ready')
       const staleDraft = await json('/api/admin/config', {

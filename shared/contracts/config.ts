@@ -11,6 +11,7 @@ import { normalizeSchedule, ScheduleInputSchema, type ScheduleInput } from '../s
 import { parseFieldPath, pathPrefix } from './field-paths.ts'
 import { isMaterialLinkIcon } from '../icons/material.ts'
 import { createTencentSource } from '../quotes/defaults.ts'
+import { SourceAccessSchema, managedServiceRoot } from './source-access.ts'
 
 export const VisibilitySchema = z.enum(['public', 'admin'])
 export const ModuleIdSchema = z.enum(MODULE_IDS)
@@ -195,7 +196,8 @@ const IntegrationSettingsBaseSchema = z.strictObject({
     'quotes-custom',
   ]),
   protocolVersion: z.string().min(1).max(64),
-  baseUrl: IntegrationUrlSchema.nullable(),
+  baseUrl: HttpsSchema.refine((v) => !new URL(v).search && !new URL(v).hash).nullable(),
+  access: SourceAccessSchema.optional(),
   enabled: z.boolean(),
   refreshInterval: z.number().int().min(60).max(86400),
   fieldMappings: z.record(
@@ -208,12 +210,27 @@ const IntegrationSettingsBaseSchema = z.strictObject({
   capabilities: z.record(IdSchema, CapabilitySchema),
   credentialState: CredentialStateSchema,
 })
+const validAccess = (i: {
+  baseUrl: string | null
+  access?: z.infer<typeof SourceAccessSchema>
+}) => {
+  if (!i.baseUrl) return true
+  if (!i.access || i.access.mode === 'legacy')
+    return IntegrationUrlSchema.safeParse(i.baseUrl).success
+  try {
+    managedServiceRoot(i.baseUrl, i.access.mode)
+    return true
+  } catch {
+    return false
+  }
+}
 export const IntegrationSettingsSchema = IntegrationSettingsBaseSchema.refine(
-  (i) => !i.enabled || i.baseUrl !== null,
-  'Enabled integration needs a base URL',
-)
+  validAccess,
+  'Invalid source target',
+).refine((i) => !i.enabled || i.baseUrl !== null, 'Enabled integration needs a base URL')
 export const IntegrationWriteSchema = IntegrationSettingsBaseSchema.omit({ credentialState: true })
   .extend({ credential: CredentialOperationSchema })
+  .refine(validAccess, 'Invalid source target')
   .refine((i) => !i.enabled || i.baseUrl !== null, 'Enabled integration needs a base URL')
 export const LinkSettingsSchema = z.strictObject({
   id: IdSchema,

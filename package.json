@@ -49,6 +49,9 @@
     "format:check": "prettier --check app shared server tests scripts workers platform public/theme-init.js public/dx-init.js public/dx-init.css package.json nuxt.config.ts tsconfig.json wrangler.jsonc pnpm-workspace.yaml .prettierrc.json",
     "postinstall": "nuxt prepare",
     "collector:build": "node scripts/build-collector.mjs",
+    "connector:build": "node scripts/build-connector.mjs",
+    "connector:start": "node --env-file-if-exists=.env .output-connector/server.mjs",
+    "test:access": "node scripts/local-runtime.mjs access-tests",
     "collector:typecheck": "tsc -p workers/collector/tsconfig.json",
     "collector:preview": "node scripts/preview-collector.mjs"
   },

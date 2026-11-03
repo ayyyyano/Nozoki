@@ -6,6 +6,7 @@ import { credentialKeys } from '../services/credential-keys.ts'
 import { decryptCredential } from '../services/credentials.ts'
 import { AdapterError } from '../adapters/types.ts'
 import { publicTarget } from '../adapters/public-targets.ts'
+import { readManagedSource } from './managed-read.ts'
 export interface ReadMetrics {
   requests: number
   responseBytes: number
@@ -18,6 +19,17 @@ export async function collectSource(
   metrics: ReadMetrics,
 ) {
   selectedAdapter(p.source)
+  if (p.source.access && p.source.access.mode !== 'legacy')
+    return readManagedSource(p.source, p.envelope, p.identityEnvelope, env, now, 'read', {
+      signal,
+      quoteSymbols: p.quoteSymbols,
+      onRead: (bytes) => {
+        metrics.responseBytes += bytes
+      },
+      onRequest: () => {
+        metrics.requests++
+      },
+    })
   const onRead = (bytes: number) => {
     metrics.responseBytes += bytes
   }

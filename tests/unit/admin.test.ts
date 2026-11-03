@@ -18,7 +18,7 @@ import { defaultProtocol } from '../../shared/contracts/adapter.ts'
 test('new or changed providers select a registered protocol without inventing unsupported capabilities', () => {
   assert.equal(defaultProtocol('sleepy'), 'sleepy-v5-status')
   assert.equal(defaultProtocol('deepseek'), 'deepseek-balance-v1')
-  assert.equal(defaultProtocol('cliproxy-bridge'), 'cliproxy-v8-toggle')
+  assert.equal(defaultProtocol('cliproxy-bridge'), 'cliproxy-v8-accounts')
   assert.equal(defaultProtocol('deepseek-spend'), 'unverified')
   assert.equal(defaultProtocol('quotes-custom'), 'tencent-us-v1')
 })

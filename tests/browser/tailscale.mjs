@@ -11,6 +11,7 @@ import { tencentFixtures } from '../fixtures/tencent-quotes.ts'
 
 export async function exerciseTailscale(page, context, origin, databasePath) {
   const select = async (scope, label, value) => {
+    await page.bringToFront()
     await scope.getByLabel(label, { exact: true }).click()
     await page
       .locator('.var-menu__menu:visible .var-option')
@@ -18,6 +19,7 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
       .click()
   }
   const save = async () => {
+    await page.bringToFront()
     const response = page.waitForResponse(
       (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
     )
@@ -162,8 +164,12 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
   const guest = await context.browser().newContext()
   const guestPage = await guest.newPage()
   const settle = async (p) => {
+    // Headless Edge throttles animation frames in the other test tab.
+    await p.bringToFront()
     await p.locator('[data-module="tailscale"]').waitFor()
-    await p.waitForFunction(() => !document.querySelector('.dx-transition'))
+    await p.waitForFunction(() => !document.querySelector('.dx-transition'), undefined, {
+      timeout: 15000,
+    })
   }
   try {
     await page.goto(origin)

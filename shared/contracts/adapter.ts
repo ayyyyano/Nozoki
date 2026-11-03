@@ -11,6 +11,7 @@ export const ADAPTER_PROTOCOLS = {
   'quotes-custom': ['tencent-us-v1', 'yahoo-chart-v8'],
 } as const
 export function defaultProtocol(provider: keyof typeof ADAPTER_PROTOCOLS): string {
+  if (provider === 'cliproxy-bridge') return 'cliproxy-v8-accounts'
   return ADAPTER_PROTOCOLS[provider][0] ?? 'unverified'
 }
 export const AdapterCodeSchema = z.enum([
@@ -18,6 +19,9 @@ export const AdapterCodeSchema = z.enum([
   'SOURCE_DISABLED',
   'UNSUPPORTED_PROTOCOL',
   'TARGET_NOT_APPROVED',
+  'ACCESS_NOT_APPROVED',
+  'CONNECTOR_UNAVAILABLE',
+  'DESTINATION_BLOCKED',
   'AUTH_REQUIRED',
   'CREDENTIAL_UNAVAILABLE',
   'CREDENTIAL_INVALID',

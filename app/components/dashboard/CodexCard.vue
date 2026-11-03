@@ -5,7 +5,6 @@ import { quotaExpired } from '../../../shared/collection/policy'
 const clock = useLocalClock('nozoki-codex-clock')
 const timezone = useDashboardTimezone()
 const props = defineProps<{ snapshot: DataSnapshot<CodexData>; title: string }>()
-const latest = computed(() => props.snapshot.data?.usage?.days.at(-1))
 const accountStates = {
   ready: '来源就绪',
   disabled: '已禁用',
@@ -26,28 +25,9 @@ const accountStates = {
     :status="snapshot.status"
     :observed-at="snapshot.observedAt"
   >
-    <template v-if="latest">
-      <div class="metric-caption">
-        Token 用量 <span>{{ latest.day }}</span>
-      </div>
-      <strong class="metric-value"
-        >{{ latest ? decimalText(String(latest.total)) : '—' }}<small>tokens</small></strong
-      >
-      <div class="inline-metrics">
-        <span
-          >输入 <b>{{ latest ? decimalText(String(latest.input)) : '—' }}</b></span
-        ><span
-          >输出 <b>{{ latest ? decimalText(String(latest.output)) : '—' }}</b></span
-        >
-      </div>
-    </template>
     <DashboardDataState
       :status="snapshot.status"
-      :empty="
-        !snapshot.data?.usage?.days.length &&
-        !snapshot.data?.accounts?.length &&
-        !snapshot.data?.quota?.accounts.length
-      "
+      :empty="!snapshot.data?.accounts?.length && !snapshot.data?.quota?.accounts.length"
       :last-success-at="snapshot.lastSuccessAt"
       compact
     />
@@ -62,9 +42,11 @@ const accountStates = {
         >
       </div>
     </div>
-    <div v-if="snapshot.data" class="section-heading">
+    <div
+      v-if="snapshot.data?.quota?.accounts.some((a) => a.windows.length)"
+      class="section-heading"
+    >
       <h3>配额</h3>
-      <span>与 Token 用量独立</span>
     </div>
     <template v-if="snapshot.data?.quota?.accounts.length"
       ><div v-for="account in snapshot.data.quota.accounts" :key="account.id">
@@ -86,18 +68,5 @@ const accountStates = {
         </div>
       </div></template
     >
-    <p v-else-if="snapshot.data" class="quiet-note">
-      {{
-        snapshot.data?.capabilities.quota.supported === false
-          ? '来源不支持配额读取'
-          : '配额能力尚未验证'
-      }}
-    </p>
-    <p v-if="snapshot.data?.usage" class="scope-note">统计范围：{{ snapshot.data.usage.scope }}</p>
-    <p v-if="snapshot.data?.estimatedCost" class="scope-note">
-      估算费用 {{ snapshot.data.estimatedCost.currency }}
-      {{ decimalText(snapshot.data.estimatedCost.amount) }} ·
-      {{ snapshot.data.estimatedCost.basis }}
-    </p>
   </DashboardModuleCard>
 </template>

@@ -16,6 +16,9 @@ import {
 import { DataLayerError, type Database } from '../types/database.ts'
 import { encryptCredential, type CredentialKeyRing } from './credentials.ts'
 import { normalizeServiceTarget } from './service-target.ts'
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
+import { randomToken } from './auth-crypto.ts'
+import { parseFieldPath } from '../../shared/contracts/field-paths.ts'
 export type SaveResult =
   | { success: true; configVersion: number; changed?: boolean; replayed?: boolean }
   | {
@@ -89,6 +92,30 @@ export async function saveConfig(
       const old = current.integrations.find((s) => s.settings.id === i.id)
       const { credential, ...settings } = i
       settings.baseUrl = normalizeServiceTarget(settings.baseUrl)
+      settings.access ??= { mode: 'legacy' }
+      if (
+        settings.access.mode !== 'legacy' &&
+        settings.access.authentication === 'bearer' &&
+        credential.operation === 'replace' &&
+        /[\r\n\u0000]/.test(credential.value)
+      )
+        return {
+          success: false,
+          code: 'VALIDATION_ERROR',
+          fieldErrors: ['integrations.credentials'],
+        }
+      if (
+        settings.access.mode !== 'legacy' &&
+        settings.provider === 'cliproxy-bridge' &&
+        settings.access.authentication !== 'bearer'
+      )
+        return { success: false, code: 'VALIDATION_ERROR', fieldErrors: ['integrations.access'] }
+      if (
+        settings.access.mode !== 'legacy' &&
+        settings.access.approved &&
+        settings.access.approvedTarget !== sourceTargetKey(settings, settings.access)
+      )
+        return { success: false, code: 'VALIDATION_ERROR', fieldErrors: ['integrations.access'] }
       if (
         credential.operation === 'keep' &&
         old?.envelope &&
@@ -121,14 +148,52 @@ export async function saveConfig(
           : credential.operation === 'clear'
             ? null
             : (old?.envelope ?? null)
-      stored.push({ settings, envelope })
+      let identityEnvelope = old?.identityEnvelope ?? null
+      if (
+        old &&
+        !identityEnvelope &&
+        settings.access.mode !== 'legacy' &&
+        settings.provider === 'cliproxy-bridge' &&
+        settings.protocolVersion === 'cliproxy-v8-accounts' &&
+        config.modules.some(
+          (m) =>
+            m.id === 'codex' &&
+            m.sources.main?.sourceId === settings.id &&
+            Object.keys(m.fields).some((path) => {
+              const parts = parseFieldPath('codex', path)
+              return parts?.some(
+                (part, index) => part === 'accounts' && parts[index + 1]?.startsWith('@'),
+              )
+            }),
+        )
+      )
+        return { success: false, code: 'VALIDATION_ERROR', fieldErrors: ['modules.codex.fields'] }
+      if (
+        settings.access.mode !== 'legacy' &&
+        settings.provider === 'cliproxy-bridge' &&
+        settings.protocolVersion === 'cliproxy-v8-accounts' &&
+        (!identityEnvelope || old?.settings.provider !== settings.provider)
+      )
+        identityEnvelope = await encryptCredential(
+          i.id,
+          settings.provider + ':identity',
+          randomToken(),
+          options.keys,
+          now,
+        )
+      stored.push({ settings, envelope, identityEnvelope })
     }
     const credentialChanged = stored.some(
       (i) =>
         canonical(i.envelope) !==
-        canonical(
-          current.integrations.find((old) => old.settings.id === i.settings.id)?.envelope ?? null,
-        ),
+          canonical(
+            current.integrations.find((old) => old.settings.id === i.settings.id)?.envelope ?? null,
+          ) ||
+        canonical(i.identityEnvelope ?? null) !==
+          canonical(
+            current.integrations.find((old) => old.settings.id === i.settings.id)
+              ?.identityEnvelope ?? null,
+          ),
     )
     const changedFields: string[] = []
     for (const key of ['siteName', 'appearance', 'background', 'schedule', 'timezone'] as const)
@@ -143,6 +208,16 @@ export async function saveConfig(
     )
       changedFields.push('integrations')
     if (credentialChanged) changedFields.push('integrations.credentials')
+    if (
+      stored.some(
+        (i) =>
+          canonical(i.settings.access) !==
+          canonical(
+            current.integrations.find((old) => old.settings.id === i.settings.id)?.settings.access,
+          ),
+      )
+    )
+      changedFields.push('integrations.access')
     const comparable = {
       ...config,
       integrations: stored.map((i) => ({

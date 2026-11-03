@@ -44,7 +44,16 @@ export async function saveAdminConfig(
   const prior = await savedRequest(db, request, new Date().toISOString())
   if (prior) return prior
   let keys
-  if (parsed.data.config.integrations.some((i) => i.credential.operation === 'replace')) {
+  if (
+    parsed.data.config.integrations.some(
+      (i) =>
+        i.credential.operation === 'replace' ||
+        (i.access &&
+          i.access.mode !== 'legacy' &&
+          i.provider === 'cliproxy-bridge' &&
+          i.protocolVersion === 'cliproxy-v8-accounts'),
+    )
+  ) {
     const secret = env.INTEGRATION_ENCRYPTION_KEY,
       version = env.INTEGRATION_KEY_VERSION
     if (

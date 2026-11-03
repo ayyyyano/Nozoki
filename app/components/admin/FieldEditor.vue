@@ -2,7 +2,20 @@
 import type { ModuleSettings } from '../../../shared/contracts/config'
 import { fieldChoices, fieldPointer, parseFieldPath } from '../../../shared/contracts/field-paths'
 const model = defineModel<ModuleSettings>({ required: true })
-const choices = computed(() => fieldChoices(model.value.id))
+const visibleRules = computed(() =>
+  Object.fromEntries(
+    Object.entries(model.value.fields).filter(
+      ([path]) =>
+        model.value.id !== 'codex' ||
+        !['usage', 'estimatedCost'].includes(String(parseFieldPath('codex', path)?.[0])),
+    ),
+  ),
+)
+const choices = computed(() =>
+  fieldChoices(model.value.id).filter(
+    (c) => model.value.id !== 'codex' || !['usage', 'estimatedCost'].includes(String(c.path[0])),
+  ),
+)
 const selected = ref(''),
   selectors = ref<Record<number, string>>({}),
   error = ref('')
@@ -27,12 +40,12 @@ function display(path: string) {
 </script>
 <template>
   <details class="admin-details">
-    <summary>字段权限（{{ Object.keys(model.fields).length }}）</summary>
+    <summary>字段权限（{{ Object.keys(visibleRules).length }}）</summary>
     <p class="admin-note">
       字段仅能收紧模块权限。* 匹配全部项目；指定 ID 会自动编码，不填写表示通配。行情显示名称为
       name。
     </p>
-    <div v-for="(policy, path) in model.fields" :key="path" class="admin-rule">
+    <div v-for="(policy, path) in visibleRules" :key="path" class="admin-rule">
       <code>{{ display(String(path)) }}</code>
       <label><VarSwitch v-model="policy.enabled" :aria-label="`字段 ${path} 启用`" />启用</label>
       <VarSelect

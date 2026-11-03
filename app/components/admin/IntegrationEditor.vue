@@ -8,8 +8,103 @@ import { canonical } from '../../../shared/contracts/admin'
 import type { CsrfDto } from '../../../shared/contracts/auth'
 import type { ConfigWrite, IntegrationSettings } from '../../../shared/contracts/config'
 import { formatTimestamp } from '../../../shared/domain/format'
+import { sourceTargetKey } from '../../../shared/contracts/source-access'
 type Integration = ConfigWrite['integrations'][number]
 const model = defineModel<Integration>({ required: true })
+const approvalId = useId()
+const connector = ref<{ configured: boolean; environmentMatches: boolean | null } | null>(null)
+onMounted(async () => {
+  try {
+    connector.value = await $fetch<{ configured: boolean; environmentMatches: boolean | null }>(
+      '/api/admin/source-connector',
+    )
+  } catch {
+    connector.value = null
+  }
+})
+const accessMode = computed({
+  get: () => model.value.access?.mode ?? 'legacy',
+  set: (mode: 'legacy' | 'public' | 'private') => {
+    model.value.access =
+      mode === 'legacy'
+        ? { mode }
+        : {
+            mode,
+            authentication: model.value.provider === 'cliproxy-bridge' ? 'bearer' : 'none',
+            approved: false,
+            approvedTarget: null,
+          }
+  },
+})
+const authentication = computed({
+  get: () =>
+    model.value.access?.mode !== 'legacy' && model.value.access
+      ? model.value.access.authentication
+      : 'none',
+  set: (value: 'none' | 'bearer') => {
+    if (model.value.access && model.value.access.mode !== 'legacy')
+      model.value.access.authentication = value
+  },
+})
+function targetIdentity() {
+  try {
+    if (model.value.access && model.value.access.mode !== 'legacy')
+      return sourceTargetKey(model.value, model.value.access)
+  } catch {
+    /* Preserve incomplete input until the administrator finishes editing. */
+  }
+  return JSON.stringify([
+    model.value.id,
+    model.value.provider,
+    model.value.protocolVersion,
+    model.value.baseUrl,
+    model.value.access?.mode,
+    authentication.value,
+  ])
+}
+watch(
+  targetIdentity,
+  () => {
+    if (model.value.access && model.value.access.mode !== 'legacy') {
+      model.value.access.approved = false
+      model.value.access.approvedTarget = null
+    }
+  },
+  { flush: 'sync' },
+)
+const showApproval = ref(false),
+  approvalPanel = useTemplateRef<HTMLElement>('approvalPanel'),
+  approvalFocus = useModalFocus(showApproval, approvalPanel)
+const approvalMessage = ref('')
+let pendingTarget = ''
+function approveSource() {
+  try {
+    if (!model.value.baseUrl || !model.value.access || model.value.access.mode === 'legacy')
+      throw new Error()
+    pendingTarget = sourceTargetKey(model.value, model.value.access)
+    approvalMessage.value = ''
+    showApproval.value = true
+  } catch {
+    approvalMessage.value = '请先填写合法的服务根 HTTPS 地址。'
+  }
+}
+function confirmApproval() {
+  if (
+    model.value.access &&
+    model.value.access.mode !== 'legacy' &&
+    pendingTarget === sourceTargetKey(model.value, model.value.access)
+  ) {
+    model.value.access.approved = true
+    model.value.access.approvedTarget = pendingTarget
+  }
+  showApproval.value = false
+}
+function revokeApproval() {
+  if (model.value.access && model.value.access.mode !== 'legacy') {
+    model.value.access.approved = false
+    model.value.access.approvedTarget = null
+  }
+}
 const props = defineProps<{
   timezone: string
   state?: IntegrationSettings['credentialState']
@@ -22,7 +117,12 @@ const provider = computed({
     if (value === model.value.provider) return
     model.value.provider = value
     model.value.protocolVersion = defaultProtocol(value)
-    if (value === 'tailscale') model.value.baseUrl = 'https://api.tailscale.com/'
+    if (value === 'cliproxy-bridge' && model.value.access && model.value.access.mode !== 'legacy')
+      model.value.access.authentication = 'bearer'
+    if (value === 'tailscale') {
+      model.value.baseUrl = 'https://api.tailscale.com/'
+      model.value.access = { mode: 'legacy' }
+    }
   },
 })
 const testing = ref(false),
@@ -80,7 +180,6 @@ const statusPageSlug = computed({
 })
 const providers = [
   'deepseek',
-  'deepseek-spend',
   'sleepy',
   'tailscale',
   'cliproxy-bridge',
@@ -91,6 +190,24 @@ const providers = [
 const fieldName = ref(''),
   mapping = ref(''),
   capName = ref('')
+const visibleCapabilities = computed(() =>
+  Object.fromEntries(
+    Object.entries(model.value.capabilities).filter(
+      ([key]) =>
+        !(model.value.provider === 'cliproxy-bridge' && ['usage', 'estimatedCost'].includes(key)),
+    ),
+  ),
+)
+function addCapability() {
+  if (
+    capName.value &&
+    !(
+      model.value.provider === 'cliproxy-bridge' &&
+      ['usage', 'estimatedCost'].includes(capName.value)
+    )
+  )
+    model.value.capabilities[capName.value] = { supported: false, verified: false }
+}
 function oauthField(key: 'clientId' | 'clientSecret') {
   return computed({
     get: () => {
@@ -137,6 +254,9 @@ function operation(value: unknown) {
     <VarSelect v-model="provider" placeholder="Provider" aria-label="Provider" variant="outlined"
       ><VarOption v-for="p in providers" :key="p" :label="p" :value="p"
     /></VarSelect>
+    <p v-if="model.provider === 'deepseek-spend'" class="admin-note">
+      此旧来源协议暂不可用，请选择受支持的 Provider。
+    </p>
     <AdminText v-model="nullableUrl" label="服务根 HTTPS 地址" />
     <AdminText
       v-if="model.provider === 'uptime-kuma'"
@@ -166,6 +286,47 @@ function operation(value: unknown) {
     {{ state?.configured ? '凭据已配置' : '凭据未配置' }} · 未验证连接。更改 Provider
     或服务根地址时，须替换或清除原凭据。
   </p>
+  <div class="admin-fields">
+    <VarSelect v-model="accessMode" aria-label="接入方式" placeholder="接入方式" variant="outlined">
+      <VarOption label="内置服务 / 兼容旧配置" value="legacy" />
+      <VarOption label="后台管理 · 公网 HTTPS" value="public" />
+      <VarOption label="后台管理 · 受限私网 HTTPS" value="private" />
+    </VarSelect>
+    <VarSelect
+      v-if="accessMode !== 'legacy'"
+      v-model="authentication"
+      aria-label="上游认证方式"
+      placeholder="上游认证方式"
+      variant="outlined"
+    >
+      <VarOption label="不发送凭据" value="none" />
+      <VarOption label="Bearer · 使用后台保存的凭据" value="bearer" />
+    </VarSelect>
+  </div>
+  <template v-if="model.access && model.access.mode !== 'legacy'">
+    <p class="admin-note" role="status">
+      {{
+        model.access.approved ? '此目标已在草稿中批准' : '此目标尚未批准'
+      }}；批准或撤销均在保存配置后生效。
+    </p>
+    <p class="admin-note">
+      {{
+        connector?.configured
+          ? '受限连接器已配置'
+          : '需要部署者一次性配置受限连接器；添加各来源无需再编辑 Worker 路由变量'
+      }}{{
+        connector?.environmentMatches === false
+          ? '；Dashboard 与 Collector 执行环境不一致，请先同步基础配置及 epoch'
+          : ''
+      }}
+    </p>
+    <div class="admin-actions">
+      <VarButton @click="model.access.approved ? revokeApproval() : approveSource()">{{
+        model.access.approved ? '撤销批准' : '批准此来源'
+      }}</VarButton>
+    </div>
+    <p v-if="approvalMessage" role="alert" class="admin-note">{{ approvalMessage }}</p>
+  </template>
   <VarSelect
     :model-value="model.credential.operation"
     aria-label="凭据操作"
@@ -200,7 +361,11 @@ function operation(value: unknown) {
     }}</span>
   </div>
   <p class="admin-note">
-    公网直连须在部署环境中批准来源、协议和完整服务根地址；私有来源使用只读 Relay。
+    {{
+      accessMode === 'legacy'
+        ? '固定官方服务可直接使用；旧自建来源继续采用原部署授权，切换到后台管理后可在此批准目标。'
+        : '仅使用已登记协议的只读端点；目标地址或认证方式变化后需要重新批准。公网禁止私网、回环及元数据地址，私网还受部署网段限制。'
+    }}
   </p>
   <p
     v-if="model.provider === 'quotes-custom' && model.protocolVersion === 'yahoo-chart-v8'"
@@ -217,6 +382,14 @@ function operation(value: unknown) {
     </p>
     <p v-if="testResult.code === 'TARGET_NOT_APPROVED'">
       目标未批准：请核对部署侧公网路由，或私有来源的 Relay 路由与绑定。
+    </p>
+    <p v-if="testResult.code === 'ACCESS_NOT_APPROVED'">请批准当前目标并保存配置后再测试。</p>
+    <p v-if="testResult.code === 'CONNECTOR_UNAVAILABLE'">
+      受限连接器或执行环境尚未就绪。请检查一次性连接器配置、密钥、版本及 Dashboard/Collector
+      一致性。
+    </p>
+    <p v-if="testResult.code === 'DESTINATION_BLOCKED'">
+      目标解析结果不在允许的网络范围内，请检查公网/私网接入方式及连接器网段配置。
     </p>
     <p>
       已验证能力：{{
@@ -239,8 +412,22 @@ function operation(value: unknown) {
     v-if="model.provider === 'cliproxy-bridge' && model.protocolVersion === 'cliproxy-v8-accounts'"
     class="admin-note"
   >
-    账户状态和被动配额观测经中继读取；Management Key
-    留在本地中继。插件查询、用量队列和推理接口不被调用。
+    {{
+      accessMode === 'legacy'
+        ? '账户状态与被动配额经旧 Relay 读取，Management Key 留在 Relay。'
+        : 'Management Key 使用后台凭据，经受限连接器访问已批准的只读账户端点；稳定账户身份密钥自动生成并加密保存。'
+    }}
+  </p>
+  <p
+    v-if="
+      model.provider === 'cliproxy-bridge' &&
+      accessMode !== 'legacy' &&
+      (!saved?.access || saved.access.mode === 'legacy')
+    "
+    class="admin-note"
+  >
+    切换旧 Relay 会更换匿名账户 ID。请先检查 Dashboard 模块中按账户 ID
+    设置的权限，改用通配规则后再保存。
   </p>
   <details class="admin-details">
     <summary>字段映射与能力元数据</summary>
@@ -259,17 +446,46 @@ function operation(value: unknown) {
         >添加映射</VarButton
       >
     </div>
-    <div v-for="(c, key) in model.capabilities" :key="key" class="admin-rule">
+    <div v-for="(c, key) in visibleCapabilities" :key="key" class="admin-rule">
       <span>{{ key }} · {{ c.verified ? '已有可信验证' : '未验证' }}</span
       ><label><VarSwitch v-model="c.supported" :aria-label="`能力 ${key} 支持`" />支持</label
       ><VarButton text @click="delete model.capabilities[key]">移除能力 {{ key }}</VarButton>
     </div>
     <div class="admin-fields">
-      <AdminText v-model="capName" label="能力名称" /><VarButton
-        text
-        @click="capName && (model.capabilities[capName] = { supported: false, verified: false })"
+      <AdminText v-model="capName" label="能力名称" /><VarButton text @click="addCapability"
         >添加未验证能力</VarButton
       >
     </div>
   </details>
+  <VarPopup
+    v-model:show="showApproval"
+    position="center"
+    :default-style="false"
+    :close-on-key-escape="true"
+    @closed="approvalFocus.restoreFocus"
+  >
+    <section
+      ref="approvalPanel"
+      class="admin-confirm"
+      role="alertdialog"
+      aria-modal="true"
+      :aria-labelledby="approvalId"
+      tabindex="-1"
+      @keydown.esc="showApproval = false"
+    >
+      <h2 :id="approvalId">批准来源访问？</h2>
+      <p class="admin-note" style="overflow-wrap: anywhere">{{ model.baseUrl }}</p>
+      <p>
+        {{ model.provider }} · {{ model.protocolVersion }} ·
+        {{ authentication === 'bearer' ? '发送该来源的 Bearer 凭据' : '不发送凭据' }}
+      </p>
+      <p>
+        请确认服务由可信运营者控制。批准只允许已登记的只读端点；私网访问仍受部署网段限制。保存后生效。
+      </p>
+      <div class="admin-actions">
+        <VarButton text @click="showApproval = false">取消</VarButton
+        ><VarButton type="primary" @click="confirmApproval">确认批准</VarButton>
+      </div>
+    </section>
+  </VarPopup>
 </template>

@@ -33,7 +33,15 @@ export async function readIntegration(
     fieldMappings: JSON.parse(String(row.field_mappings_json)),
     capabilities: JSON.parse(String(row.capabilities_json)),
     credentialState: credentialState(envelope),
+    access: row.access_json ? JSON.parse(String(row.access_json)) : { mode: 'legacy' },
   })
   const { credentialState: _state, ...safe } = settings
-  return { settings: safe, envelope, configVersion: Number(row.config_version) }
+  return {
+    settings: safe,
+    envelope,
+    identityEnvelope: row.identity_envelope_json
+      ? CredentialEnvelopeSchema.parse(JSON.parse(String(row.identity_envelope_json)))
+      : null,
+    configVersion: Number(row.config_version),
+  }
 }

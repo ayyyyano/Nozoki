@@ -21,7 +21,7 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 
 后台可设置模块启停、顺序、标题和访问权限。服务端根据登录身份过滤数据，访客刷新页面时从数据库读取已保存的结果。
 
-数据源需要配置地址、协议版本及凭据。公开 HTTPS 来源可由部署管理员批准直连；私有来源通过固定 VPC Service 和只读 Relay 访问，Node.js 服务器可以运行内嵌只读 Relay。QQQM、VOO 默认使用已启用的腾讯来源。DeepSeek 余额净变化与官方消费账单分别处理，Codex Token 用量和费用需要可信来源。
+后台管理数据源的地址、协议、凭据和访问批准。自建 HTTPS 来源通过受限连接器访问。Node.js 部署内嵌连接器，Cloudflare 部署需要先配置一次连接器。QQQM、VOO 默认使用已启用的腾讯来源。Codex 展示账户状态及可确认的被动配额。
 
 ## 技术栈
 
@@ -276,29 +276,40 @@ pnpm collector:deploy
 
 需要随 GitHub 推送更新 Collector 时，将修改后的 Collector 配置也提交到仓库，然后打开 `nozoki-collector → Settings → Builds → Connect`，连接同一仓库。根目录仍选仓库根目录，构建命令填写 `pnpm collector:build`，部署命令填写 `pnpm collector:deploy`。
 
-Collector 的网页地址返回 404 是正常行为。采集结果在看板显示，执行情况可在该 Worker 的日志中查看。DeepSeek 需要自己的 API Key。公开的 Sleepy、Kuma 和 Flare 可按下节批准直连；CLIProxyAPI 管理接口和私有网络来源使用固定 VPC Service 与只读 Relay。更改采集密钥、路由或绑定修订时，递增 `COLLECTOR_EPOCH` 后发布。
+Collector 的网页地址返回 404 是正常行为。采集结果在看板显示，执行情况可在该 Worker 的日志中查看。DeepSeek 需要自己的 API Key。腾讯、Yahoo、DeepSeek 和 Tailscale 的固定官方地址有内置批准。
 
-### 批准公开 HTTPS 数据源
+### 在后台接入自建来源
 
-先在后台保存来源，记下来源 ID、Provider、协议版本及完整服务根地址。在 Dashboard 和 Collector 的运行时变量中设置相同的 `NOZOKI_PUBLIC_ROUTES`（JSON 字符串）。Node.js 部署则写入服务与采集进程共同使用的环境文件。例如：
+1. 打开「数据源」，添加来源并选择 Provider。协议会跟随 Provider 填入。填写完整服务根 HTTPS 地址，例如 `https://alive.example.com/` 或 `https://example.com/sleepy/`。
+2. 接入方式选择「后台管理 · 公网 HTTPS」。无认证的状态接口选择「不发送凭据」；自己的服务要求 Bearer Key 时选择 Bearer，在「凭据操作 → replace」填写密钥。
+3. 启用来源，点击「批准此来源」，确认地址、协议和凭据用途，再点击顶栏「保存配置」。批准和撤销都在保存后生效。
+4. 点击「只读测试连接」。测试通过后，在「Dashboard 模块」为对应模块选择该来源的 `main` 引用并保存。Collector 会按刷新间隔采集。
 
-```json
-[
-  {
-    "id": "my-sleepy",
-    "provider": "sleepy",
-    "protocolVersion": "sleepy-v5-status",
-    "baseUrl": "https://sleepy.example.com/",
-    "authentication": "none"
-  }
-]
-```
+更改来源 ID、Provider、协议、服务根地址、网络范围或认证方式后，需要重新批准。更改服务根地址或 Provider 时还需要替换或清除已保存凭据。凭据加密保存在数据库中，后台读取时仅返回配置状态。每份配置最多 10 个来源。
 
-将示例替换为自己已确认的来源。服务根路径参与匹配，`/service-a/` 与 `/service-b/` 是两个目标。每份配置最多 10 个来源。修改后台地址、Provider 或协议后，需要同步更新部署变量；目标不匹配时拒绝请求。公开状态接口使用 `none`；仅在自己的只读代理要求 Bearer Token 时选择 `bearer`，并在后台单独保存该来源凭据。`none` 模式不发送已保存凭据。
+Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cliproxy-bridge` / `cliproxy-v8-accounts`，使用 Management Key 作为 Bearer 凭据。账户身份密钥自动生成并加密保存。建议用反向代理仅开放该协议读取的 `v8/management/credentials` 端点。后台不能将任意 URL 当作自定义协议调用。
 
-批准前需确认域名、DNS 和服务由可信运营者控制，最终目标位于公网，TLS 证书有效。直连采用固定 HTTPS 地址和适配器登记的只读端点，拒绝 IP 字面量、局域网主机名、非标准端口及重定向。运行时仍按域名建立连接，没有 DNS/IP 固定能力；DNS 重绑定、分流到私网或网络位置不明的来源应继续使用受限 Relay。Cloudflare 代理或 Tunnel 本身不替代这项确认。不要向公网开放完整 CLIProxyAPI 管理接口。
+Node.js 服务器已内嵌连接器。Cloudflare Workers 的 HTTPS 接口无法把 DNS 检查结果固定到实际连接，因此自建域名需要下述一次性连接器配置。[Cloudflare HTTP 文档](https://developers.cloudflare.com/workers/runtime-apis/nodejs/http/)说明了 `lookup` 选项的限制。
 
-已有 Collector 在升级到包含此策略的版本、修改公网路由或内置公网服务表后，需要递增 `COLLECTOR_EPOCH`。同一 epoch 下配置指纹变化会被内部检查拒绝，采集报告返回 `COLLECTION_UNAVAILABLE`。DeepSeek、腾讯及 Yahoo 固定地址已内置批准，其他来源需要单独批准；添加路由不会启用未知协议。
+### Cloudflare 一次性连接器配置
+
+连接器运行在可联网的 Node.js 24 服务器上，处理已批准来源的受限 HTTPS 请求。后续添加、修改和撤销来源都在后台完成。
+
+1. 在这台服务器安装项目依赖，执行 `pnpm connector:build`。
+2. 执行 `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"` 生成独立密钥。将 `NOZOKI_CONNECTOR_TOKEN=生成的密钥` 写入连接器的 `.env`，同时设置 `HOST=127.0.0.1`、`PORT=3100`，保护该文件的读取权限。
+3. 执行 `pnpm connector:start`。服务默认监听 `127.0.0.1:3100`。配置进程管理器维持运行，并通过 HTTPS 反向代理或 Tunnel 提供独立根域名，例如 `https://connector.example.com/`。代理将 `/v1/read` 转发到该本地服务，限制请求体为 32KB。TLS 证书需要有效。
+4. 在 Dashboard 和 Collector 两个 Worker 的运行时变量中设置相同的 `NOZOKI_CONNECTOR_URL=https://connector.example.com/`、`NOZOKI_CONNECTOR_TOKEN` 和 `NOZOKI_CONNECTOR_REVISION=1`。Token 使用 Secret。连接器的域名、DNS、服务器和 TLS 终止代理都需要由部署者信任。
+5. 已有站点应用 `0017_source_access.sql`，备份数据库后使用本 README 的迁移与部署命令。递增 Collector 的 `COLLECTOR_EPOCH`，更新两个 Worker。后台应显示「受限连接器已配置」。
+
+签名包含请求体、时间和随机数，连接器拒绝篡改及重放请求。每次访问都会检查全部 DNS 结果，再把合格 IP 固定到 HTTPS 连接；服务器证书仍按来源域名校验。公网模式拒绝私网、回环、链路本地、元数据、保留地址及混合 DNS 结果。仅支持 HTTPS 443 和已登记的 GET 端点，拒绝重定向，响应上限 128KB。密钥只发送到该来源已批准的端点。连接器是可信基础设施，请限制管理入口并保护其主机。
+
+连接器配置完成后，后台来源的修改不需要编辑 Worker 路由变量或递增 epoch。更换连接器地址、密钥、网络策略或绑定时，在两个 Worker 同步变量并递增 Collector epoch；网络策略变化还需更新 `NOZOKI_CONNECTOR_REVISION`。环境不一致时，测试和采集会拒绝执行。
+
+访问私网服务时，部署者可以在连接器设置 `NOZOKI_CONNECTOR_PRIVATE_CIDRS`，例如 `10.20.0.0/24,fd12::/64`，然后在后台选择「受限私网 HTTPS」。只允许 RFC1918/ULA 范围内的这些网段，回环和元数据地址始终禁止。没有网段配置时，私网访问默认拒绝。证书需受 Node.js 信任，内部 CA 可通过 Node 的 `NODE_EXTRA_CA_CERTS` 配置。不要关闭证书校验。
+
+### 已有来源的兼容方式
+
+数据库升级后，已有来源保持「内置服务 / 兼容旧配置」。内置服务可继续使用；`NOZOKI_PUBLIC_ROUTES`、`NOZOKI_PRIVATE_ROUTES` 和旧 Relay 也继续按部署白名单工作。旧公网路由依赖部署者确认 DNS 与网络安全。自建来源可在后台切换到受限连接器，重新批准并保存，无需再为各来源维护部署白名单。切换前请确认连接器已经就绪。Codex 从旧 Relay 切换时会更换匿名账户 ID；若存在按账户 ID 指定的字段权限，保存会拒绝迁移。先在 Dashboard 模块中检查这些规则，改用通配规则，再批准来源并保存。
 
 ### Tailscale 设备列表
 
@@ -325,7 +336,7 @@ Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 
 
 日涨跌按响应中的昨收计算，金额保存为十进制字符串。美股报价时间按 `America/New_York` 转为 UTC，页面再按站点时区显示。五日走势使用前复权收盘价，历史日期以纽约当地零点记录日期位置，报价观测时间使用独立的上游时间。延迟分钟数未知时显示“延迟未知”。休市旧数据会标记过期，失败时保留最后合法快照。
 
-这是腾讯自选股页面使用的未版本化端点，公开展示权利尚未确认。当前已实现协议解析和本地离线采集验证，云端 Workers 的出口连通性及长期数据表现待验证。Yahoo 的 `yahoo-chart-v8` 协议与两个镜像保留为手动选择，不自动回退。旧的 `NOZOKI_PUBLIC_ROUTES` 如覆盖同名来源，需要与新来源设置一致或移除该覆盖。
+这是腾讯自选股页面使用的未版本化端点，公开展示权利尚未确认。Yahoo 的 `yahoo-chart-v8` 协议与两个镜像保留为手动选择，不自动回退。旧的 `NOZOKI_PUBLIC_ROUTES` 如覆盖同名来源，需要与新来源设置一致或移除该覆盖。
 
 ### 后续更新与常见问题
 
@@ -339,7 +350,7 @@ Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 
 | 登录提示“暂时无法登录”            | `AUTH_ORIGIN` 与地址栏是否一致、两个登录 Secret 是否添加在运行时设置中                                              |
 | 绑定自定义域名后无法登录          | `AUTH_ORIGIN` 是否已改为自定义域名并重新部署；改前通过 `workers.dev` 地址之外的自定义域名访问时，任何密码都会被拒绝 |
 | 登录提示“邮箱或密码错误”          | 登录邮箱是否与 `ADMIN_EMAIL` 相同，密码是否与 Secret 中设置的值相同                                                 |
-| 数据源显示未配置或目标未批准      | 后台来源配置及固定 Relay 设置，这类状态需要按来源补充配置                                                           |
+| 数据源显示未配置或目标未批准      | 后台批准、凭据及连接器配置，旧来源还需检查 Relay 设置                                                               |
 
 控制台操作参考 Cloudflare 的 [Git 仓库部署](https://developers.cloudflare.com/workers/ci-cd/builds/)、[D1 数据库](https://developers.cloudflare.com/d1/get-started/) 和 [Secret 设置](https://developers.cloudflare.com/workers/configuration/secrets/) 文档。
 
@@ -414,7 +425,7 @@ WantedBy=multi-user.target
 pnpm collector:node
 ```
 
-网页进程和采集进程使用相同的 `NOZOKI_SQLITE_PATH`、集成解密密钥及 Relay 配置。`COLLECTOR_EPOCH` 为正整数；更改采集密钥、Relay 路由或绑定修订时递增。每次命令按五分钟窗口检查到期来源，D1 版本的租约、修订检查、退避及提交守卫同样用于 SQLite。
+网页进程和采集进程使用相同的 `NOZOKI_SQLITE_PATH`、集成解密密钥及连接器配置。`COLLECTOR_EPOCH` 为正整数；更改部署中的集成加密密钥、连接器或旧 Relay 路由时递增。后台保存的来源凭据变更通过来源修订生效。每次命令按五分钟窗口检查到期来源，D1 版本的租约、修订检查、退避及提交守卫同样用于 SQLite。
 
 需要自动采集时，由运行账号添加系统 Cron，环境文件及路径按实际情况填写：
 
@@ -422,9 +433,9 @@ pnpm collector:node
 */5 * * * * /usr/bin/node --env-file=/etc/nozoki/nozoki.env /opt/nozoki/.output-node/collector.mjs
 ```
 
-采集命令同时执行有界的小时级清理。部署包不会自行安装或启用定时任务。公网直连按上文设置 `NOZOKI_PUBLIC_ROUTES`；私有来源由服务器管理员配置静态只读 Relay。
+采集命令同时执行有界的小时级清理。定时任务由服务器管理员配置。自建来源在后台批准后使用内嵌连接器。私网网段通过 `NOZOKI_CONNECTOR_PRIVATE_CIDRS` 设置；升级启用内嵌连接器或更改网段时递增 `COLLECTOR_EPOCH`。
 
-内嵌 Relay 使用 `NOZOKI_RELAY_CONFIG_FILE` 指向受限权限的 JSON 文件，格式为 `{"sources":[{"source":{...},"credential":"..."}]}`。`source` 包含 `id`、`provider`、`protocolVersion`、规范化 HTTPS `baseUrl`、`enabled`、`refreshInterval`、`fieldMappings`、`capabilities` 和 `credentialState`，采用已有 IntegrationSettings 校验。上游管理密钥放在 `credential`，它只供 Relay 使用。`NOZOKI_PRIVATE_ROUTES` 中登记同一来源的 `id`、`provider`、`protocolVersion`、`baseUrl`、`refreshInterval`、`fieldMappings`。路由必须与 D1/SQLite 中已保存的配置一致。还需配置独立的 `NOZOKI_PRIVATE_RELAY_TOKEN` 和 `COLLECTOR_BINDING_REVISION`。Codex 账户协议另外需要稳定的 `NOZOKI_RELAY_ID_KEY`，其 SHA-256 十六进制摘要填入对应路由的 `identityVersion`。
+旧配置继续使用内嵌 Relay 时，使用 `NOZOKI_RELAY_CONFIG_FILE` 指向受限权限的 JSON 文件，格式为 `{"sources":[{"source":{...},"credential":"..."}]}`。`source` 包含 `id`、`provider`、`protocolVersion`、规范化 HTTPS `baseUrl`、`enabled`、`refreshInterval`、`fieldMappings`、`capabilities` 和 `credentialState`，采用已有 IntegrationSettings 校验。上游管理密钥放在 `credential`，它只供 Relay 使用。`NOZOKI_PRIVATE_ROUTES` 中登记同一来源的 `id`、`provider`、`protocolVersion`、`baseUrl`、`refreshInterval`、`fieldMappings`。路由必须与 D1/SQLite 中已保存的配置一致。还需配置独立的 `NOZOKI_PRIVATE_RELAY_TOKEN` 和 `COLLECTOR_BINDING_REVISION`。Codex 账户协议另外需要稳定的 `NOZOKI_RELAY_ID_KEY`，其 SHA-256 十六进制摘要填入对应路由的 `identityVersion`。
 
 内嵌 Relay 在进程内处理固定请求，不监听额外 HTTP 端口。它使用正常的 TLS 证书校验，来源限于已注册的只读路径。来源没有匹配的公网批准或 Relay 配置时，返回 `TARGET_NOT_APPROVED`。
 
