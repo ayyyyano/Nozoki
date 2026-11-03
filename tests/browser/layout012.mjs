@@ -29,17 +29,13 @@ try {
       g.scenario = scenario
       g.bottomGap = height - g.cards.at(-1).bottom
       if (width > 1100) {
-        for (const ids of [
-          ['deepseek', 'devices', 'codex'],
-          ['activity', 'quotes', 'links'],
-        ]) {
-          const cards = g.cards.filter((c) => ids.includes(c.id))
-          assert.ok(
-            Math.max(...cards.map((c) => c.height)) - Math.min(...cards.map((c) => c.height)) < 1,
-            JSON.stringify(cards),
-          )
-          assert.ok(Math.max(...cards.map((c) => c.y)) - Math.min(...cards.map((c) => c.y)) < 1)
-        }
+        const visual = [...g.cards].sort((a, b) =>
+          Math.abs(a.y - b.y) < 1 ? a.x - b.x : a.y - b.y,
+        )
+        assert.deepEqual(
+          visual.map((c) => c.id),
+          g.cards.map((c) => c.id),
+        )
         if (scenario === 'unconfigured') {
           assert.equal(g.scrollHeight, height)
           assert.ok(g.bottomGap >= 20 && g.bottomGap <= 26)

@@ -198,7 +198,7 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
       const dto = await (await guest.request.get(origin + '/api/dashboard')).json()
       assert.equal(JSON.stringify(dto).includes('100.64.1.2'), visible)
     }
-    // Move full-width-era Services and Links into the middle using actual ordering controls.
+    // Move Services and Links into the middle using actual ordering controls.
     for (let n = 0; n < 4; n++)
       await item('services').getByRole('button', { name: '上移 services', exact: true }).click()
     for (let n = 0; n < 3; n++)
@@ -209,6 +209,9 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
     await mkdir('.wrangler/test-results/tailscale', { recursive: true })
     for (const width of [1440, 1024, 768, 390, 320]) {
       await page.setViewportSize({ width, height: 900 })
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      )
       assert.equal(
         await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
         true,
@@ -226,19 +229,18 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
         assert.ok(!box.overflow, JSON.stringify(box))
         assert.ok(box.x >= grid.x - 1 && box.right <= grid.x + grid.width + 1)
       }
-      const rows = []
-      for (const box of bounds) {
-        let row = rows.find((row) => Math.abs(row[0].y - box.y) < 2)
-        if (!row) rows.push((row = []))
-        row.push(box)
-      }
-      for (const row of rows) {
-        assert.ok(Math.abs(row.at(-1).right - grid.x - grid.width) < 2, JSON.stringify(row))
-        if (row.length > 1)
+      const visual = [...bounds].sort((a, b) => (Math.abs(a.y - b.y) < 1 ? a.x - b.x : a.y - b.y))
+      assert.deepEqual(
+        visual.map((b) => b.id),
+        bounds.map((b) => b.id),
+      )
+      for (let i = 0; i < bounds.length; i++)
+        for (const b of bounds.slice(i + 1)) {
+          const a = bounds[i]
           assert.ok(
-            Math.max(...row.map((b) => b.height)) - Math.min(...row.map((b) => b.height)) < 2,
+            a.right <= b.x + 1 || b.right <= a.x + 1 || a.bottom <= b.y + 1 || b.bottom <= a.y + 1,
           )
-      }
+        }
       if (width === 390 || width === 1440)
         await page.screenshot({
           path: `.wrangler/test-results/tailscale/fixture-${width}.png`,

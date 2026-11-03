@@ -71,17 +71,13 @@ try {
         assert.ok(Math.abs(g.banner.width - g.wave.width) < 1)
         assert.ok(g.wave.bottom >= g.banner.bottom - 1 && g.wave.bottom <= g.banner.bottom + 2)
         if (width > 1100) {
-          for (const ids of [
-            ['deepseek', 'devices', 'codex'],
-            ['activity', 'quotes', 'links'],
-          ]) {
-            const cards = g.cards.filter((c) => ids.includes(c.id))
-            assert.ok(
-              Math.max(...cards.map((c) => c.height)) - Math.min(...cards.map((c) => c.height)) < 1,
-              JSON.stringify(cards),
-            )
-            assert.ok(Math.max(...cards.map((c) => c.y)) - Math.min(...cards.map((c) => c.y)) < 1)
-          }
+          const visual = [...g.cards].sort((a, b) =>
+            Math.abs(a.y - b.y) < 1 ? a.x - b.x : a.y - b.y,
+          )
+          assert.deepEqual(
+            visual.map((c) => c.id),
+            g.cards.map((c) => c.id),
+          )
           assert.ok(Math.abs(g.pageHeight - g.services.bottom - 24) < 1, JSON.stringify(g))
           if (scenario === 'unconfigured') {
             assert.equal(g.scrollHeight, height)
