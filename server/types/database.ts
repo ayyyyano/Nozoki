@@ -17,7 +17,11 @@ export interface Database {
 }
 export class DataLayerError extends Error {
   code:
-    'DB_BINDING_MISSING' | 'CONFIG_NOT_INITIALIZED' | 'CONFIG_BASELINE_INVALID' | 'DATABASE_ERROR'
+    | 'DB_BINDING_MISSING'
+    | 'CONFIG_NOT_INITIALIZED'
+    | 'CONFIG_BASELINE_INVALID'
+    | 'DATABASE_ERROR'
+    | 'MIGRATIONS_REQUIRED'
   constructor(code: DataLayerError['code']) {
     super(code)
     this.code = code

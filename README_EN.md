@@ -8,16 +8,16 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 
 ## Dashboard modules
 
-| Module   | Content                                                                                                   |
-| -------- | --------------------------------------------------------------------------------------------------------- |
-| DeepSeek | Account balances, currencies, topped-up balances and granted balances                                     |
-| Devices  | Sleepy status text, identifiable foreground applications, optional battery and external power information |
-| Tailscale | Device names, control-plane connection status and IP visibility based on login |
-| Codex    | CLIProxyAPI account status and passive quota observations supplied by the source                          |
-| Activity | Weekly schedules, multiple periods, templates, date exceptions, countdowns and progress                   |
-| Quotes   | Tencent prices, daily changes, volume and five-day history                                                   |
-| Links    | Bookmarks, ordering and Material icons                                                                    |
-| Services | Uptime Kuma and UptimeFlare monitor status and latency                                                    |
+| Module    | Content                                                                                                   |
+| --------- | --------------------------------------------------------------------------------------------------------- |
+| DeepSeek  | Account balances, currencies, topped-up balances and granted balances                                     |
+| Devices   | Sleepy status text, identifiable foreground applications, optional battery and external power information |
+| Tailscale | Device names, control-plane connection status and IP visibility based on login                            |
+| Codex     | CLIProxyAPI account status and passive quota observations supplied by the source                          |
+| Activity  | Weekly schedules, multiple periods, templates, date exceptions, countdowns and progress                   |
+| Quotes    | Tencent prices, daily changes, volume and five-day history                                                |
+| Links     | Bookmarks, ordering and Material icons                                                                    |
+| Services  | Uptime Kuma and UptimeFlare monitor status and latency                                                    |
 
 The admin interface controls module availability, ordering, titles and access permissions. The server filters data for the current session. Visitor requests read saved results from the database.
 
@@ -108,19 +108,19 @@ Cloud resources:
 4. Run pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.jsonc to create the cloud tables.
 
 Build and deploy:
-5. Run pnpm build and then pnpm exec wrangler deploy --config wrangler.jsonc. Record the workers.dev address from the output.
+5. Run pnpm build and then pnpm deploy:cloudflare. Record the workers.dev address from the output.
 6. Add that address as AUTH_ORIGIN in the vars of wrangler.jsonc and run the deploy command again.
 7. Run node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" to generate one secret and set it as AUTH_RATE_LIMIT_SECRET with pnpm exec wrangler secret put. Ask me for the administrator password. Supply both values through interactive input or stdin; never write them to files, command-line arguments or your reply.
 8. Verify the deployment: request the address from step 5 and confirm the dashboard responds, sign in at /admin with the administrator email and password, change the site name, save and refresh to confirm the change persists. Report the result and anything unfinished.
 
 Git binding for automatic builds:
-9. Run git remote -v to confirm the local remote points to my repository; ask me for the repository URL and run git remote add origin if none exists. Commit every change to the root wrangler.jsonc and push it to the production branch (master by default; use the repository's actual default branch otherwise). Then guide me through the one-time connection in the Cloudflare dashboard: open nozoki-dashboard → Settings → Builds → Connect, finish the GitHub authorization as prompted, select the repository, keep the production branch identical to the push branch, set the build command to pnpm build and the deploy command to pnpm exec wrangler deploy --config wrangler.jsonc (matching step 4 of the next section), save, wait for the first build to finish and report the result. After that, updates only need a commit and push; the Worker builds and deploys automatically.
+9. Run git remote -v to confirm the local remote points to my repository; ask me for the repository URL and run git remote add origin if none exists. Commit every change to the root wrangler.jsonc and push it to the production branch (master by default; use the repository's actual default branch otherwise). Then guide me through the one-time connection in the Cloudflare dashboard: open nozoki-dashboard → Settings → Builds → Connect, finish the GitHub authorization as prompted, select the repository, keep the production branch identical to the push branch, set the build command to pnpm build and the deploy command to pnpm deploy:cloudflare (matching step 4 of the next section), save, wait for the first build to finish and report the result. After that, updates only need a commit and push; the Worker builds and deploys automatically.
 
 Credential encryption (only when I ask for it):
 10. Run node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" to generate an independent secret and set it as INTEGRATION_ENCRYPTION_KEY on nozoki-dashboard with pnpm exec wrangler secret put. Add INTEGRATION_KEY_VERSION=v1 to the vars of the root wrangler.jsonc, then commit and push the change (run the deploy command instead when step 9 has not been completed). Supply the secret through interactive input or stdin only, and remind me to store it in a password manager; losing it prevents decryption of saved credentials. If the secret was not retained and no encrypted credentials exist yet, generate a fresh one and set the same value on both Workers.
 
 Scheduled collection (only when I ask for it):
-11. Edit workers/collector/wrangler.jsonc as described in step 6 of the next section: fill in the same database_id, remove "remote": false, and add top-level vars COLLECTOR_EPOCH=1 and INTEGRATION_KEY_VERSION=v1. Run pnpm collector:build and pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc. Then set the same INTEGRATION_ENCRYPTION_KEY from step 10 on nozoki-collector with wrangler secret put; when step 10 was skipped or its secret was not retained, generate a fresh one and set the same value on both nozoki-dashboard and nozoki-collector. After deploying, wait for the next five-minute boundary and run pnpm exec wrangler d1 execute DB --remote --command "SELECT COUNT(*) FROM collector_environment" --config wrangler.jsonc to confirm one row exists, which verifies the cron is live; with no data sources configured yet, an empty collection run is expected.
+11. Edit workers/collector/wrangler.jsonc as described in step 6 of the next section: fill in the same database_id, remove "remote": false, and add top-level vars COLLECTOR_EPOCH=1 and INTEGRATION_KEY_VERSION=v1. Run pnpm collector:build and pnpm collector:deploy. Then set the same INTEGRATION_ENCRYPTION_KEY from step 10 on nozoki-collector with wrangler secret put; when step 10 was skipped or its secret was not retained, generate a fresh one and set the same value on both nozoki-dashboard and nozoki-collector. After deploying, wait for the next five-minute boundary and run pnpm exec wrangler d1 execute DB --remote --command "SELECT COUNT(*) FROM collector_environment" --config wrangler.jsonc to confirm one row exists, which verifies the cron is live; with no data sources configured yet, an empty collection run is expected.
 
 Security: passwords and secrets belong only in Worker Secrets and Git-ignored local files. Never commit them, and never echo them into logs or your reply.
 ```
@@ -214,11 +214,15 @@ In Cloudflare, open **Workers & Pages → Create application → GitHub**. Autho
 | Production branch | `main`, or your actual branch                           |
 | Root directory    | Repository root; keep the default                       |
 | Build command     | `pnpm build`                                            |
-| Deploy command    | `pnpm exec wrangler deploy --config wrangler.jsonc`     |
+| Deploy command    | `pnpm deploy:cloudflare`                                |
 
 The repository pins Node.js and pnpm through `.node-version` and `package.json`. If the dashboard requires explicit versions, set build variables `NODE_VERSION=24.21.0` and `PNPM_VERSION=12.15.0`. Use `pnpm build` for Cloudflare; `build:node` is for server self-hosting.
 
 Select **Save and Deploy**, wait for a successful build, then open the supplied `https://nozoki-dashboard.your-subdomain.workers.dev` address. The dashboard should load. The next step enables administrator login.
+
+Use `pnpm deploy:cloudflare` for the Dashboard and `pnpm collector:deploy` for the Collector. Both apply pending D1 migrations through Wrangler before publishing the Worker; a migration or D1 permission failure stops publication. The Cloudflare Builds deployment token needs **D1 Edit** permission for that database. For existing Git-connected Workers, update the deploy command in Settings → Builds too. Running `wrangler deploy` directly bypasses this step. `pnpm build` and `pnpm collector:build` only build and never access or modify remote databases.
+
+When newer code encounters an intact seven-module database from before migration 0016, the first configuration read switches to read-only compatibility: existing configuration and valid snapshots remain available, while configuration saves, source probes and collection stop. Apply `pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.jsonc` and refresh to recover without restarting the Worker. Empty or damaged databases are not replaced with defaults. Migrations run during deployment, never from visitor requests.
 
 ### 5. Set the login address and secrets
 
@@ -265,12 +269,12 @@ The Collector is a second Worker that collects data and removes expired sessions
 Publish it from your local terminal:
 
 ```sh
-pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc
+pnpm collector:deploy
 ```
 
 This enables the configured five-minute Cron. Each source keeps its own refresh interval; disabled sources and sources without enabled module references are skipped. In **nozoki-collector → Settings → Variables and Secrets**, add Secret `INTEGRATION_ENCRYPTION_KEY` with the same value as the Dashboard, then select **Deploy**. The Collector does not need the administrator password.
 
-For automatic updates on GitHub pushes, commit the Collector configuration, then open **nozoki-collector → Settings → Builds → Connect** and connect the same repository. Keep the repository root, use build command `pnpm collector:build` and deploy command `pnpm exec wrangler deploy --config workers/collector/wrangler.jsonc`.
+For automatic updates on GitHub pushes, commit the Collector configuration, then open **nozoki-collector → Settings → Builds → Connect** and connect the same repository. Keep the repository root, use build command `pnpm collector:build` and deploy command `pnpm collector:deploy`.
 
 A 404 at the Collector's web address is expected. Results appear on the dashboard; execution details are in the Worker's logs. DeepSeek needs your API key. Public Sleepy, Kuma and Flare sources can use the direct routes below. CLIProxyAPI management interfaces and private network sources use a fixed VPC Service and read-only relay. Increment `COLLECTOR_EPOCH` when changing collection keys, routes or binding revisions.
 

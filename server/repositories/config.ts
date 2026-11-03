@@ -11,12 +11,14 @@ import {
   type CredentialEnvelope,
 } from '../services/credentials.ts'
 import { DataLayerError, type Database, type D1Statement } from '../types/database.ts'
+import { storageMode, requireWritableStorage, type StorageMode } from './storage-status.ts'
 export interface StoredIntegration {
   revision?: string
   settings: Omit<IntegrationSettings, 'credentialState'>
   envelope: CredentialEnvelope | null
 }
 export interface StoredState {
+  storageMode?: StorageMode
   config: Config
   integrations: StoredIntegration[]
   snapshots: Record<string, unknown>[]
@@ -44,7 +46,31 @@ export async function readStoredState(
              WHERE m.enabled=1 ${withSnapshots === 'admin' ? '' : "AND m.visibility='public'"}`
           : 'SELECT * FROM integration_snapshot_views WHERE 0',
       ),
+      db.prepare('PRAGMA table_info(dashboard_modules)'),
     ])
+    const mode = storageMode(results[5]!.results)
+    const modules = results[1]!.results
+    // The only supported legacy shape is the intact seven-module configuration.
+    // Add a disabled in-memory module; never persist or loosen existing ACLs here.
+    const legacyIds = ['deepseek', 'devices', 'codex', 'activity', 'quotes', 'links', 'services']
+    if (mode === 'read-only') {
+      if (
+        modules.length !== legacyIds.length ||
+        !legacyIds.every((id) => modules.some((m) => m.id === id))
+      )
+        throw new DataLayerError('CONFIG_BASELINE_INVALID')
+      modules.push({
+        id: 'tailscale',
+        title: 'Tailscale',
+        enabled: 0,
+        sort_order: Math.min(10000, Math.max(...modules.map((m) => Number(m.sort_order))) + 1),
+        visibility: 'admin',
+        guest_behavior: 'hidden',
+        fields_json: '{}',
+        sources_json: '{}',
+        ip_visibility: 'admin',
+      })
+    }
     const sites = results[0]!.results
     if (sites.length === 0) throw new DataLayerError('CONFIG_NOT_INITIALIZED')
     if (sites.length !== 1 || sites[0]!.id !== 1)
@@ -80,7 +106,7 @@ export async function readStoredState(
       contractVersion: 1,
       site: { ...(parseJson(row.settings_json) as object), configVersion: row.config_version },
       links: parseJson(row.links_json),
-      modules: results[1]!.results.map((m) => ({
+      modules: modules.map((m) => ({
         id: m.id,
         title: m.title,
         enabled: m.enabled === 1,
@@ -105,7 +131,7 @@ export async function readStoredState(
         credentialState: credentialState(i.envelope),
       })),
     })
-    return { config, integrations, snapshots: results[4]!.results }
+    return { config, integrations, snapshots: results[4]!.results, storageMode: mode }
   } catch (e) {
     if (e instanceof DataLayerError) throw e
     if (e instanceof Error && e.message.includes('no such table: site_settings'))
@@ -132,6 +158,7 @@ export async function commitConfig(
   request?: ConfigRequest,
   changed = true,
 ) {
+  await requireWritableStorage(db)
   const token = crypto.randomUUID(),
     { configVersion: _version, ...site } = input.site
   const statements: D1Statement[] = [

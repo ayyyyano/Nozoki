@@ -20,7 +20,12 @@ export type SaveResult =
   | { success: true; configVersion: number; changed?: boolean; replayed?: boolean }
   | {
       success: false
-      code: 'CONFIG_CONFLICT' | 'IDEMPOTENCY_CONFLICT' | 'VALIDATION_ERROR' | 'DATABASE_ERROR'
+      code:
+        | 'CONFIG_CONFLICT'
+        | 'IDEMPOTENCY_CONFLICT'
+        | 'VALIDATION_ERROR'
+        | 'DATABASE_ERROR'
+        | 'MIGRATIONS_REQUIRED'
       fieldErrors?: string[]
       reason?: 'CONFIG_NOT_INITIALIZED' | 'CONFIG_BASELINE_INVALID'
     }
@@ -76,6 +81,7 @@ export async function saveConfig(
       if (prior) return prior
     }
     const current = await readStoredState(db)
+    if (current.storageMode === 'read-only') return { success: false, code: 'MIGRATIONS_REQUIRED' }
     if (current.config.site.configVersion !== expectedVersion)
       return { success: false, code: 'CONFIG_CONFLICT' }
     const stored: StoredIntegration[] = []

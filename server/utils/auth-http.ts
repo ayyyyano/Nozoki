@@ -145,11 +145,13 @@ export function authEndpoint(handler: (event: H3Event) => Promise<unknown>) {
       return {
         code: error.code,
         message:
-          error.code === 'INVALID_CREDENTIALS'
-            ? '邮箱或密码错误'
-            : error.code === 'LOGIN_LIMITED'
-              ? '登录暂时受限，请稍后重试'
-              : '请求无法完成',
+          error.code === 'MIGRATIONS_REQUIRED'
+            ? '数据库等待迁移，当前仅可读取；请运行迁移后刷新页面'
+            : error.code === 'INVALID_CREDENTIALS'
+              ? '邮箱或密码错误'
+              : error.code === 'LOGIN_LIMITED'
+                ? '登录暂时受限，请稍后重试'
+                : '请求无法完成',
       }
     }
   })
