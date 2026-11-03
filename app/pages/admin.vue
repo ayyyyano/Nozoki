@@ -19,7 +19,13 @@ const { data: session, refresh: refreshSession } = await useFetch<SessionDto>('/
   key: 'admin-session',
 })
 if (session.value?.viewer !== 'admin') await navigateTo('/login')
-const { data: initial } = await useFetch<Config>('/api/admin/config', { key: 'admin-config' })
+const readOnly = useState('admin-storage-read-only', () => false)
+const { data: initial } = await useFetch<Config>('/api/admin/config', {
+  key: 'admin-config',
+  onResponse({ response }) {
+    if (response.ok) readOnly.value = response.headers.get('X-Nozoki-Storage-Mode') === 'read-only'
+  },
+})
 const shared = useSharedDashboard()
 const themeControl = inject<{ dark: Ref<boolean>; ready: Ref<boolean>; toggleTheme: () => void }>(
   'themeControl',
@@ -234,14 +240,16 @@ function acceptLatest() {
 }
 async function loadLatest() {
   try {
-    latest.value = await $fetch<Config>('/api/admin/config')
+    const response = await $fetch.raw<Config>('/api/admin/config')
+    readOnly.value = response.headers.get('X-Nozoki-Storage-Mode') === 'read-only'
+    latest.value = response._data ?? null
     showLatest.value = true
   } catch {
     message.value = '读取最新配置失败，请确认登录状态后重试'
   }
 }
 async function save() {
-  if (busy.value || !draft.value) return
+  if (busy.value || !draft.value || readOnly.value) return
   errors.value = []
   message.value = ''
   conflict.value = false
@@ -279,17 +287,20 @@ async function save() {
   } catch (error) {
     const data = (error as { data?: { code?: string; fieldErrors?: string[]; reason?: string } })
       .data
+    if (data?.code === 'MIGRATIONS_REQUIRED') readOnly.value = true
     conflict.value = data?.code === 'CONFIG_CONFLICT'
     errors.value = data?.fieldErrors ?? []
     message.value = savedNeedsReload.value
       ? '配置已保存，但重新读取失败；请读取最新配置确认。凭据输入已清除。'
       : conflict.value
         ? '配置已被其他窗口修改。草稿已保留，请读取最新版本后决定如何处理。'
-        : data?.reason === 'CREDENTIAL_KEY_UNAVAILABLE'
-          ? '未配置服务端集成加密密钥；请配置本地密钥后重试，凭据不会明文保存。'
-          : data?.code === 'VALIDATION_ERROR'
-            ? '配置校验未通过。请检查字段、来源引用和地址变化后的凭据操作。'
-            : '未能确认保存结果。草稿已保留；原样重试会复用请求标识。'
+        : data?.code === 'MIGRATIONS_REQUIRED'
+          ? '数据库等待迁移，已暂停保存。草稿已保留，完成迁移后请读取最新配置。'
+          : data?.reason === 'CREDENTIAL_KEY_UNAVAILABLE'
+            ? '未配置服务端集成加密密钥；请配置本地密钥后重试，凭据不会明文保存。'
+            : data?.code === 'VALIDATION_ERROR'
+              ? '配置校验未通过。请检查字段、来源引用和地址变化后的凭据操作。'
+              : '未能确认保存结果。草稿已保留；原样重试会复用请求标识。'
   } finally {
     busy.value = false
   }
@@ -452,7 +463,7 @@ onBeforeRouteLeave(() => {
             :aria-label="busy ? '保存中' : '保存配置'"
             :title="busy ? '保存中' : '保存配置'"
             :loading="busy"
-            :disabled="busy || !draft || savedNeedsReload"
+            :disabled="busy || !draft || savedNeedsReload || readOnly"
             @click="save"
             ><CommonAppIcon name="save" :size="22" /><span class="admin-action-text">{{
               busy ? '保存中' : '保存配置'
@@ -545,13 +556,16 @@ onBeforeRouteLeave(() => {
       <div v-else class="admin-workspace">
         <AdminSectionNav ref="navigation" v-model="section" :sections="sections" />
         <form class="admin-form" @submit.prevent="save">
+          <p v-if="readOnly" class="admin-storage-notice" role="status">
+            数据库等待迁移，当前为只读模式。已有配置和看板数据保持可读；请完成数据库迁移后刷新页面。
+          </p>
           <div class="admin-section-heading">
             <h2>{{ currentSection.label }}</h2>
             <VarButton
               text
               round
               class="admin-icon-button"
-              :disabled="busy"
+              :disabled="busy || readOnly"
               :aria-label="`重置${currentSection.label}为默认设置`"
               title="重置为默认设置"
               @click="requestReset"
@@ -559,7 +573,7 @@ onBeforeRouteLeave(() => {
               <CommonAppIcon name="restore" />
             </VarButton>
           </div>
-          <fieldset v-show="section === 'site'">
+          <fieldset v-show="section === 'site'" :disabled="readOnly">
             <legend class="sr-only">站点与外观</legend>
             <AdminText v-model="draft.site.siteName" label="站点名称" :max="100" />
             <div class="palette-presets">
@@ -590,7 +604,7 @@ onBeforeRouteLeave(() => {
               />预览共享外观（不保存个人偏好）</label
             ><AdminBackgroundEditor v-model="draft.site.background" />
           </fieldset>
-          <fieldset v-show="section === 'modules'">
+          <fieldset v-show="section === 'modules'" :disabled="readOnly">
             <legend class="sr-only">Dashboard 模块</legend>
             <AdminEditorItem
               v-for="(m, index) in draft.modules"
@@ -683,7 +697,7 @@ onBeforeRouteLeave(() => {
               <AdminFieldEditor v-model="draft.modules[index]!" />
             </AdminEditorItem>
           </fieldset>
-          <fieldset v-show="section === 'integrations'">
+          <fieldset v-show="section === 'integrations'" :disabled="readOnly">
             <legend class="sr-only">数据源</legend>
             <AdminEditorItem
               v-for="(i, index) in draft.integrations"
@@ -712,11 +726,11 @@ onBeforeRouteLeave(() => {
               ><CommonAppIcon name="AddRound" :size="20" />添加来源</VarButton
             >
           </fieldset>
-          <fieldset v-show="section === 'schedule'">
+          <fieldset v-show="section === 'schedule'" :disabled="readOnly">
             <legend class="sr-only">日程安排</legend>
             <AdminScheduleEditor v-model="draft.site.schedule" :reset-token="scheduleDraftReset" />
           </fieldset>
-          <fieldset v-show="section === 'quotes'">
+          <fieldset v-show="section === 'quotes'" :disabled="readOnly">
             <legend class="sr-only">行情标的</legend>
             <AdminEditorItem
               v-for="(q, index) in draft.quotes"
@@ -773,7 +787,7 @@ onBeforeRouteLeave(() => {
               ><CommonAppIcon name="AddRound" :size="20" />添加行情标的</VarButton
             >
           </fieldset>
-          <fieldset v-show="section === 'links'">
+          <fieldset v-show="section === 'links'" :disabled="readOnly">
             <legend class="sr-only">常用链接</legend>
             <AdminEditorItem
               v-for="(l, index) in draft.links"

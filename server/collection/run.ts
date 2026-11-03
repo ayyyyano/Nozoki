@@ -16,6 +16,7 @@ import { COLLECTION_BUDGET, safeCollectionCode } from '../../shared/collection/p
 import { AdapterError, type AdapterRead } from '../adapters/types.ts'
 import { meterDatabase } from './metrics.ts'
 import { cleanupRecords } from '../services/retention.ts'
+import { requireWritableStorage } from '../repositories/storage-status.ts'
 export type SourceReader = (
   p: CollectionPlan,
   env: Record<string, unknown>,
@@ -52,6 +53,7 @@ export async function runCollection(
     return report
   }
   try {
+    await requireWritableStorage(db)
     const environment = await collectionEnvironment(db, env),
       plans = collectionPlans(await readStoredState(db))
     await syncCollectionPlans(db, plans, environment, start.toISOString())
@@ -148,8 +150,11 @@ export async function runCollection(
         // Collection data is already committed; retention failure must not mark the run fatal.
       }
     }
-  } catch {
-    report.fatal = 'COLLECTION_UNAVAILABLE'
+  } catch (error) {
+    report.fatal =
+      error instanceof Error && error.message === 'MIGRATIONS_REQUIRED'
+        ? 'MIGRATIONS_REQUIRED'
+        : 'COLLECTION_UNAVAILABLE'
   }
   report.wallMs = clock().getTime() - start.getTime()
   return report

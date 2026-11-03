@@ -21,6 +21,8 @@
     "predev:local": "pnpm dx:generate",
     "dev:local": "node scripts/dev-local.mjs --local-auth",
     "build": "nuxt prepare --envName=development && nuxt build",
+    "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs dashboard",
+    "collector:deploy": "node scripts/deploy-cloudflare.mjs collector",
     "prebuild:node": "node scripts/build-prepaint.mjs",
     "build:node": "node scripts/build-node.mjs",
     "start:node": "node --env-file-if-exists=.env .output-node/start.mjs",

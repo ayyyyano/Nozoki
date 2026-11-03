@@ -163,6 +163,13 @@
 .admin-form > fieldset {
   max-width: 1200px;
 }
+.admin-storage-notice {
+  margin: 0 0 20px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
 .admin-form :is(input, textarea, button, [tabindex]) {
   scroll-margin-block: var(--management-scroll-space) 24px;
 }
