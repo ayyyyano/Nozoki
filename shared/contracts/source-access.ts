@@ -24,7 +24,7 @@ export function sourceTargetKey(
   ])
 }
 
-/** HTTPS service directory; the connector also checks and pins its resolved addresses. */
+/** HTTPS service directory; the platform transport enforces resolved-address restrictions. */
 export function managedServiceRoot(value: string, scope: 'public' | 'private'): string {
   if (!/^https:\/\//i.test(value) || /[%\\\s]/.test(value)) throw new Error('INVALID_SOURCE_TARGET')
   const rawPath = value.replace(/^https:\/\/[^/]+/i, '')

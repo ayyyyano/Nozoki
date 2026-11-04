@@ -19,7 +19,7 @@ AUTH_ALLOW_LOCAL_HTTP="1"
 # INTEGRATION_DECRYPTION_KEYS='{"v1":"REPLACE_WITH_OLD_32_BYTE_BASE64URL_KEY"}'
 # Never put this map or any actual key into ordinary Wrangler vars.
 
-# Optional private VPC Service relay; absent settings deny self-hosted targets.
+# Optional legacy private VPC Service relay. Managed public sources use Workers fetch.
 # NOZOKI_PRIVATE_RELAY_TOKEN=REPLACE_WITH_INDEPENDENT_32_BYTE_BASE64URL_SECRET
 # NOZOKI_PRIVATE_ROUTES='[]'
 # NOZOKI_PRIVATE_RELAY is a VPC Service binding, not an ordinary vars string.

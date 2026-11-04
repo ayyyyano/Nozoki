@@ -3,7 +3,7 @@
   "name": "nozoki-dashboard",
   "main": ".output/server/index.mjs",
   "compatibility_date": "2026-10-19",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
   "assets": {
     "directory": ".output/public",
@@ -24,5 +24,6 @@
     "AUTH_ALLOW_LOCAL_HTTP": "0",
     "AUTH_ORIGIN": "https://nozoki.nekro.top",
     "INTEGRATION_KEY_VERSION": "v1",
+    "COLLECTOR_EPOCH": "7",
   },
 }

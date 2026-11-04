@@ -23,6 +23,7 @@ export async function environmentFingerprint(env: Record<string, unknown>) {
     ]),
   )
   const fingerprint: Record<string, unknown> = {
+    managedEgressPolicy: 'public-https-v2',
     values,
     publicServices: PUBLIC_SERVICES,
     relayBound: typeof (env.NOZOKI_PRIVATE_RELAY as { fetch?: unknown })?.fetch === 'function',
