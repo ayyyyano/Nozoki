@@ -21,7 +21,7 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 
 The admin interface controls module availability, ordering, titles and access permissions. The server filters data for the current session. Visitor requests read saved results from the database.
 
-The admin page manages source addresses, protocols, credentials and access approvals. Custom HTTPS sources use a constrained connector. Node.js embeds it; Cloudflare requires a one-time connector setup. QQQM and VOO use the enabled Tencent source by default. Codex displays account status and confirmed passive quota observations.
+The admin page manages source addresses, protocols, credentials and access approvals. Cloudflare Workers fetch approved public HTTPS sources directly. Node.js uses an embedded connector. QQQM and VOO use the enabled Tencent source by default. Codex displays account status and confirmed passive quota observations.
 
 ## Tech stack
 
@@ -120,7 +120,7 @@ Credential encryption (only when I ask for it):
 10. Run node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" to generate an independent secret and set it as INTEGRATION_ENCRYPTION_KEY on nozoki-dashboard with pnpm exec wrangler secret put. Add INTEGRATION_KEY_VERSION=v1 to the vars of the root wrangler.jsonc, then commit and push the change (run the deploy command instead when step 9 has not been completed). Supply the secret through interactive input or stdin only, and remind me to store it in a password manager; losing it prevents decryption of saved credentials. If the secret was not retained and no encrypted credentials exist yet, generate a fresh one and set the same value on both Workers.
 
 Scheduled collection (only when I ask for it):
-11. Edit workers/collector/wrangler.jsonc as described in step 6 of the next section: fill in the same database_id, remove "remote": false, and add top-level vars COLLECTOR_EPOCH=1 and INTEGRATION_KEY_VERSION=v1. Run pnpm collector:build and pnpm collector:deploy. Then set the same INTEGRATION_ENCRYPTION_KEY from step 10 on nozoki-collector with wrangler secret put; when step 10 was skipped or its secret was not retained, generate a fresh one and set the same value on both nozoki-dashboard and nozoki-collector. After deploying, wait for the next five-minute boundary and run pnpm exec wrangler d1 execute DB --remote --command "SELECT COUNT(*) FROM collector_environment" --config wrangler.jsonc to confirm one row exists, which verifies the cron is live; with no data sources configured yet, an empty collection run is expected.
+11. Edit workers/collector/wrangler.jsonc as described in step 6 of the next section: fill in the same database_id, remove "remote": false, and add top-level vars COLLECTOR_EPOCH=7 and INTEGRATION_KEY_VERSION=v1. Run pnpm collector:build and pnpm collector:deploy. Then set the same INTEGRATION_ENCRYPTION_KEY from step 10 on nozoki-collector with wrangler secret put; when step 10 was skipped or its secret was not retained, generate a fresh one and set the same value on both nozoki-dashboard and nozoki-collector. After deploying, wait for the next five-minute boundary and run pnpm exec wrangler d1 execute DB --remote --command "SELECT COUNT(*) FROM collector_environment" --config wrangler.jsonc to confirm one row exists, which verifies the cron is live; with no data sources configured yet, an empty collection run is expected.
 
 Security: passwords and secrets belong only in Worker Secrets and Git-ignored local files. Never commit them, and never echo them into logs or your reply.
 ```
@@ -161,7 +161,7 @@ For a first deployment, replace the root [wrangler.jsonc](wrangler.jsonc) with t
   "name": "nozoki-dashboard",
   "main": ".output/server/index.mjs",
   "compatibility_date": "2026-10-19",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
   "assets": {
     "directory": ".output/public",
@@ -179,6 +179,7 @@ For a first deployment, replace the root [wrangler.jsonc](wrangler.jsonc) with t
     "ADMIN_EMAIL": "REPLACE_WITH_YOUR_LOGIN_EMAIL",
     "AUTH_VERSION": "1",
     "AUTH_ALLOW_LOCAL_HTTP": "0",
+    "COLLECTOR_EPOCH": "7",
   },
 }
 ```
@@ -233,7 +234,8 @@ Copy the site's full HTTPS address and add `AUTH_ORIGIN` to the root configurati
   "ADMIN_EMAIL": "you@example.com",
   "AUTH_VERSION": "1",
   "AUTH_ALLOW_LOCAL_HTTP": "0",
-  "AUTH_ORIGIN": "https://nozoki-dashboard.your-subdomain.workers.dev"
+  "AUTH_ORIGIN": "https://nozoki-dashboard.your-subdomain.workers.dev",
+  "COLLECTOR_EPOCH": "7"
 }
 ```
 
@@ -264,7 +266,7 @@ The Collector is a second Worker that collects data and removes expired sessions
 
 - Replace `database_id` with the same Database ID from step 2.
 - Remove `"remote": false` from that D1 binding.
-- Add `"vars": { "COLLECTOR_EPOCH": "1", "INTEGRATION_KEY_VERSION": "v1" }` at the top level. Merge these fields if `vars` already exists.
+- Add `"vars": { "COLLECTOR_EPOCH": "7", "INTEGRATION_KEY_VERSION": "v1" }` at the top level. Merge these fields if `vars` already exists, and use the same `COLLECTOR_EPOCH` as the Dashboard.
 
 Publish it from your local terminal:
 
@@ -289,27 +291,21 @@ Changes to the source ID, provider, protocol, root, network scope or authenticat
 
 Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI uses `cliproxy-bridge` / `cliproxy-v8-accounts`, with its Management Key as the Bearer credential. A stable account identity key is generated and stored encrypted. Use a reverse proxy to expose only the protocol's `v8/management/credentials` endpoint. The admin page accepts registered protocols rather than arbitrary endpoint URLs.
 
-Node.js embeds the connector. Cloudflare Workers cannot pin a checked DNS address into an HTTPS connection, so custom domains need the one-time setup below. See the `lookup` limitation in [Cloudflare's HTTP documentation](https://developers.cloudflare.com/workers/runtime-apis/nodejs/http/).
+### Public HTTPS access on Cloudflare
 
-### One-time connector setup for Cloudflare
+Dashboard and Collector use Workers `fetch` to read approved sources. Custom public services such as `https://alive.example.com/` need no additional server, connector secret or per-source Worker variable.
 
-The connector runs on a Node.js 24 server with network access. Subsequent source additions, edits and revocations are managed in the admin page.
+Both Worker configurations include `global_fetch_strictly_public`. Keep this flag so requests to domains in the same Cloudflare zone use their public entry points and respect the destination's Worker routes and security rules. If the service requires Cloudflare Access, a login page or an interactive challenge, configure suitable access rules for its read-only API. The Collector cannot complete browser challenges.
 
-1. Install the project dependencies on that server and run `pnpm connector:build`.
-2. Generate an independent secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. Put `NOZOKI_CONNECTOR_TOKEN=your-generated-secret` in its protected `.env` file, together with `HOST=127.0.0.1` and `PORT=3100`.
-3. Run `pnpm connector:start` and configure a process manager. It listens on `127.0.0.1:3100` by default. Expose it through an HTTPS reverse proxy or Tunnel at a dedicated root such as `https://connector.example.com/`. Forward `/v1/read` to the local service, limit request bodies to 32KB, and use a valid TLS certificate.
-4. Set matching runtime values in both Dashboard and Collector Workers: `NOZOKI_CONNECTOR_URL=https://connector.example.com/`, `NOZOKI_CONNECTOR_TOKEN` and `NOZOKI_CONNECTOR_REVISION=1`. Store the token as a Secret. The operator must trust the connector's domain, DNS, host and TLS proxy.
-5. Back up the database, apply `0017_source_access.sql` with the migration and deployment commands in this README, increment the Collector's `COLLECTOR_EPOCH`, and update both Workers. The admin page should report that the connector is configured.
+Requests use HTTPS 443, the approved service directory and registered GET endpoints. They omit browser cookies and send Bearer credentials only to the approved source. Redirects are rejected. Responses are capped at 128KB; timeouts are 3.5 seconds for ordinary sources and 10 seconds for quotes. Workers' network layer filters private DNS destinations when connecting. The application also rejects IP literals, loopback names and local domain suffixes. See [workerd network rules](https://github.com/cloudflare/workerd/blob/main/src/workerd/server/workerd.capnp) and the [Cloudflare public routing flag](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public).
 
-Requests are signed with their body, timestamp and nonce. The connector rejects tampering and replay. It validates every DNS result, pins an allowed address into the HTTPS connection and verifies the certificate against the source hostname. Public access rejects private, loopback, link-local, metadata, reserved and mixed DNS destinations. Requests use HTTPS 443 and registered GET endpoints, with no redirects and a 128KB response limit. Source credentials go only to approved source endpoints. Protect the connector host and its administration access.
+To upgrade from the connector version, back up the database and apply `0017_source_access.sql`. Remove any `NOZOKI_CONNECTOR_URL`, `NOZOKI_CONNECTOR_TOKEN`, `NOZOKI_CONNECTOR_REVISION` settings and `NOZOKI_SOURCE_CONNECTOR` binding from both Workers. Update Dashboard and Collector using the deployment commands in this README. Both configurations need the same `COLLECTOR_EPOCH`, greater than the site's current value. The repository uses 7; if your current value is already 7 or higher, set a higher positive integer in both files. Wait for the next Collector run before testing. Routine source additions, approvals and credential changes take effect when saved in the admin page.
 
-Once configured, source edits require no Worker route variables or epoch changes. Changes to connector infrastructure require matching settings in both Workers and a higher Collector epoch. Update `NOZOKI_CONNECTOR_REVISION` when changing its network policy. Tests and collection reject mismatched execution environments.
-
-For private services, the operator can set `NOZOKI_CONNECTOR_PRIVATE_CIDRS`, for example `10.20.0.0/24,fd12::/64`, and select managed private HTTPS in the admin page. These ranges must be within RFC1918/ULA space. Loopback and metadata addresses remain blocked. Without configured ranges, private access is denied. Certificates must be trusted by Node.js; use `NODE_EXTRA_CA_CERTS` for an internal CA instead of disabling verification.
+Managed sources on Workers support public HTTPS only. Private IPs, LAN-only names and Tailscale network addresses cannot be reached through public `fetch`. Node.js deployments can set `NOZOKI_CONNECTOR_PRIVATE_CIDRS`, for example `10.20.0.0/24,fd12::/64`, and select managed private HTTPS. Ranges must be within RFC1918/ULA space; loopback and metadata addresses remain blocked. Node.js must trust the server certificate. Use `NODE_EXTRA_CA_CERTS` for an internal CA.
 
 ### Compatibility for existing sources
 
-Upgraded sources retain built-in / legacy access mode. Built-in services continue to work. Existing `NOZOKI_PUBLIC_ROUTES`, `NOZOKI_PRIVATE_ROUTES` and relays retain their deployment allowlists. Legacy public routes rely on the operator's DNS and network checks. To migrate a custom source, configure the connector, change its access mode in the admin page, approve the target and save. Each source can then be managed without a deployment route entry. Moving Codex from a legacy relay changes its anonymous account IDs. If the module has field permissions for specific account IDs, saving refuses this transition. Review those permissions in Dashboard modules and use wildcard rules before approving and saving the source.
+Upgraded sources retain built-in / legacy access mode. Built-in services continue to work. Existing `NOZOKI_PUBLIC_ROUTES`, `NOZOKI_PRIVATE_ROUTES` and relays retain their deployment allowlists. Legacy public routes rely on the operator's DNS and network checks. To migrate a custom public source, select managed public HTTPS in the admin page, approve the target and save. Moving Codex from a legacy relay changes its anonymous account IDs. If the module has field permissions for specific account IDs, saving refuses this transition. Review those permissions in Dashboard modules and use wildcard rules before approving and saving the source.
 
 ### Tailscale devices
 

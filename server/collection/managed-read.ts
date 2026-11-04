@@ -3,7 +3,8 @@ import type { CredentialEnvelope } from '../services/credentials.ts'
 import { decryptCredential } from '../services/credentials.ts'
 import { credentialKeys } from '../services/credential-keys.ts'
 import { hmacKey } from '../services/auth-crypto.ts'
-import { assertManagedSource, connectorTransport } from '../adapters/source-connector.ts'
+import { assertManagedSource } from '../adapters/source-connector.ts'
+import { managedTransport } from '../adapters/managed-transport.ts'
 import { AdapterError } from '../adapters/types.ts'
 import { runAdapter } from '../adapters/registry.ts'
 import type { TransportOptions } from '../adapters/transport.ts'
@@ -44,7 +45,7 @@ export async function readManagedSource(
     }
     if (source.provider === 'cliproxy-bridge' && access.authentication !== 'bearer')
       throw new AdapterError('AUTH_REQUIRED')
-    const transport = connectorTransport(source, credential, env, options)
+    const transport = managedTransport(source, credential, env, options)
     return await runAdapter(
       {
         source,

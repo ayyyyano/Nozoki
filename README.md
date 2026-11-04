@@ -21,7 +21,7 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 
 后台可设置模块启停、顺序、标题和访问权限。服务端根据登录身份过滤数据，访客刷新页面时从数据库读取已保存的结果。
 
-后台管理数据源的地址、协议、凭据和访问批准。自建 HTTPS 来源通过受限连接器访问。Node.js 部署内嵌连接器，Cloudflare 部署需要先配置一次连接器。QQQM、VOO 默认使用已启用的腾讯来源。Codex 展示账户状态及可确认的被动配额。
+后台管理数据源的地址、协议、凭据和访问批准。Cloudflare Workers 直接读取在后台批准的公网 HTTPS 来源。Node.js 部署使用内嵌连接器。QQQM、VOO 默认使用已启用的腾讯来源。Codex 展示账户状态及可确认的被动配额。
 
 ## 技术栈
 
@@ -120,7 +120,7 @@ Nuxt 构建会清理 `.output`，需要在 `pnpm build` 之后构建 Collector�
 10. 运行 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" 生成一份独立密钥，用 pnpm exec wrangler secret put 在 nozoki-dashboard 上设为 INTEGRATION_ENCRYPTION_KEY，并在根目录 wrangler.jsonc 的 vars 中加入 INTEGRATION_KEY_VERSION=v1，随后提交推送修改（第 9 步未完成时改为执行 deploy 命令）。密钥同样只通过交互输入或 stdin 传入，并提醒我保存在密码管理器中——遗失后将无法解密已保存的凭据。若我未留存该密钥且尚无已加密凭据，直接重新生成一份并在两个 Worker 上设置为相同值即可。
 
 定时采集（我明确要求时再执行）：
-11. 按下一节第 6 步修改 workers/collector/wrangler.jsonc：填入同一个 database_id，删除 remote: false，在顶层 vars 中加入 COLLECTOR_EPOCH=1 和 INTEGRATION_KEY_VERSION=v1。依次执行 pnpm collector:build 和 pnpm collector:deploy，再用第 10 步的同一密钥在 nozoki-collector 上设置 INTEGRATION_ENCRYPTION_KEY；第 10 步未执行或密钥未留存时，重新生成一份并在 nozoki-dashboard 和 nozoki-collector 上设置相同的值。部署后等待下一个五分钟边界，执行 pnpm exec wrangler d1 execute DB --remote --command "SELECT COUNT(*) FROM collector_environment" --config wrangler.jsonc 确认出现一行记录，即验证 cron 已生效；尚未配置数据源时采集为空跑属正常现象。
+11. 按下一节第 6 步修改 workers/collector/wrangler.jsonc：填入同一个 database_id，删除 remote: false，在顶层 vars 中加入 COLLECTOR_EPOCH=7 和 INTEGRATION_KEY_VERSION=v1。依次执行 pnpm collector:build 和 pnpm collector:deploy，再用第 10 步的同一密钥在 nozoki-collector 上设置 INTEGRATION_ENCRYPTION_KEY；第 10 步未执行或密钥未留存时，重新生成一份并在 nozoki-dashboard 和 nozoki-collector 上设置相同的值。部署后等待下一个五分钟边界，执行 pnpm exec wrangler d1 execute DB --remote --command "SELECT COUNT(*) FROM collector_environment" --config wrangler.jsonc 确认出现一行记录，即验证 cron 已生效；尚未配置数据源时采集为空跑属正常现象。
 
 安全要求：密码和密钥只进入 Worker Secrets 与被 Git 忽略的本地文件，不要提交到仓库，不要在输出或日志中回显。
 ```
@@ -161,7 +161,7 @@ pnpm install --frozen-lockfile
   "name": "nozoki-dashboard",
   "main": ".output/server/index.mjs",
   "compatibility_date": "2026-10-19",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
   "assets": {
     "directory": ".output/public",
@@ -179,6 +179,7 @@ pnpm install --frozen-lockfile
     "ADMIN_EMAIL": "替换为你的登录邮箱",
     "AUTH_VERSION": "1",
     "AUTH_ALLOW_LOCAL_HTTP": "0",
+    "COLLECTOR_EPOCH": "7",
   },
 }
 ```
@@ -233,7 +234,8 @@ git push origin main
   "ADMIN_EMAIL": "you@example.com",
   "AUTH_VERSION": "1",
   "AUTH_ALLOW_LOCAL_HTTP": "0",
-  "AUTH_ORIGIN": "https://nozoki-dashboard.your-subdomain.workers.dev"
+  "AUTH_ORIGIN": "https://nozoki-dashboard.your-subdomain.workers.dev",
+  "COLLECTOR_EPOCH": "7"
 }
 ```
 
@@ -264,7 +266,7 @@ Collector 是负责定时采集的第二个 Worker，也负责清理过期会话
 
 - 将 `database_id` 替换为第 2 步创建的同一个 Database ID。
 - 删除该 D1 配置中的 `"remote": false`。
-- 在文件最外层添加 `"vars": { "COLLECTOR_EPOCH": "1", "INTEGRATION_KEY_VERSION": "v1" }`。已有 `vars` 时将这两个字段加进去。
+- 在文件最外层添加 `"vars": { "COLLECTOR_EPOCH": "7", "INTEGRATION_KEY_VERSION": "v1" }`。已有 `vars` 时合并这两个字段，`COLLECTOR_EPOCH` 与 Dashboard 保持相同。
 
 先在本地终端发布 Collector：
 
@@ -289,27 +291,21 @@ Collector 的网页地址返回 404 是正常行为。采集结果在看板显�
 
 Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cliproxy-bridge` / `cliproxy-v8-accounts`，使用 Management Key 作为 Bearer 凭据。账户身份密钥自动生成并加密保存。建议用反向代理仅开放该协议读取的 `v8/management/credentials` 端点。后台不能将任意 URL 当作自定义协议调用。
 
-Node.js 服务器已内嵌连接器。Cloudflare Workers 的 HTTPS 接口无法把 DNS 检查结果固定到实际连接，因此自建域名需要下述一次性连接器配置。[Cloudflare HTTP 文档](https://developers.cloudflare.com/workers/runtime-apis/nodejs/http/)说明了 `lookup` 选项的限制。
+### Cloudflare 公网 HTTPS 出站
 
-### Cloudflare 一次性连接器配置
+Dashboard 和 Collector 使用 Workers 的 `fetch` 读取已批准的来源，无需额外服务器、连接器密钥或逐来源 Worker 变量。`https://alive.example.com/` 这类自建公网服务也适用。
 
-连接器运行在可联网的 Node.js 24 服务器上，处理已批准来源的受限 HTTPS 请求。后续添加、修改和撤销来源都在后台完成。
+两个 Worker 的配置都包含 `global_fetch_strictly_public`。它让同一 Cloudflare zone 下的请求经过域名的公开入口，遵守目标的 Workers 路由和安全规则。请保留此标志。目标若有登录页、Cloudflare Access 或交互验证，需要为只读 API 配置合适的访问规则；采集器无法完成浏览器验证。
 
-1. 在这台服务器安装项目依赖，执行 `pnpm connector:build`。
-2. 执行 `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"` 生成独立密钥。将 `NOZOKI_CONNECTOR_TOKEN=生成的密钥` 写入连接器的 `.env`，同时设置 `HOST=127.0.0.1`、`PORT=3100`，保护该文件的读取权限。
-3. 执行 `pnpm connector:start`。服务默认监听 `127.0.0.1:3100`。配置进程管理器维持运行，并通过 HTTPS 反向代理或 Tunnel 提供独立根域名，例如 `https://connector.example.com/`。代理将 `/v1/read` 转发到该本地服务，限制请求体为 32KB。TLS 证书需要有效。
-4. 在 Dashboard 和 Collector 两个 Worker 的运行时变量中设置相同的 `NOZOKI_CONNECTOR_URL=https://connector.example.com/`、`NOZOKI_CONNECTOR_TOKEN` 和 `NOZOKI_CONNECTOR_REVISION=1`。Token 使用 Secret。连接器的域名、DNS、服务器和 TLS 终止代理都需要由部署者信任。
-5. 已有站点应用 `0017_source_access.sql`，备份数据库后使用本 README 的迁移与部署命令。递增 Collector 的 `COLLECTOR_EPOCH`，更新两个 Worker。后台应显示「受限连接器已配置」。
+每次请求限定为批准的 HTTPS 443 服务根目录及已登记的 GET 端点。请求不携带浏览器 Cookie，Bearer 凭据按来源发送，重定向会被拒绝。响应上限为 128KB，普通来源超时 3.5 秒，行情来源超时 10 秒。域名解析后的私网地址由 Workers 网络层在连接时过滤，应用同时拒绝 IP 字面量、回环域名和本地域名。[workerd 网络规则](https://github.com/cloudflare/workerd/blob/main/src/workerd/server/workerd.capnp)和 [Cloudflare 公开路由标志](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public)说明了这些平台行为。
 
-签名包含请求体、时间和随机数，连接器拒绝篡改及重放请求。每次访问都会检查全部 DNS 结果，再把合格 IP 固定到 HTTPS 连接；服务器证书仍按来源域名校验。公网模式拒绝私网、回环、链路本地、元数据、保留地址及混合 DNS 结果。仅支持 HTTPS 443 和已登记的 GET 端点，拒绝重定向，响应上限 128KB。密钥只发送到该来源已批准的端点。连接器是可信基础设施，请限制管理入口并保护其主机。
+从连接器版本升级时，先备份数据库并应用 `0017_source_access.sql`。若曾配置 `NOZOKI_CONNECTOR_URL`、`NOZOKI_CONNECTOR_TOKEN`、`NOZOKI_CONNECTOR_REVISION` 或 `NOZOKI_SOURCE_CONNECTOR` 绑定，请从两个 Worker 一并移除。使用本文的部署命令更新 Dashboard 和 Collector，两个配置中的 `COLLECTOR_EPOCH` 需要相同且大于站点当前值。仓库配置使用 7；若站点当前值已达到 7，请在两处填写一个更大的正整数。等待下一轮 Collector 执行后再测试。后台公网来源的日常增删、批准与凭据修改通过保存配置生效。
 
-连接器配置完成后，后台来源的修改不需要编辑 Worker 路由变量或递增 epoch。更换连接器地址、密钥、网络策略或绑定时，在两个 Worker 同步变量并递增 Collector epoch；网络策略变化还需更新 `NOZOKI_CONNECTOR_REVISION`。环境不一致时，测试和采集会拒绝执行。
-
-访问私网服务时，部署者可以在连接器设置 `NOZOKI_CONNECTOR_PRIVATE_CIDRS`，例如 `10.20.0.0/24,fd12::/64`，然后在后台选择「受限私网 HTTPS」。只允许 RFC1918/ULA 范围内的这些网段，回环和元数据地址始终禁止。没有网段配置时，私网访问默认拒绝。证书需受 Node.js 信任，内部 CA 可通过 Node 的 `NODE_EXTRA_CA_CERTS` 配置。不要关闭证书校验。
+Workers 的后台管理模式仅支持公网 HTTPS。私网 IP、仅局域网解析的地址和 Tailscale 内网地址无法通过公网 `fetch` 访问。Node.js 自部署可在内嵌连接器中设置 `NOZOKI_CONNECTOR_PRIVATE_CIDRS`，例如 `10.20.0.0/24,fd12::/64`，再选择「受限私网 HTTPS」。允许网段限于 RFC1918/ULA，回环和元数据地址始终拒绝。证书需受 Node.js 信任，内部 CA 可通过 `NODE_EXTRA_CA_CERTS` 配置。
 
 ### 已有来源的兼容方式
 
-数据库升级后，已有来源保持「内置服务 / 兼容旧配置」。内置服务可继续使用；`NOZOKI_PUBLIC_ROUTES`、`NOZOKI_PRIVATE_ROUTES` 和旧 Relay 也继续按部署白名单工作。旧公网路由依赖部署者确认 DNS 与网络安全。自建来源可在后台切换到受限连接器，重新批准并保存，无需再为各来源维护部署白名单。切换前请确认连接器已经就绪。Codex 从旧 Relay 切换时会更换匿名账户 ID；若存在按账户 ID 指定的字段权限，保存会拒绝迁移。先在 Dashboard 模块中检查这些规则，改用通配规则，再批准来源并保存。
+数据库升级后，已有来源保持「内置服务 / 兼容旧配置」。内置服务可继续使用；`NOZOKI_PUBLIC_ROUTES`、`NOZOKI_PRIVATE_ROUTES` 和旧 Relay 也继续按部署白名单工作。旧公网路由依赖部署者确认 DNS 与网络安全。自建公网来源可在后台选择「后台管理 · 公网 HTTPS」，重新批准并保存。Codex 从旧 Relay 切换时会更换匿名账户 ID；若存在按账户 ID 指定的字段权限，保存会拒绝迁移。先在 Dashboard 模块中检查这些规则，改用通配规则，再批准来源并保存。
 
 ### Tailscale 设备列表
 
@@ -350,7 +346,7 @@ Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 
 | 登录提示“暂时无法登录”            | `AUTH_ORIGIN` 与地址栏是否一致、两个登录 Secret 是否添加在运行时设置中                                              |
 | 绑定自定义域名后无法登录          | `AUTH_ORIGIN` 是否已改为自定义域名并重新部署；改前通过 `workers.dev` 地址之外的自定义域名访问时，任何密码都会被拒绝 |
 | 登录提示“邮箱或密码错误”          | 登录邮箱是否与 `ADMIN_EMAIL` 相同，密码是否与 Secret 中设置的值相同                                                 |
-| 数据源显示未配置或目标未批准      | 后台批准、凭据及连接器配置，旧来源还需检查 Relay 设置                                                               |
+| 数据源显示未配置或目标未批准      | 后台批准、凭据及执行环境是否一致，旧来源还需检查 Relay 设置                                                               |
 
 控制台操作参考 Cloudflare 的 [Git 仓库部署](https://developers.cloudflare.com/workers/ci-cd/builds/)、[D1 数据库](https://developers.cloudflare.com/d1/get-started/) 和 [Secret 设置](https://developers.cloudflare.com/workers/configuration/secrets/) 文档。
 

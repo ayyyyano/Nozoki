@@ -12,12 +12,16 @@ import { sourceTargetKey } from '../../../shared/contracts/source-access'
 type Integration = ConfigWrite['integrations'][number]
 const model = defineModel<Integration>({ required: true })
 const approvalId = useId()
-const connector = ref<{ configured: boolean; environmentMatches: boolean | null } | null>(null)
+type EgressStatus = {
+  configured: boolean
+  publicMode: 'worker' | 'connector' | 'unavailable'
+  privateConfigured: boolean
+  environmentMatches: boolean | null
+}
+const connector = ref<EgressStatus | null>(null)
 onMounted(async () => {
   try {
-    connector.value = await $fetch<{ configured: boolean; environmentMatches: boolean | null }>(
-      '/api/admin/source-connector',
-    )
+    connector.value = await $fetch<EgressStatus>('/api/admin/source-connector')
   } catch {
     connector.value = null
   }
@@ -290,7 +294,11 @@ function operation(value: unknown) {
     <VarSelect v-model="accessMode" aria-label="接入方式" placeholder="接入方式" variant="outlined">
       <VarOption label="内置服务 / 兼容旧配置" value="legacy" />
       <VarOption label="后台管理 · 公网 HTTPS" value="public" />
-      <VarOption label="后台管理 · 受限私网 HTTPS" value="private" />
+      <VarOption
+        v-if="connector?.publicMode !== 'worker' || accessMode === 'private'"
+        label="后台管理 · 受限私网 HTTPS"
+        value="private"
+      />
     </VarSelect>
     <VarSelect
       v-if="accessMode !== 'legacy'"
@@ -311,9 +319,13 @@ function operation(value: unknown) {
     </p>
     <p class="admin-note">
       {{
-        connector?.configured
-          ? '受限连接器已配置'
-          : '需要部署者一次性配置受限连接器；添加各来源无需再编辑 Worker 路由变量'
+        connector?.publicMode === 'worker'
+          ? accessMode === 'private'
+            ? 'Workers 公网出站不支持私网来源；请使用可公开访问的 HTTPS 服务地址。'
+            : '使用 Workers 原生公网 HTTPS 出站，在此批准并保存即可接入。'
+          : connector?.configured
+            ? '使用服务器内嵌或已配置的受限连接器。'
+            : '服务器出站尚未就绪，请检查运行环境。'
       }}{{
         connector?.environmentMatches === false
           ? '；Dashboard 与 Collector 执行环境不一致，请先同步基础配置及 epoch'
@@ -385,11 +397,11 @@ function operation(value: unknown) {
     </p>
     <p v-if="testResult.code === 'ACCESS_NOT_APPROVED'">请批准当前目标并保存配置后再测试。</p>
     <p v-if="testResult.code === 'CONNECTOR_UNAVAILABLE'">
-      受限连接器或执行环境尚未就绪。请检查一次性连接器配置、密钥、版本及 Dashboard/Collector
-      一致性。
+      执行环境尚未就绪。请检查 Dashboard 与 Collector 的版本、加密配置和 COLLECTOR_EPOCH
+      是否一致；Workers 公网来源无需外部连接器。
     </p>
     <p v-if="testResult.code === 'DESTINATION_BLOCKED'">
-      目标解析结果不在允许的网络范围内，请检查公网/私网接入方式及连接器网段配置。
+      目标不在允许的网络范围内。Workers 仅支持公网 HTTPS；服务器私网来源还需要配置允许网段。
     </p>
     <p>
       已验证能力：{{
@@ -415,7 +427,7 @@ function operation(value: unknown) {
     {{
       accessMode === 'legacy'
         ? '账户状态与被动配额经旧 Relay 读取，Management Key 留在 Relay。'
-        : 'Management Key 使用后台凭据，经受限连接器访问已批准的只读账户端点；稳定账户身份密钥自动生成并加密保存。'
+        : 'Management Key 使用后台凭据，发送至已批准的只读账户端点；稳定账户身份密钥自动生成并加密保存。'
     }}
   </p>
   <p

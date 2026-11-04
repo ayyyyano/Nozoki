@@ -4,9 +4,6 @@ import { createRequire } from 'node:module'
 import { readFile, readdir, mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { build } from 'esbuild'
-import { EventEmitter } from 'node:events'
-import { PassThrough } from 'node:stream'
-import { createSourceConnector } from '../../platform/node/source-connector.mjs'
 import { randomToken } from '../../server/services/auth-crypto.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
@@ -50,14 +47,13 @@ const script = (
 ).outputFiles[0].text
 
 test(
-  'admin-managed sources: real Worker HTTP, isolated D1, pinned connector fixtures, collector and browser',
+  'admin-managed sources: real Worker HTTP, isolated D1, native public fetch fixtures, collector and browser',
   { timeout: 180000 },
   async (t) => {
     const folder = await mkdtemp(resolve('.wrangler/source-access-test-')),
       evidence = resolve(folder, 'evidence')
     await mkdir(evidence)
     const origin = 'http://127.0.0.1:8808',
-      token = randomToken(),
       password = 'Synthetic-' + randomToken()
     const env = {
       AUTH_ORIGIN: origin,
@@ -69,67 +65,40 @@ test(
       INTEGRATION_ENCRYPTION_KEY: randomToken(),
       INTEGRATION_KEY_VERSION: 'v1',
       COLLECTOR_EPOCH: '1',
-      NOZOKI_CONNECTOR_TOKEN: token,
-      NOZOKI_CONNECTOR_REVISION: 'fixture-1',
     }
     const upstream = []
-    const handler = createSourceConnector(token, {
-      lookup: async (host) => [
-        { address: host.startsWith('blocked.') ? '127.0.0.1' : '93.184.216.34', family: 4 },
-      ],
-      request: (url, options, callback) => {
-        upstream.push({ url: url.href, authorization: options.headers.Authorization })
-        assert.equal(options.rejectUnauthorized, true)
-        assert.equal(options.agent, false)
-        const req = new EventEmitter()
-        req.end = () =>
-          queueMicrotask(() => {
-            const res = new PassThrough()
-            res.statusCode = 200
-            res.headers = { 'content-type': 'application/json' }
-            callback(res)
-            const payload = url.pathname.endsWith('v8/management/credentials')
-              ? {
-                  observed_at: new Date().toISOString(),
-                  files: [
-                    {
-                      auth_index: 'fixture-account-id',
-                      provider: 'codex',
-                      status: 'ready',
-                      disabled: false,
-                      unavailable: false,
-                    },
-                  ],
-                }
-              : url.pathname.endsWith('api/meta')
-                ? sleepMeta
-                : structuredClone(sleepStatus)
-            if (payload.device) {
-              payload.time = Date.now() / 1000
-              payload.last_updated = payload.time
-            }
-            res.end(JSON.stringify(payload))
-          })
-        return req
-      },
-    })
     const common = {
       compatibilityDate: '2026-10-19',
-      compatibilityFlags: ['nodejs_compat'],
+      compatibilityFlags: ['nodejs_compat', 'global_fetch_strictly_public'],
       d1Databases: { DB: 'source-access-isolated' },
       bindings: env,
-      serviceBindings: {
-        NOZOKI_SOURCE_CONNECTOR: async (request) =>
-          handler(
-            new Request(request.url, {
-              method: request.method,
-              headers: request.headers,
-              body: await request.arrayBuffer(),
-            }),
-          ),
-      },
-      outboundService: () => {
-        throw new Error('Direct upstream access forbidden in this fixture')
+      outboundService: async (request) => {
+        const url = new URL(request.url)
+        if (url.hostname.startsWith('blocked.')) throw new Error('Synthetic network refusal')
+        assert.equal(request.method, 'GET')
+        assert.equal(request.headers.get('cookie'), null)
+        upstream.push({ url: url.href, authorization: request.headers.get('authorization') })
+        const payload = url.pathname.endsWith('v8/management/credentials')
+          ? {
+              observed_at: new Date().toISOString(),
+              files: [
+                {
+                  auth_index: 'fixture-account-id',
+                  provider: 'codex',
+                  status: 'ready',
+                  disabled: false,
+                  unavailable: false,
+                },
+              ],
+            }
+          : url.pathname.endsWith('api/meta')
+            ? sleepMeta
+            : structuredClone(sleepStatus)
+        if (payload.device) {
+          payload.time = Date.now() / 1000
+          payload.last_updated = payload.time
+        }
+        return Response.json(payload)
       },
     }
     const options = convertV4MiniflareOptions({
@@ -186,7 +155,12 @@ test(
     cookie = login.headers.get('set-cookie').split(';')[0]
     csrf = (await (await request('/api/auth/csrf')).json()).token
     const status = await request('/api/admin/source-connector')
-    assert.deepEqual(await status.json(), { configured: true, environmentMatches: null })
+    assert.deepEqual(await status.json(), {
+      configured: true,
+      publicMode: 'worker',
+      privateConfigured: false,
+      environmentMatches: null,
+    })
     assert.match(status.headers.get('cache-control'), /no-store/)
     const input = async () => {
       const c = await (await request('/api/admin/config')).json()
@@ -233,7 +207,7 @@ test(
     const probed = await probe.json()
     assert.equal(probed.protocolMatched, true, JSON.stringify(probed))
     assert.equal(upstream.length, 1)
-    assert.equal(upstream[0].authorization, undefined)
+    assert.equal(upstream[0].authorization, null)
     assert.equal((await db.prepare('SELECT COUNT(*) n FROM integration_snapshots').first()).n, 0)
     const collected = await (await collector.fetch(origin + '/collect')).json()
     assert.equal(collected.fatal, null)
@@ -252,7 +226,7 @@ test(
           .prepare("SELECT error_code FROM collection_state WHERE source_id='blocked'")
           .first()
       ).error_code,
-      'DESTINATION_BLOCKED',
+      'UPSTREAM_UNAVAILABLE',
     )
     const dashboard = await (await request('/api/dashboard')).json()
     const deviceView = dashboard.modules.find((m) => m.id === 'devices').snapshot
@@ -288,7 +262,7 @@ test(
         .first()
     ).changed_fields_json
     assert.match(revocationAudit, /integrations.access/)
-    // Use a saved bearer credential through the same connector; only the exact approved endpoint sees it.
+    // Use a saved bearer credential through native Worker fetch; only the exact approved endpoint sees it.
     value = await input()
     const first = value.config.integrations.find((s) => s.id === 'fixture')
     first.access.authentication = 'bearer'
@@ -392,6 +366,11 @@ test(
       .filter({ has: page.getByRole('button', { name: /^fixture/ }) })
       .first()
     await scope.locator('.admin-item-toggle').click()
+    await expect(
+      scope.getByText('使用 Workers 原生公网 HTTPS 出站，在此批准并保存即可接入。', {
+        exact: true,
+      }),
+    ).toBeVisible()
     await scope.getByRole('button', { name: '撤销批准', exact: true }).first().click()
     await scope.getByRole('button', { name: '批准此来源', exact: true }).first().click()
     const dialog = page.getByRole('alertdialog', { name: '批准来源访问？' })
@@ -486,7 +465,7 @@ test(
     await mf.dispose()
     const changed = convertV4MiniflareOptions({
       ...common,
-      bindings: { ...env, NOZOKI_CONNECTOR_REVISION: 'fixture-2' },
+      bindings: { ...env, COLLECTOR_EPOCH: '2' },
       modules,
       modulesRoot: root,
     })
@@ -495,6 +474,8 @@ test(
     dash = await mf.getWorker()
     assert.deepEqual(await (await request('/api/admin/source-connector')).json(), {
       configured: true,
+      publicMode: 'worker',
+      privateConfigured: false,
       environmentMatches: false,
     })
     const mismatched = await request('/api/admin/integrations/fixture/test', 'POST', {})
@@ -514,7 +495,7 @@ test(
             'probe',
             'collect',
             'ACL',
-            'blocked DNS',
+            'network refusal',
             'revocation fences lease',
             'encrypted credentials',
             'stable Codex identity',

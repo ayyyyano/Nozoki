@@ -37,6 +37,7 @@ const commands = {
     '--test',
     '--test-concurrency=1',
     'tests/integration/source-access.test.mjs',
+    'tests/integration/worker-public.test.mjs',
   ],
 }
 const args = commands[process.argv[2]]
