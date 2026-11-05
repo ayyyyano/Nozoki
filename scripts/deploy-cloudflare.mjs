@@ -8,12 +8,8 @@ const require = createRequire(import.meta.url)
 const wrangler = resolve(dirname(require.resolve('wrangler/package.json')), 'bin/wrangler.js')
 
 /** Only an explicit deployment command may change remote D1. Builds remain offline. */
-export async function deployCloudflare(target, run = runWrangler) {
-  if (!['dashboard', 'collector'].includes(target)) throw new Error('INVALID_DEPLOY_TARGET')
-  const config = { dashboard: 'wrangler.jsonc', collector: 'workers/collector/wrangler.jsonc' }[
-    target
-  ]
-  if (!config) throw new Error('INVALID_DEPLOY_TARGET')
+export async function deployCloudflare(run = runWrangler) {
+  const config = 'wrangler.jsonc'
   // Wrangler tracks applied names in d1_migrations and applies only pending files.
   // A migration or permissions failure stops publication of the new Worker.
   await run(['d1', 'migrations', 'apply', 'DB', '--remote', '--config', config])
@@ -35,10 +31,9 @@ function runWrangler(args) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.length !== 3)
-    throw new Error('USAGE: deploy-cloudflare.mjs dashboard | collector')
+  if (process.argv.length !== 2) throw new Error('USAGE: deploy-cloudflare.mjs')
   try {
-    await deployCloudflare(process.argv[2])
+    await deployCloudflare()
   } catch (error) {
     console.error(error instanceof Error ? error.message : 'CLOUDFLARE_DEPLOY_FAILED')
     process.exitCode = 1

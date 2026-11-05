@@ -33,4 +33,10 @@ export async function requireWritableStorage(db: Database): Promise<void> {
     !columns.some((c) => c.name === 'identity_envelope_json')
   )
     throw new DataLayerError('MIGRATIONS_REQUIRED')
+  const environment = (await db.prepare('PRAGMA table_info(collector_environment)').all()).results
+  if (
+    !environment.some((c) => c.name === 'deployment_id') ||
+    !environment.some((c) => c.name === 'deployment_created_at')
+  )
+    throw new DataLayerError('MIGRATIONS_REQUIRED')
 }

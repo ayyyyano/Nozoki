@@ -69,8 +69,8 @@ test(
         {
           ...common,
           name: 'collector',
-          modules: true,
-          scriptPath: resolve('.output/collector/index.mjs'),
+          modules,
+          modulesRoot: root,
         },
       ],
     })

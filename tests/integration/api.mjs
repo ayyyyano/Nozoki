@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
 const dir = '.wrangler/test-results/phase-02'
-const base = process.env.BASE_URL ?? 'http://127.0.0.1:8788'
+const base = process.env.BASE_URL ?? 'http://127.0.0.1:8787'
 assert.equal(new URL(base).hostname, '127.0.0.1')
 const probe = JSON.parse(await readFile(`${dir}/preview-persistence.json`, 'utf8'))
 const expectedName = process.env.CHECK_RESTORED === '1' ? probe.originalName : probe.marker

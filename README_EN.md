@@ -80,17 +80,9 @@ pnpm preview
 
 Open http://127.0.0.1:8787. The Dashboard Worker entry is `.output/server/index.mjs`; static files are in `.output/public`.
 
-Build and run the Collector locally with:
+Pages, APIs and scheduled collection use one Worker. Its Cron calls the independent collection engine every five minutes; each source keeps its own refresh interval. In local preview, open `http://127.0.0.1:8787/cdn-cgi/handler/scheduled` to trigger it manually. Wrangler provides this local route; production has no public collection endpoint.
 
-```sh
-pnpm collector:typecheck
-pnpm collector:build
-pnpm collector:preview
-```
-
-The local Collector listens at http://127.0.0.1:8788. Scheduled events trigger collection; HTTP requests return 404. Dashboard and Collector local commands share `.wrangler/state`. They also need the same `database_id` to use the same database.
-
-Nuxt builds clear `.output`, so build the Collector after `pnpm build`. Collection uses D1 leases and source revision checks. A failed attempt keeps the last valid snapshot and records the error separately.
+Collection uses database leases and source revision checks. A failed attempt keeps the last valid snapshot and records the error separately.
 
 ## Quick deployment with an agent tool
 
@@ -114,20 +106,20 @@ Build and deploy:
 8. Verify the deployment: request the address from step 5 and confirm the dashboard responds, sign in at /admin with the administrator email and password, change the site name, save and refresh to confirm the change persists. Report the result and anything unfinished.
 
 Git binding for automatic builds:
-9. Run git remote -v to confirm the local remote points to my repository; ask me for the repository URL and run git remote add origin if none exists. Commit every change to the root wrangler.jsonc and push it to the production branch (master by default; use the repository's actual default branch otherwise). Then guide me through the one-time connection in the Cloudflare dashboard: open nozoki-dashboard → Settings → Builds → Connect, finish the GitHub authorization as prompted, select the repository, keep the production branch identical to the push branch, set the build command to pnpm build and the deploy command to pnpm deploy:cloudflare (matching step 4 of the next section), save, wait for the first build to finish and report the result. After that, updates only need a commit and push; the Worker builds and deploys automatically.
+9. Run git remote -v to confirm the repository; ask me for its URL if no remote exists. Commit and push deployment settings to the production branch (master by default). Guide me through nozoki-dashboard → Settings → Builds → Connect. Select that repository and branch, keep the repository root, use pnpm build as the build command and pnpm deploy:cloudflare as the deploy command. Connect this one Worker; later pushes update pages and scheduled collection together.
 
 Credential encryption (only when I ask for it):
-10. Run node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" to generate an independent secret and set it as INTEGRATION_ENCRYPTION_KEY on nozoki-dashboard with pnpm exec wrangler secret put. Add INTEGRATION_KEY_VERSION=v1 to the vars of the root wrangler.jsonc, then commit and push the change (run the deploy command instead when step 9 has not been completed). Supply the secret through interactive input or stdin only, and remind me to store it in a password manager; losing it prevents decryption of saved credentials. If the secret was not retained and no encrypted credentials exist yet, generate a fresh one and set the same value on both Workers.
+10. Generate an independent random 32-byte base64url key and set it on the main Worker with pnpm exec wrangler secret put INTEGRATION_ENCRYPTION_KEY. Keep INTEGRATION_KEY_VERSION=v1 in the configuration. Pass the key through interactive input or stdin and ask me to retain it in a password manager. Admin saves and scheduled collection use this single key. Reuse the original key when encrypted credentials already exist.
 
-Scheduled collection (only when I ask for it):
-11. Edit workers/collector/wrangler.jsonc as described in step 6 of the next section: fill in the same database_id, remove "remote": false, and add top-level vars COLLECTOR_EPOCH=7 and INTEGRATION_KEY_VERSION=v1. Run pnpm collector:build and pnpm collector:deploy. Then set the same INTEGRATION_ENCRYPTION_KEY from step 10 on nozoki-collector with wrangler secret put; when step 10 was skipped or its secret was not retained, generate a fresh one and set the same value on both nozoki-dashboard and nozoki-collector. After deploying, wait for the next five-minute boundary and run pnpm exec wrangler d1 execute DB --remote --command "SELECT COUNT(*) FROM collector_environment" --config wrangler.jsonc to confirm one row exists, which verifies the cron is live; with no data sources configured yet, an empty collection run is expected.
+Scheduled collection:
+11. The main Worker Cron enables scheduled collection; no second Worker is needed. Check its */5 * * * * trigger, configure a source and module binding in the admin page, then wait for the next scheduled run.
 
 Security: passwords and secrets belong only in Worker Secrets and Git-ignored local files. Never commit them, and never echo them into logs or your reply.
 ```
 
 ## Deploy to Cloudflare from GitHub
 
-Steps 1 through 5 give you a working website with administrator login and saved settings. Step 6 adds automatic collection and can be configured later. You need GitHub and Cloudflare accounts. Cloudflare provides a `workers.dev` address, so you can start without your own domain.
+Steps 1 through 5 give you a working website with administrator login, saved settings and scheduled default quotes. Step 6 adds encrypted source credentials and can be configured later. You need GitHub and Cloudflare accounts. Cloudflare provides a `workers.dev` address, so you can start without your own domain.
 
 Run commands in your computer's terminal, such as PowerShell or the VS Code terminal. After downloading the repository, run the remaining commands in the project root, the folder containing `package.json` and `wrangler.jsonc`.
 
@@ -163,6 +155,8 @@ For a first deployment, replace the root [wrangler.jsonc](wrangler.jsonc) with t
   "compatibility_date": "2026-10-19",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "triggers": { "crons": ["*/5 * * * *"] },
   "assets": {
     "directory": ".output/public",
     "binding": "ASSETS",
@@ -179,7 +173,7 @@ For a first deployment, replace the root [wrangler.jsonc](wrangler.jsonc) with t
     "ADMIN_EMAIL": "REPLACE_WITH_YOUR_LOGIN_EMAIL",
     "AUTH_VERSION": "1",
     "AUTH_ALLOW_LOCAL_HTTP": "0",
-    "COLLECTOR_EPOCH": "7",
+    "INTEGRATION_KEY_VERSION": "v1",
   },
 }
 ```
@@ -200,10 +194,10 @@ The first command opens a browser. Authorize the Cloudflare account that owns yo
 ```sh
 git add wrangler.jsonc
 git commit -m "Configure Cloudflare deployment"
-git push origin main
+git push origin master
 ```
 
-Use your actual branch name if it differs from `main`. GitHub Desktop can also commit and push these changes. Database contents stay in Cloudflare and are not uploaded to GitHub.
+Use your actual branch name if it differs from `master`. GitHub Desktop can also commit and push these changes. Database contents stay in Cloudflare and are not uploaded to GitHub.
 
 ### 4. Import the repository into Workers
 
@@ -212,7 +206,7 @@ In Cloudflare, open **Workers & Pages → Create application → GitHub**. Autho
 | Setting           | Value                                                   |
 | ----------------- | ------------------------------------------------------- |
 | Worker name       | `nozoki-dashboard`, matching `name` in `wrangler.jsonc` |
-| Production branch | `main`, or your actual branch                           |
+| Production branch | `master`, or your actual branch                           |
 | Root directory    | Repository root; keep the default                       |
 | Build command     | `pnpm build`                                            |
 | Deploy command    | `pnpm deploy:cloudflare`                                |
@@ -221,7 +215,7 @@ The repository pins Node.js and pnpm through `.node-version` and `package.json`.
 
 Select **Save and Deploy**, wait for a successful build, then open the supplied `https://nozoki-dashboard.your-subdomain.workers.dev` address. The dashboard should load. The next step enables administrator login.
 
-Use `pnpm deploy:cloudflare` for the Dashboard and `pnpm collector:deploy` for the Collector. Both apply pending D1 migrations through Wrangler before publishing the Worker; a migration or D1 permission failure stops publication. The Cloudflare Builds deployment token needs **D1 Edit** permission for that database. For existing Git-connected Workers, update the deploy command in Settings → Builds too. Running `wrangler deploy` directly bypasses this step. `pnpm build` and `pnpm collector:build` only build and never access or modify remote databases.
+Use `pnpm deploy:cloudflare`. It applies pending D1 migrations before publishing the Worker with both page and collection handlers. Migration failures stop publication. The Cloudflare Builds deployment token needs **D1 Edit** permission for the database. `pnpm build` only builds and does not access the remote database.
 
 When newer code encounters an intact seven-module database from before migration 0016, the first configuration read switches to read-only compatibility: existing configuration and valid snapshots remain available, while configuration saves, source probes and collection stop. Apply `pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.jsonc` and refresh to recover without restarting the Worker. Empty or damaged databases are not replaced with defaults. Migrations run during deployment, never from visitor requests.
 
@@ -235,7 +229,7 @@ Copy the site's full HTTPS address and add `AUTH_ORIGIN` to the root configurati
   "AUTH_VERSION": "1",
   "AUTH_ALLOW_LOCAL_HTTP": "0",
   "AUTH_ORIGIN": "https://nozoki-dashboard.your-subdomain.workers.dev",
-  "COLLECTOR_EPOCH": "7"
+  "INTEGRATION_KEY_VERSION": "v1"
 }
 ```
 
@@ -258,27 +252,13 @@ Select **Deploy** to apply the secrets. These are Worker runtime settings. **Bui
 
 Open the website and click the account icon at the top right. Sign in with `ADMIN_EMAIL` and your password. Change the site name in the admin interface, save, then refresh to confirm it persists. Modules without configured sources will show an unconfigured state.
 
-### 6. Set source credentials and automatic collection
+### 6. Set source credentials and scheduled collection
 
-To save API keys in the admin interface, run the random-secret command from step 5 again to generate an independent encryption key. Add it as the Dashboard's runtime Secret `INTEGRATION_ENCRYPTION_KEY`. Add `"INTEGRATION_KEY_VERSION": "v1"` to the root Wrangler `vars` and push the change. Save this key in a password manager; losing it prevents decryption of existing credentials.
+The default Tencent quotes need no API key. To save credentials for other sources, generate an independent encryption key with the random-secret command from step 5. Add runtime Secret `INTEGRATION_ENCRYPTION_KEY` under **nozoki-dashboard → Settings → Variables and Secrets**, then select **Deploy**. The root configuration sets `INTEGRATION_KEY_VERSION=v1`. Keep the key in a password manager; losing it prevents decryption of saved credentials.
 
-The Collector is a second Worker that collects data and removes expired sessions and old logs. When ready, edit [workers/collector/wrangler.jsonc](workers/collector/wrangler.jsonc):
+Admin saves, read-only probes and scheduled collection share this Worker's D1 binding and Secrets. The configured `*/5 * * * *` Cron runs every five minutes. Disabled sources and sources without enabled module references are skipped. View collection execution in this Worker's logs.
 
-- Replace `database_id` with the same Database ID from step 2.
-- Remove `"remote": false` from that D1 binding.
-- Add `"vars": { "COLLECTOR_EPOCH": "7", "INTEGRATION_KEY_VERSION": "v1" }` at the top level. Merge these fields if `vars` already exists, and use the same `COLLECTOR_EPOCH` as the Dashboard.
-
-Publish it from your local terminal:
-
-```sh
-pnpm collector:deploy
-```
-
-This enables the configured five-minute Cron. Each source keeps its own refresh interval; disabled sources and sources without enabled module references are skipped. In **nozoki-collector → Settings → Variables and Secrets**, add Secret `INTEGRATION_ENCRYPTION_KEY` with the same value as the Dashboard, then select **Deploy**. The Collector does not need the administrator password.
-
-For automatic updates on GitHub pushes, commit the Collector configuration, then open **nozoki-collector → Settings → Builds → Connect** and connect the same repository. Keep the repository root, use build command `pnpm collector:build` and deploy command `pnpm collector:deploy`.
-
-A 404 at the Collector's web address is expected. Results appear on the dashboard; execution details are in Worker logs. DeepSeek needs your API key. Fixed Tencent, Yahoo, DeepSeek and Tailscale roots have built-in approval.
+The collection environment follows the [Cloudflare deployment version](https://developers.cloudflare.com/workers/runtime-apis/bindings/version-metadata/) automatically. Adding the encryption key or deploying code requires no manual `COLLECTOR_EPOCH`. For an existing two-Worker installation, disable or delete the old `nozoki-collector` Cron and Git build so it stops running. To roll back code, rebuild and publish the target revision; collection rejects deployments older than the recorded version.
 
 ### Adding custom sources in the admin page
 
@@ -293,13 +273,13 @@ Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI use
 
 ### Public HTTPS access on Cloudflare
 
-Dashboard and Collector use Workers `fetch` to read approved sources. Custom public services such as `https://alive.example.com/` need no additional server, connector secret or per-source Worker variable.
+The Worker uses `fetch` to read approved sources. Custom public services such as `https://alive.example.com/` need no additional server, connector secret or per-source Worker variable.
 
-Both Worker configurations include `global_fetch_strictly_public`. Keep this flag so requests to domains in the same Cloudflare zone use their public entry points and respect the destination's Worker routes and security rules. If the service requires Cloudflare Access, a login page or an interactive challenge, configure suitable access rules for its read-only API. The Collector cannot complete browser challenges.
+The root configuration includes `global_fetch_strictly_public`. Keep this flag so requests to domains in the same Cloudflare zone use their public entry points and respect the destination's Worker routes and security rules. If the service requires Cloudflare Access, a login page or an interactive challenge, configure suitable access rules for its read-only API. The Collector cannot complete browser challenges.
 
 Requests use HTTPS 443, the approved service directory and registered GET endpoints. They omit browser cookies and send Bearer credentials only to the approved source. Redirects are rejected. Responses are capped at 128KB; timeouts are 3.5 seconds for ordinary sources and 10 seconds for quotes. Workers' network layer filters private DNS destinations when connecting. The application also rejects IP literals, loopback names and local domain suffixes. See [workerd network rules](https://github.com/cloudflare/workerd/blob/main/src/workerd/server/workerd.capnp) and the [Cloudflare public routing flag](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public).
 
-To upgrade from the connector version, back up the database and apply `0017_source_access.sql`. Remove any `NOZOKI_CONNECTOR_URL`, `NOZOKI_CONNECTOR_TOKEN`, `NOZOKI_CONNECTOR_REVISION` settings and `NOZOKI_SOURCE_CONNECTOR` binding from both Workers. Update Dashboard and Collector using the deployment commands in this README. Both configurations need the same `COLLECTOR_EPOCH`, greater than the site's current value. The repository uses 7; if your current value is already 7 or higher, set a higher positive integer in both files. Wait for the next Collector run before testing. Routine source additions, approvals and credential changes take effect when saved in the admin page.
+The deployment script applies database migrations before publication. Routine public source additions, approvals and credential changes take effect when saved in the admin page.
 
 Managed sources on Workers support public HTTPS only. Private IPs, LAN-only names and Tailscale network addresses cannot be reached through public `fetch`. Node.js deployments can set `NOZOKI_CONNECTOR_PRIVATE_CIDRS`, for example `10.20.0.0/24,fd12::/64`, and select managed private HTTPS. Ranges must be within RFC1918/ULA space; loopback and metadata addresses remain blocked. Node.js must trust the server certificate. Use `NODE_EXTRA_CA_CERTS` for an internal CA.
 
@@ -318,13 +298,12 @@ Tailscale and Sleepy are independent modules. Tailscale is disabled by default a
 
 Connection status uses `connectedToControl`. It describes the control-plane connection and does not prove service reachability. This API does not supply foreground apps or battery data; Sleepy continues to handle those. The Collector calls the official API without joining the tailnet, using at most two requests per run and no device management operations.
 
-For existing installations, apply `0016_tailscale_module.sql` and increment `COLLECTOR_EPOCH` before updating the Collector, since the built-in service approval table changes. The migration preserves existing settings and snapshots and adds a disabled Tailscale module. OAuth secrets use the existing encrypted credential storage.
 
 ### Default Tencent quotes
 
 Fresh databases automatically load the enabled source `tencent`, with provider `quotes-custom`, protocol `tencent-us-v1`, root `https://web.ifzq.gtimg.cn/` and a 300-second refresh interval. QQQM, VOO and the Quotes module's `main` reference are bound to it. The exact root has built-in approval and requires no API key or `NOZOKI_PUBLIC_ROUTES` entry.
 
-1. Back up the database and apply migrations through `0015_load_default_tencent_source.sql`. When upgrading from the Yahoo version, update the Dashboard and Collector together and increment `COLLECTOR_EPOCH` for the Tencent target catalog. If the Tencent adapter is already deployed, applying only this default-source migration needs no further epoch increment.
+1. Use the deployment command in this README to apply migrations and load the default Tencent source.
 2. On existing sites without a source named `tencent`, the migration loads the default source and switches QQQM/VOO's default Yahoo bindings and the Quotes module's default Yahoo reference to Tencent. Yahoo is disabled when no other enabled references remain; its credentials, snapshots and cooldown records remain stored. An existing `tencent` source, custom bindings and configurations already at the ten-source limit remain unchanged. Changes increment the config version and create a system audit record; reload admin drafts opened before the upgrade.
 3. Run the read-only connection test, then wait for collection. The test reads one symbol; the dashboard reads persisted Collector results. Node.js deployments can run `pnpm collector:node`.
 
@@ -456,7 +435,6 @@ shared/
   device-state/      Device status and battery parsing
   collection/        Collection timing and result rules
   domain/            Balance calculations and view data conversion
-workers/collector/   Separate collection Worker
 platform/node/       Node HTTP entry, SQLite, migrations and one-shot collector
 migrations/          Shared D1 and server SQLite SQL migrations
 scripts/             Build, local runtime and asset generation scripts
@@ -481,7 +459,7 @@ pnpm build
 pnpm test:d1
 ```
 
-`test:d1` builds the Collector and runs on isolated local workerd/D1 databases. Browser tests need a running local service. They use Microsoft Edge by default; set `PLAYWRIGHT_EXECUTABLE_PATH` to select another browser.
+`test:d1` builds the complete Worker and runs on isolated local workerd/D1 databases. Browser tests need a running local service. They use Microsoft Edge by default; set `PLAYWRIGHT_EXECUTABLE_PATH` to select another browser.
 
 For server tests, run `pnpm build:node` followed by `pnpm test:node`. Tests use isolated SQLite files and cover transactions, cross-connection CAS, collection leases, authentication, CSRF, HTTP idempotency, restart persistence and browser saves.
 

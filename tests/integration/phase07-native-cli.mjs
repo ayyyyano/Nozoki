@@ -17,7 +17,7 @@ const secret = () => Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toS
 const password = 'SYNTHETIC-' + secret()
 const common = {
   compatibility_date: '2026-10-19',
-  compatibility_flags: ['nodejs_compat'],
+  compatibility_flags: ['nodejs_compat', 'global_fetch_strictly_public'],
   d1_databases: [
     {
       binding: 'DB',
@@ -29,8 +29,7 @@ const common = {
   ],
 }
 await mkdir(evidence, { recursive: true })
-const dashboardConfig = resolve(base, 'dashboard.jsonc'),
-  collectorConfig = resolve(base, 'collector.jsonc')
+const dashboardConfig = resolve(base, 'worker.jsonc')
 await writeFile(
   dashboardConfig,
   JSON.stringify({
@@ -38,22 +37,14 @@ await writeFile(
     name: 'nozoki-local07-dashboard',
     main: resolve('.output/server/index.mjs'),
     assets: { directory: resolve('.output/public'), binding: 'ASSETS' },
-  }),
-)
-await writeFile(
-  collectorConfig,
-  JSON.stringify({
-    ...common,
-    name: 'nozoki-local07-collector',
-    main: resolve('workers/collector/index.ts'),
-    vars: { COLLECTOR_EPOCH: '1' },
+    version_metadata: { binding: 'CF_VERSION_METADATA' },
     triggers: { crons: ['*/5 * * * *'] },
   }),
 )
 // Only this isolated configuration directory can read these synthetic local secrets.
 await writeFile(
   resolve(base, '.dev.vars'),
-  `ADMIN_EMAIL="owner@example.invalid"\nADMIN_PASSWORD="${password}"\nAUTH_RATE_LIMIT_SECRET="${secret()}"\nAUTH_VERSION="1"\nAUTH_ORIGIN="${origin}"\nAUTH_ALLOW_LOCAL_HTTP="1"\nCOLLECTOR_EPOCH="1"\n`,
+  `ADMIN_EMAIL="owner@example.invalid"\nADMIN_PASSWORD="${password}"\nAUTH_RATE_LIMIT_SECRET="${secret()}"\nAUTH_VERSION="1"\nAUTH_ORIGIN="${origin}"\nAUTH_ALLOW_LOCAL_HTTP="1"\n`,
   { mode: 0o600 },
 )
 const report = {
@@ -131,9 +122,7 @@ try {
   )
   report.checks.push('repeat CLI migration has no pending work')
   const dash = start(dashboardConfig, 8817, 9337, 'dashboard')
-  const collector = start(collectorConfig, 8818, 9338, 'collector')
   assert.equal((await wait(origin + '/api/dashboard', dash)).status, 200)
-  assert.equal((await wait('http://127.0.0.1:8818/', collector)).status, 404)
   const login = await fetch(origin + '/api/auth/login', {
     method: 'POST',
     headers: { Origin: origin, 'Content-Type': 'application/json' },
@@ -147,6 +136,7 @@ try {
   const config = await (
     await fetch(origin + '/api/admin/config', { headers: { Cookie: cookie } })
   ).json()
+  for (const item of config.integrations) item.enabled = false
   config.site.siteName = 'Phase07 native CLI fixture'
   config.integrations = config.integrations.map(({ credentialState, ...s }) => ({
     ...s,
@@ -167,7 +157,7 @@ try {
   assert.equal((await saved.json()).success, true)
   report.checks.push('native Dashboard HTTP auth/CSRF/CAS writes isolated D1')
   const scheduled = await fetch(
-    'http://127.0.0.1:8818/cdn-cgi/local/scheduled?cron=' + encodeURIComponent('*/5 * * * *'),
+    origin + '/cdn-cgi/handler/scheduled?cron=' + encodeURIComponent('*/5 * * * *'),
   )
   assert.equal(scheduled.status, 200)
   await new Promise((r) => setTimeout(r, 500))
@@ -195,11 +185,8 @@ try {
     realCronInvocations: 0,
     upstreamRequests: 0,
   }
-  report.checks.push(
-    'two separate native Wrangler processes share the actual same SQLite namespace',
-  )
+  report.checks.push('HTTP and scheduled events share one Worker and one SQLite namespace')
   report.checks.push('Local Explorer scheduled endpoint completes empty schedule without upstream')
-  report.checks.push('Collector ordinary HTTP is 404')
   const selection = process.argv
     .find((a) => a.startsWith('--ui='))
     ?.slice(5)

@@ -13,6 +13,7 @@ const commands = {
     '127.0.0.1',
     '--port',
     '8787',
+    '--test-scheduled',
     '--persist-to',
     resolve('.wrangler/state'),
   ],

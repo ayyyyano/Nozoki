@@ -121,14 +121,14 @@ function options() {
       ...['collector-a', 'collector-b'].map((name) => ({
         ...common,
         name,
-        modules: true,
-        scriptPath: resolve('.output/collector/index.mjs'),
+        modules,
+        modulesRoot: root,
       })),
       {
         ...common,
         name: 'collector-unbound',
-        modules: true,
-        scriptPath: resolve('.output/collector/index.mjs'),
+        modules,
+        modulesRoot: root,
         bindings: { ...env, COLLECTOR_EPOCH: '2', NOZOKI_PRIVATE_ROUTES: '[]' },
         serviceBindings: {},
       },

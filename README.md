@@ -80,17 +80,9 @@ pnpm preview
 
 预览地址为 http://127.0.0.1:8787。Dashboard Worker 入口为 `.output/server/index.mjs`，静态资源为 `.output/public`。
 
-Collector 的构建与本地运行：
+网页、API 和定时采集使用同一个 Worker。根配置中的 Cron 每五分钟调用独立的采集引擎，来源仍按各自刷新间隔更新。预览时可打开 `http://127.0.0.1:8787/cdn-cgi/handler/scheduled` 手动触发；这一路径由本地 Wrangler 提供，线上没有公开采集入口。
 
-```sh
-pnpm collector:typecheck
-pnpm collector:build
-pnpm collector:preview
-```
-
-Collector 本地地址为 http://127.0.0.1:8788。它通过 Scheduled 事件执行采集，HTTP 请求返回 404。Dashboard 与 Collector 的本地命令共用 `.wrangler/state`；共享数据库还需要一致的 `database_id`。
-
-Nuxt 构建会清理 `.output`，需要在 `pnpm build` 之后构建 Collector。来源采集使用 D1 租约和配置修订检查，失败时保存上次有效快照，并单独记录错误。
+采集使用数据库租约和来源修订检查。失败时保留上次有效快照，错误单独记录。
 
 ## 使用 Agent 工具快速部署
 
@@ -114,20 +106,20 @@ Nuxt 构建会清理 `.output`，需要在 `pnpm build` 之后构建 Collector�
 8. 验证部署：请求第 5 步的地址确认看板返回正常，用管理员邮箱和密码登录 /admin，修改站点名称保存并刷新确认生效。完成后向我报告结果和未完成事项。
 
 绑定 Git 自动构建：
-9. 执行 git remote -v 确认本地远端指向我的仓库；没有远端时向我索取仓库地址并执行 git remote add origin。把根目录 wrangler.jsonc 的全部修改提交并推送到生产分支（默认 master，仓库使用其他默认分支时按实际填写）。随后引导我在 Cloudflare 控制台完成一次性连接：打开 nozoki-dashboard → Settings → Builds → Connect，按提示完成 GitHub 授权并选择该仓库，生产分支与推送分支保持一致，构建命令填 pnpm build，部署命令填 pnpm deploy:cloudflare（与下一节第 4 步一致），保存后等待首次构建完成并向我报告结果。此后更新代码只需提交推送，Worker 会自动构建部署。
+9. 执行 git remote -v 确认远端仓库；没有远端时向我索取仓库地址。将部署配置提交并推送到生产分支（默认 master）。引导我打开 nozoki-dashboard → Settings → Builds → Connect，选择该仓库与生产分支，根目录使用仓库根目录，构建命令填写 pnpm build，部署命令填写 pnpm deploy:cloudflare。只需连接这一个 Worker，此后推送会一起更新网页和定时采集。
 
 数据凭据加密（我明确要求时再执行）：
-10. 运行 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))" 生成一份独立密钥，用 pnpm exec wrangler secret put 在 nozoki-dashboard 上设为 INTEGRATION_ENCRYPTION_KEY，并在根目录 wrangler.jsonc 的 vars 中加入 INTEGRATION_KEY_VERSION=v1，随后提交推送修改（第 9 步未完成时改为执行 deploy 命令）。密钥同样只通过交互输入或 stdin 传入，并提醒我保存在密码管理器中——遗失后将无法解密已保存的凭据。若我未留存该密钥且尚无已加密凭据，直接重新生成一份并在两个 Worker 上设置为相同值即可。
+10. 生成一份独立的随机 32 字节 base64url 密钥，用 pnpm exec wrangler secret put INTEGRATION_ENCRYPTION_KEY 配置到主 Worker。INTEGRATION_KEY_VERSION 使用配置中的 v1。密钥只通过交互输入或 stdin 传入，提醒我保存在密码管理器中。网页保存和定时采集共用这一份密钥。已有加密凭据时需使用原密钥。
 
-定时采集（我明确要求时再执行）：
-11. 按下一节第 6 步修改 workers/collector/wrangler.jsonc：填入同一个 database_id，删除 remote: false，在顶层 vars 中加入 COLLECTOR_EPOCH=7 和 INTEGRATION_KEY_VERSION=v1。依次执行 pnpm collector:build 和 pnpm collector:deploy，再用第 10 步的同一密钥在 nozoki-collector 上设置 INTEGRATION_ENCRYPTION_KEY；第 10 步未执行或密钥未留存时，重新生成一份并在 nozoki-dashboard 和 nozoki-collector 上设置相同的值。部署后等待下一个五分钟边界，执行 pnpm exec wrangler d1 execute DB --remote --command "SELECT COUNT(*) FROM collector_environment" --config wrangler.jsonc 确认出现一行记录，即验证 cron 已生效；尚未配置数据源时采集为空跑属正常现象。
+定时采集：
+11. 定时采集随主 Worker 的 Cron 启用，无需部署第二个 Worker。检查该 Worker 的定时触发器为 */5 * * * *，在后台配置来源并绑定模块后，等待下一次调度。
 
 安全要求：密码和密钥只进入 Worker Secrets 与被 Git 忽略的本地文件，不要提交到仓库，不要在输出或日志中回显。
 ```
 
 ## 通过 GitHub 部署到 Cloudflare
 
-完成下面 1～5 步后，就能打开网站、登录后台并保存设置。第 6 步用于自动采集数据，可以稍后配置。你需要一个 GitHub 账号和一个 Cloudflare 账号，域名可以先使用 Cloudflare 提供的 `workers.dev` 地址。
+完成下面 1～5 步后，就能打开网站、登录后台并保存设置，默认行情由同一 Worker 定时采集。第 6 步用于保存其他来源的加密凭据，可以稍后配置。你需要一个 GitHub 账号和一个 Cloudflare 账号，域名可以先使用 Cloudflare 提供的 `workers.dev` 地址。
 
 文中的“本地终端”指你电脑上的 PowerShell、终端或 VS Code 终端。“项目根目录”指包含 `package.json` 和 `wrangler.jsonc` 的文件夹。下载仓库后，余下命令都在这个目录执行。
 
@@ -163,6 +155,8 @@ pnpm install --frozen-lockfile
   "compatibility_date": "2026-10-19",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "triggers": { "crons": ["*/5 * * * *"] },
   "assets": {
     "directory": ".output/public",
     "binding": "ASSETS",
@@ -179,7 +173,7 @@ pnpm install --frozen-lockfile
     "ADMIN_EMAIL": "替换为你的登录邮箱",
     "AUTH_VERSION": "1",
     "AUTH_ALLOW_LOCAL_HTTP": "0",
-    "COLLECTOR_EPOCH": "7",
+    "INTEGRATION_KEY_VERSION": "v1",
   },
 }
 ```
@@ -200,10 +194,10 @@ pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.jsonc
 ```sh
 git add wrangler.jsonc
 git commit -m "Configure Cloudflare deployment"
-git push origin main
+git push origin master
 ```
 
-以上使用 `main` 分支，仓库使用其他分支名时按实际修改。也可以用 GitHub Desktop 提交并推送。数据库内容保存在 Cloudflare，不会随这些命令上传到 GitHub。
+以上使用 `master` 分支，仓库使用其他分支名时按实际修改。也可以用 GitHub Desktop 提交并推送。数据库内容保存在 Cloudflare，不会随这些命令上传到 GitHub。
 
 ### 4. 在 Cloudflare 导入仓库
 
@@ -212,7 +206,7 @@ git push origin main
 | 设置        | 填写内容                                               |
 | ----------- | ------------------------------------------------------ |
 | Worker 名称 | `nozoki-dashboard`，与 `wrangler.jsonc` 的 `name` 相同 |
-| 生产分支    | `main`，或自己的实际分支                               |
+| 生产分支    | `master`，或自己的实际分支                               |
 | 根目录      | 仓库根目录，保留默认值                                 |
 | 构建命令    | `pnpm build`                                           |
 | 部署命令    | `pnpm deploy:cloudflare`                               |
@@ -221,7 +215,7 @@ git push origin main
 
 点击 **Save and Deploy（保存并部署）**，等待构建成功。打开提供的 `https://nozoki-dashboard.你的子域名.workers.dev` 地址。这时应能看到看板，管理员登录将在下一步启用。
 
-部署命令请使用 `pnpm deploy:cloudflare`，Collector 使用 `pnpm collector:deploy`。两者先通过 Wrangler 应用对应 D1 的待执行迁移，再发布 Worker；迁移或 D1 权限检查失败时停止发布。Cloudflare Builds 的部署 Token 需要该数据库的 **D1 Edit** 权限。已有仓库自动部署也需要在 Settings → Builds 中更新部署命令；直接运行 `wrangler deploy` 会绕过此步骤。`pnpm build` 和 `pnpm collector:build` 仍只构建，不会访问或修改云端数据库。
+部署命令使用 `pnpm deploy:cloudflare`，它先应用 D1 待执行迁移，再发布包含网页和采集入口的 Worker。迁移失败时停止发布。Cloudflare Builds 的部署 Token 需要该数据库的 **D1 Edit** 权限。`pnpm build` 仅构建，本身不会访问云端数据库。
 
 若代码已更新但数据库还停留在完整的七模块旧结构，服务会在首次配置读取时检测并降级为只读：继续展示已有配置及合法快照，后台提示等待迁移，禁止保存、测试来源及定时采集。执行 `pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.jsonc` 后刷新即可恢复，无需重启 Worker。该兼容仅用于迁移 0016 前的完整旧结构；空库、损坏结构不会被默认数据覆盖。迁移仍由发布流程执行，不由访客请求执行。
 
@@ -235,7 +229,7 @@ git push origin main
   "AUTH_VERSION": "1",
   "AUTH_ALLOW_LOCAL_HTTP": "0",
   "AUTH_ORIGIN": "https://nozoki-dashboard.your-subdomain.workers.dev",
-  "COLLECTOR_EPOCH": "7"
+  "INTEGRATION_KEY_VERSION": "v1"
 }
 ```
 
@@ -258,27 +252,13 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 
 打开网站，点击右上角账号图标，使用 `ADMIN_EMAIL` 和刚才设置的密码登录。进入后台后修改站点名称并保存，刷新页面确认设置仍在，即可开始使用。还没有配置来源时，设备、余额等模块会显示未配置状态。
 
-### 6. 配置数据凭据与自动采集
+### 6. 配置数据凭据与定时采集
 
-需要在后台保存 API Key 时，再运行一次第 5 步的随机密钥命令，生成独立的加密密钥。在 `nozoki-dashboard` 的运行时 Secrets 中添加 `INTEGRATION_ENCRYPTION_KEY`，并在根目录 `wrangler.jsonc` 的 `vars` 中添加 `"INTEGRATION_KEY_VERSION": "v1"`，随后推送修改。将这个密钥保存在密码管理器中，遗失后将无法解密已保存的凭据。
+腾讯默认行情不需要 API Key。需要在后台保存其他来源的凭据时，运行第 5 步的随机密钥命令，生成独立的加密密钥。在 **nozoki-dashboard → Settings → Variables and Secrets** 中添加 Secret `INTEGRATION_ENCRYPTION_KEY`，点击 **Deploy**。根配置已设置 `INTEGRATION_KEY_VERSION=v1`。将密钥保存在密码管理器中，遗失后无法解密已有凭据。
 
-Collector 是负责定时采集的第二个 Worker，也负责清理过期会话和旧日志。准备启用时，打开 [workers/collector/wrangler.jsonc](workers/collector/wrangler.jsonc)：
+网页保存、只读测试和定时采集共用此 Worker 的 D1 与 Secrets。配置中的 `*/5 * * * *` Cron 每五分钟执行一次，关闭的来源及未被启用模块引用的来源会跳过。执行情况在该 Worker 的日志中查看。
 
-- 将 `database_id` 替换为第 2 步创建的同一个 Database ID。
-- 删除该 D1 配置中的 `"remote": false`。
-- 在文件最外层添加 `"vars": { "COLLECTOR_EPOCH": "7", "INTEGRATION_KEY_VERSION": "v1" }`。已有 `vars` 时合并这两个字段，`COLLECTOR_EPOCH` 与 Dashboard 保持相同。
-
-先在本地终端发布 Collector：
-
-```sh
-pnpm collector:deploy
-```
-
-该命令会启用配置中的每五分钟 Cron。它按来源各自的刷新间隔采集，关闭的来源和未被启用模块引用的来源会跳过。在 Cloudflare 的 `nozoki-collector → Settings → Variables and Secrets` 中添加同名 Secret `INTEGRATION_ENCRYPTION_KEY`，值与 Dashboard 中的加密密钥相同，点击 **Deploy**。Collector 不需要管理员登录密码。
-
-需要随 GitHub 推送更新 Collector 时，将修改后的 Collector 配置也提交到仓库，然后打开 `nozoki-collector → Settings → Builds → Connect`，连接同一仓库。根目录仍选仓库根目录，构建命令填写 `pnpm collector:build`，部署命令填写 `pnpm collector:deploy`。
-
-Collector 的网页地址返回 404 是正常行为。采集结果在看板显示，执行情况可在该 Worker 的日志中查看。DeepSeek 需要自己的 API Key。腾讯、Yahoo、DeepSeek 和 Tailscale 的固定官方地址有内置批准。
+采集环境按 [Cloudflare 部署版本](https://developers.cloudflare.com/workers/runtime-apis/bindings/version-metadata/)自动更新，添加加密密钥或发布代码后无需手动设置 `COLLECTOR_EPOCH`。已有双 Worker 安装应关闭或删除旧 `nozoki-collector` 的 Cron 与 Git 构建，避免它继续运行。回滚代码时请重新构建并发布目标版本，采集会拒绝比当前记录更旧的部署。
 
 ### 在后台接入自建来源
 
@@ -293,13 +273,13 @@ Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cl
 
 ### Cloudflare 公网 HTTPS 出站
 
-Dashboard 和 Collector 使用 Workers 的 `fetch` 读取已批准的来源，无需额外服务器、连接器密钥或逐来源 Worker 变量。`https://alive.example.com/` 这类自建公网服务也适用。
+Worker 使用 `fetch` 读取已批准的来源，无需额外服务器、连接器密钥或逐来源 Worker 变量。`https://alive.example.com/` 这类自建公网服务也适用。
 
-两个 Worker 的配置都包含 `global_fetch_strictly_public`。它让同一 Cloudflare zone 下的请求经过域名的公开入口，遵守目标的 Workers 路由和安全规则。请保留此标志。目标若有登录页、Cloudflare Access 或交互验证，需要为只读 API 配置合适的访问规则；采集器无法完成浏览器验证。
+根配置包含 `global_fetch_strictly_public`。它让同一 Cloudflare zone 下的请求经过域名的公开入口，遵守目标的 Workers 路由和安全规则。请保留此标志。目标若有登录页、Cloudflare Access 或交互验证，需要为只读 API 配置合适的访问规则；采集器无法完成浏览器验证。
 
 每次请求限定为批准的 HTTPS 443 服务根目录及已登记的 GET 端点。请求不携带浏览器 Cookie，Bearer 凭据按来源发送，重定向会被拒绝。响应上限为 128KB，普通来源超时 3.5 秒，行情来源超时 10 秒。域名解析后的私网地址由 Workers 网络层在连接时过滤，应用同时拒绝 IP 字面量、回环域名和本地域名。[workerd 网络规则](https://github.com/cloudflare/workerd/blob/main/src/workerd/server/workerd.capnp)和 [Cloudflare 公开路由标志](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public)说明了这些平台行为。
 
-从连接器版本升级时，先备份数据库并应用 `0017_source_access.sql`。若曾配置 `NOZOKI_CONNECTOR_URL`、`NOZOKI_CONNECTOR_TOKEN`、`NOZOKI_CONNECTOR_REVISION` 或 `NOZOKI_SOURCE_CONNECTOR` 绑定，请从两个 Worker 一并移除。使用本文的部署命令更新 Dashboard 和 Collector，两个配置中的 `COLLECTOR_EPOCH` 需要相同且大于站点当前值。仓库配置使用 7；若站点当前值已达到 7，请在两处填写一个更大的正整数。等待下一轮 Collector 执行后再测试。后台公网来源的日常增删、批准与凭据修改通过保存配置生效。
+发布前由部署脚本应用数据库迁移。公网来源的日常增删、批准和凭据修改在后台保存后生效。
 
 Workers 的后台管理模式仅支持公网 HTTPS。私网 IP、仅局域网解析的地址和 Tailscale 内网地址无法通过公网 `fetch` 访问。Node.js 自部署可在内嵌连接器中设置 `NOZOKI_CONNECTOR_PRIVATE_CIDRS`，例如 `10.20.0.0/24,fd12::/64`，再选择「受限私网 HTTPS」。允许网段限于 RFC1918/ULA，回环和元数据地址始终拒绝。证书需受 Node.js 信任，内部 CA 可通过 `NODE_EXTRA_CA_CERTS` 配置。
 
@@ -318,13 +298,12 @@ Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 
 
 在线状态来自 `connectedToControl`，表示 Tailscale 控制面连接状态，不保证设备上的服务可达。接口不提供前台应用或电量；这些信息继续由 Sleepy 提供。Collector 访问官方 API，无需加入 Tailnet。每轮最多两次请求，不执行设备管理操作。
 
-升级已有站点时需应用 `0016_tailscale_module.sql`，并在更新 Collector 前递增 `COLLECTOR_EPOCH`，因为内置服务批准表发生变化。迁移保留原有配置和快照，并新增一个关闭的 Tailscale 模块。OAuth Secret 使用现有凭据加密机制保存。
 
 ### 默认腾讯行情
 
 新数据库自动加载来源 `tencent`：Provider 为 `quotes-custom`，协议为 `tencent-us-v1`，服务根地址为 `https://web.ifzq.gtimg.cn/`。来源已启用，每 300 秒检查刷新；QQQM、VOO 和行情模块的 `main` 引用均已绑定。此地址已内置批准，无需 API Key 或 `NOZOKI_PUBLIC_ROUTES`。
 
-1. 备份数据库并执行迁移至 `0015_load_default_tencent_source.sql`。首次从 Yahoo 版本升级时，一起更新 Dashboard 与 Collector，并递增 `COLLECTOR_EPOCH` 以匹配腾讯内置服务表。若已部署腾讯适配器，仅补上默认来源迁移无需再次递增 epoch。
+1. 使用本文部署命令应用数据库迁移，默认配置会加载腾讯来源。
 2. 已有站点缺少 `tencent` 时，迁移会自动加载腾讯默认来源，将 QQQM/VOO 的默认 Yahoo 绑定和行情模块的默认 Yahoo 引用切换到腾讯。Yahoo 若已无其他启用引用，会被关闭；其凭据、快照和退避记录仍保留。已有同名来源、其他自定义绑定或达到 10 个来源上限的配置保持原状。配置变更会递增版本并记录系统审计，升级前打开的后台草稿需要重新读取。
 3. 可先执行只读连接测试，再等待 Collector 调度。测试读取一个标的；看板使用 Collector 保存的结果。Node.js 部署可执行 `pnpm collector:node`。
 
@@ -449,14 +428,14 @@ pnpm db:backup:node /var/backups/nozoki/manual.sqlite
 
 ```text
 app/                 Vue 页面、组件、样式与 composable
-server/              API、认证、配置服务、Repository、适配器和采集编排
+server/              API、认证、配置服务、Repository、适配器
+  collection/        定时采集引擎与编排
 shared/
   contracts/         运行时数据校验与共享类型
   schedule/          可独立导入的日程引擎
   device-state/      设备状态与电量解析
   collection/        采集时间与结果规则
   domain/            余额计算及展示数据转换
-workers/collector/   独立采集 Worker
 platform/node/       Node HTTP 入口、SQLite、迁移和单次采集入口
 migrations/          D1 与服务器 SQLite 共用的 SQL 迁移
 scripts/             构建、本地运行与资源生成脚本
@@ -481,7 +460,7 @@ pnpm build
 pnpm test:d1
 ```
 
-`test:d1` 自动构建 Collector，并使用隔离的本地 workerd/D1。浏览器测试需要已启动的本地服务，默认使用 Microsoft Edge，可通过 `PLAYWRIGHT_EXECUTABLE_PATH` 指定其他浏览器。
+`test:d1` 构建完整 Worker，并使用隔离的本地 workerd/D1。浏览器测试需要已启动的本地服务，默认使用 Microsoft Edge，可通过 `PLAYWRIGHT_EXECUTABLE_PATH` 指定其他浏览器。
 
 服务器专项测试先运行 `pnpm build:node`，再运行 `pnpm test:node`。测试使用隔离 SQLite，覆盖事务、跨连接 CAS、采集租约、认证、CSRF、HTTP 幂等、重启恢复和浏览器保存。
 
