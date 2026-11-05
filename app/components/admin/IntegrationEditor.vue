@@ -328,7 +328,7 @@ function operation(value: unknown) {
             : '服务器出站尚未就绪，请检查运行环境。'
       }}{{
         connector?.environmentMatches === false
-          ? '；Dashboard 与 Collector 执行环境不一致，请先同步基础配置及 epoch'
+          ? '；当前部署已过期或采集环境异常，请重新部署并等待下一次定时采集'
           : ''
       }}
     </p>
@@ -384,8 +384,8 @@ function operation(value: unknown) {
     class="admin-note"
   >
     Yahoo 默认地址 https://query1.finance.yahoo.com/ 已内置批准，无需密钥。 默认配置已启用并绑定
-    QQQM、VOO。新增标的时选择此来源；关闭来源可停止采集。 非官方接口的公开展示许可尚未确认。已有
-    Collector 升级时需递增 COLLECTOR_EPOCH。
+    QQQM、VOO。新增标的时选择此来源；关闭来源可停止采集。 非官方接口的公开展示许可尚未确认。Worker
+    部署后由定时任务采集。
   </p>
   <div v-if="testResult" role="status" class="admin-note">
     <p>
@@ -397,8 +397,7 @@ function operation(value: unknown) {
     </p>
     <p v-if="testResult.code === 'ACCESS_NOT_APPROVED'">请批准当前目标并保存配置后再测试。</p>
     <p v-if="testResult.code === 'CONNECTOR_UNAVAILABLE'">
-      执行环境尚未就绪。请检查 Dashboard 与 Collector 的版本、加密配置和 COLLECTOR_EPOCH
-      是否一致；Workers 公网来源无需外部连接器。
+      执行环境尚未就绪。请检查部署状态与加密配置；Workers 的网页和采集共用同一份配置。
     </p>
     <p v-if="testResult.code === 'DESTINATION_BLOCKED'">
       目标不在允许的网络范围内。Workers 仅支持公网 HTTPS；服务器私网来源还需要配置允许网段。

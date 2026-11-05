@@ -19,7 +19,7 @@ import {
 import type { AuthSession } from './sessions.ts'
 import { AuthError } from './auth-settings.ts'
 import { readManagedSource } from '../collection/managed-read.ts'
-import { environmentFingerprint } from '../collection/environment.ts'
+import { collectionEnvironmentMatches } from '../collection/environment.ts'
 export async function testIntegration(
   db: Database,
   id: string,
@@ -63,14 +63,7 @@ export async function testIntegration(
     const target =
       source.access?.mode && source.access.mode !== 'legacy' ? undefined : publicTarget(source, env)
     if (source.access && source.access.mode !== 'legacy') {
-      const prior = await db
-        .prepare('SELECT epoch,fingerprint FROM collector_environment WHERE id=1')
-        .first()
-      if (
-        prior &&
-        (prior.epoch !== Number(env.COLLECTOR_EPOCH) ||
-          prior.fingerprint !== (await environmentFingerprint(env)))
-      )
+      if ((await collectionEnvironmentMatches(db, env)) === false)
         throw new AdapterError('CONNECTOR_UNAVAILABLE')
       requiresAuthentication = source.access.authentication === 'bearer'
       result = await readManagedSource(
