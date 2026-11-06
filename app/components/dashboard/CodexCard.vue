@@ -21,7 +21,6 @@ const accountStates = {
   <DashboardModuleCard
     id="codex"
     :title="title"
-    icon="code"
     :status="snapshot.status"
     :observed-at="snapshot.observedAt"
   >

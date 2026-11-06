@@ -313,25 +313,29 @@
   gap: 20px;
   min-width: 0;
 }
-.source-manager .source-card > header {
+.source-manager .source-card > header,
+.admin-editor-item.admin-module-card > header,
+.admin-editor-item.admin-link-card > header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
 }
-.source-card .admin-item-toggle {
+.source-card .admin-item-toggle,
+.admin-module-card .admin-item-toggle,
+.admin-link-card .admin-item-toggle {
   width: 100%;
 }
 .source-enable {
   padding-inline: 8px;
 }
-.source-enable-copy {
-  display: grid;
-  gap: 3px;
-  font-size: 12px;
-  color: var(--color-on-surface-variant);
+.admin-module-card .admin-item-actions,
+.admin-link-card .admin-item-actions {
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  padding-inline: 4px 12px;
 }
-.source-enable-copy small {
-  color: var(--color-primary);
-  font-size: 10px;
+.admin-module-card .admin-item-actions > .var-switch {
+  margin-inline-start: 8px;
 }
 .source-settings-grid {
   display: grid;
@@ -498,8 +502,11 @@
   .source-manager .admin-item-status {
     display: none;
   }
-  .source-manager .source-enable-copy {
-    max-width: 40px;
+  .admin-editor-item.admin-module-card > header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-module-card .admin-item-actions {
+    justify-self: end;
   }
   .source-settings-grid {
     grid-template-columns: minmax(0, 1fr);

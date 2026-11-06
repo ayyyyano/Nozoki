@@ -103,7 +103,8 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
 
   const first = await expand('fixture')
   await first.getByRole('switch').click()
-  await expect(first.getByText('未保存', { exact: true })).toBeVisible()
+  await expect(first.getByRole('switch')).not.toBeChecked()
+  await expect(first.locator('.source-enable-copy')).toHaveCount(0)
   await first.getByRole('switch').click()
   const deep = await expand(deepId)
   await expect(deep.getByText('已配置', { exact: true })).toBeVisible()

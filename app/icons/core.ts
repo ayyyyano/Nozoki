@@ -16,6 +16,8 @@ import LockRound from '@vicons/material/es/LockRound.js'
 import TuneRound from '@vicons/material/es/TuneRound.js'
 import CloseRound from '@vicons/material/es/CloseRound.js'
 import ArrowForwardRound from '@vicons/material/es/ArrowForwardRound.js'
+import ArrowUpwardRound from '@vicons/material/es/ArrowUpwardRound.js'
+import ArrowDownwardRound from '@vicons/material/es/ArrowDownwardRound.js'
 import BatteryFullRound from '@vicons/material/es/BatteryFullRound.js'
 import BoltRound from '@vicons/material/es/BoltRound.js'
 import WarningRound from '@vicons/material/es/WarningRound.js'
@@ -51,6 +53,8 @@ export const coreIcons: Record<
   tune: { component: TuneRound, name: 'TuneRound', symbol: 'tune' },
   close: { component: CloseRound, name: 'CloseRound', symbol: 'close' },
   arrow: { component: ArrowForwardRound, name: 'ArrowForwardRound', symbol: 'arrow_forward' },
+  up: { component: ArrowUpwardRound, name: 'ArrowUpwardRound', symbol: 'arrow_upward' },
+  down: { component: ArrowDownwardRound, name: 'ArrowDownwardRound', symbol: 'arrow_downward' },
   battery: { component: BatteryFullRound, name: 'BatteryFullRound', symbol: 'battery_full' },
   bolt: { component: BoltRound, name: 'BoltRound', symbol: 'bolt' },
   alert: { component: WarningRound, name: 'WarningRound', symbol: 'warning' },

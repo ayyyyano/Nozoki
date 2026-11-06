@@ -176,6 +176,24 @@ test(
     }
     const save = (value, key = crypto.randomUUID()) =>
       request('/api/admin/config', 'PUT', value, { 'Idempotency-Key': key })
+    if (process.env.NOZOKI_TEST_LIST_HEADERS === '1') {
+      const { launch, settle } = await import('../browser/support.mjs')
+      const { exerciseAdminListHeaders } = await import('../browser/admin-list-headers.mjs')
+      await mf.ready
+      browser = await launch()
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+      await context.addCookies([
+        { name: cookie.split('=')[0], value: cookie.slice(cookie.indexOf('=') + 1), url: origin },
+      ])
+      const page = await context.newPage()
+      await page.goto(origin + '/admin')
+      await settle(page)
+      await exerciseAdminListHeaders(page, { input, evidence })
+      await context.close()
+      await browser.close()
+      browser = null
+      return
+    }
     await t.test(
       'unsaved, disabled source probe preserves D1 config, ciphertext and snapshots',
       async () => {

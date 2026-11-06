@@ -17,7 +17,7 @@ function chartPoints(quote: Quote): string | null {
 }
 </script>
 <template>
-  <DashboardModuleCard id="quotes" :title="title" icon="chart" :status="snapshot.status">
+  <DashboardModuleCard id="quotes" :title="title" :status="snapshot.status">
     <DashboardDataState
       :status="snapshot.status"
       :empty="!snapshot.data?.items.length"

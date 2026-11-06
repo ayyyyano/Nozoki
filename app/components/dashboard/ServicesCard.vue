@@ -15,7 +15,6 @@ const states: Record<Monitor['state'], string> = {
   <DashboardModuleCard
     id="services"
     :title="title"
-    icon="server"
     :status="snapshot.status"
     :observed-at="snapshot.observedAt"
   >

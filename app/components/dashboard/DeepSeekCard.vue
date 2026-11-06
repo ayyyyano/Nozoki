@@ -34,7 +34,7 @@ const series = computed(() => {
 })
 </script>
 <template>
-  <DashboardModuleCard id="deepseek" :title="title" icon="spark" :status="snapshot.status">
+  <DashboardModuleCard id="deepseek" :title="title" :status="snapshot.status">
     <div v-if="snapshot.data?.masked" class="balance-private" role="status">
       <div class="balance-private-preview" aria-hidden="true">
         <div class="metric-caption">账户余额</div>

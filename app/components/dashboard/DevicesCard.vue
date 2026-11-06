@@ -18,7 +18,6 @@ const devices = computed(() =>
   <DashboardModuleCard
     id="devices"
     :title="title"
-    icon="devices"
     :status="snapshot.status"
     :observed-at="snapshot.observedAt"
   >

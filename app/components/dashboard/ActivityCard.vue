@@ -11,7 +11,6 @@ const { state, view, legacy } = useScheduleEvaluation(
   <DashboardModuleCard
     id="activity"
     :title="title"
-    icon="clock"
     :status="state.valid ? snapshot.status : snapshot.data ? 'error' : snapshot.status"
   >
     <template v-if="state.valid && snapshot.data">
