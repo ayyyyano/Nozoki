@@ -8,8 +8,7 @@ import { fixed, fixture } from '../fixtures/layout.mjs'
 import { createDefaultConfig } from '../../shared/contracts/config.ts'
 
 const before = process.argv.includes('--before')
-const directory =
-  process.env.LAYOUT_EVIDENCE ?? 'docs/implementation/evidence/phase-07-ui/dynamic-layout'
+const directory = process.env.LAYOUT_EVIDENCE ?? '.wrangler/test-results/layout'
 await mkdir(directory, { recursive: true })
 const browser = await launch()
 const report = { fixtureOnly: true, engine: browser.version(), before, checks: [], errors: [] }

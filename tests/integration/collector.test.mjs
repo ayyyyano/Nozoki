@@ -15,7 +15,6 @@ import { readBalanceChanges } from '../../server/services/balance-observations.t
 import { fieldPointer } from '../../shared/contracts/field-paths.ts'
 import { cleanupCollection } from '../../server/repositories/collection.ts'
 import { upsertSnapshot } from '../../server/repositories/telemetry.ts'
-import { launch, settle } from '../browser/support.mjs'
 const require = createRequire(import.meta.url),
   wrangler = createRequire(require.resolve('wrangler/package.json'))
 const { Miniflare, convertV4MiniflareOptions } = process.env.NOZOKI_TEST_MINIFLARE
@@ -741,6 +740,8 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
           },
         },
       })
+      if (process.env.NOZOKI_TEST_BROWSER !== '1') return
+      const { launch, settle } = await import('../browser/support.mjs')
       browser = await launch()
       const context = await browser.newContext({
           viewport: { width: 1440, height: 900 },
