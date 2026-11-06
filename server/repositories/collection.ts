@@ -46,8 +46,12 @@ export async function syncCollectionPlans(
  SELECT id,?,?,? FROM integrations WHERE id=? AND (collection_generation||':'||collection_revision)=? AND enabled=1
  AND EXISTS(SELECT 1 FROM collector_environment WHERE id=1 AND epoch=? AND fingerprint=?)
  ON CONFLICT(source_id) DO UPDATE SET source_revision=excluded.source_revision,environment_epoch=excluded.environment_epoch,
- next_run_at=max(excluded.next_run_at,coalesce(collection_state.retry_after_until,excluded.next_run_at)),
- failures=0,status='unconfigured',error_code=NULL,last_scheduled_at=NULL,last_success_at=NULL,
+ next_run_at=max(excluded.next_run_at,coalesce(collection_state.retry_after_until,excluded.next_run_at),
+ CASE WHEN collection_state.status='error' THEN collection_state.next_run_at ELSE excluded.next_run_at END),
+ failures=CASE WHEN collection_state.status='error' THEN collection_state.failures ELSE 0 END,
+ status=CASE WHEN collection_state.status='error' THEN 'error' ELSE 'unconfigured' END,
+ error_code=CASE WHEN collection_state.status='error' THEN collection_state.error_code ELSE NULL END,
+ last_scheduled_at=NULL,last_success_at=NULL,
  run_id=NULL,lease_owner=NULL,lease_token=NULL,lease_until=NULL
  WHERE collection_state.source_revision<>excluded.source_revision OR collection_state.environment_epoch<>excluded.environment_epoch`,
         )

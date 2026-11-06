@@ -25,7 +25,7 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
     )
     await page.getByRole('button', { name: '保存配置', exact: true }).click()
     assert.equal((await response).status(), 200)
-    await page.getByText('已保存并确认持久化', { exact: true }).waitFor()
+    await page.getByText(/^(?:已保存并确认持久化|配置已保存，)/).waitFor()
     await expect(page.getByRole('button', { name: '保存配置', exact: true })).toBeEnabled()
   }
   await page.getByRole('button', { name: '数据源', exact: true }).click()
