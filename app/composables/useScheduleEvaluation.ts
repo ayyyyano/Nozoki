@@ -26,6 +26,13 @@ export function useScheduleEvaluation(input: () => unknown, now: () => number) {
     validation.value.valid ? toLegacySchedule(validation.value.schedule) : null,
   )
   const state = computed(() => evaluateSchedule(prepared.value ?? input(), now()))
-  const view = computed(() => activityScheduleView(state.value, now(), legacy.value))
+  const view = computed(() =>
+    activityScheduleView(
+      state.value,
+      now(),
+      legacy.value,
+      validation.value.valid ? validation.value.schedule.labels : undefined,
+    ),
+  )
   return { state, view, validation, legacy }
 }

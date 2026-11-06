@@ -60,13 +60,15 @@ export function legacyScheduleView(
     : (state.nextPeriod?.startAt ?? null)
   return {
     phase,
-    label: {
-      before: '尚未上班',
-      working: '工作中',
-      lunch: '午休中',
-      after: '下班啦',
-      rest: '今日休息',
-    }[phase],
+    label:
+      config.labels?.[phase === 'working' ? 'active' : phase === 'lunch' ? 'break' : phase] ??
+      {
+        before: '尚未上班',
+        working: '工作中',
+        lunch: '午休中',
+        after: '下班啦',
+        rest: '今日休息',
+      }[phase],
     caption,
     localDate: state.localDate,
     clock: state.clock,

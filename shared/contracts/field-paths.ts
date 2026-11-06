@@ -78,6 +78,7 @@ export const FIELD_MODEL: Record<ModuleId, FieldNode> = {
   },
   activity: {
     schedule: {
+      labels: leaf('active', 'break', 'free', 'before', 'after', 'rest', 'empty'),
       ...leaf(
         'timezone',
         'start',

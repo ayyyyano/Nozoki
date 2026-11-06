@@ -16,6 +16,7 @@ import {
   type SchedulePeriod,
   type Weekday,
   type WeeklySchedule,
+  type ScheduleLabels,
 } from '../../../shared/schedule'
 import { activityScheduleView, scheduleIssueText } from '../../../shared/domain/schedule-view'
 import { formatTimestamp } from '../../../shared/domain/format'
@@ -42,6 +43,22 @@ const weekdays = [
   ['7', '周日'],
 ] as const
 const custom = computed(() => ('version' in model.value ? model.value : null))
+const labelFields: { key: keyof ScheduleLabels; label: string }[] = [
+  { key: 'active', label: '活动状态文字' },
+  { key: 'break', label: '休息时段状态文字' },
+  { key: 'before', label: '开始前状态文字' },
+  { key: 'after', label: '结束后状态文字' },
+  { key: 'rest', label: '休息日状态文字' },
+  { key: 'free', label: '自由时间状态文字' },
+  { key: 'empty', label: '无安排状态文字' },
+]
+function setLabel(key: keyof ScheduleLabels, text: string) {
+  const labels = { ...model.value.labels }
+  if (text) labels[key] = text
+  else delete labels[key]
+  if (Object.keys(labels).length) model.value.labels = labels
+  else delete model.value.labels
+}
 const basic = computed<LegacySchedule>({
   get: () => model.value as LegacySchedule,
   set: (value) => (model.value = value),
@@ -198,7 +215,7 @@ const instant = computed(() => {
 const preview = computed(() => evaluateSchedule(prepared.value ?? model.value, instant.value))
 const basicEquivalent = computed(() => toLegacySchedule(model.value))
 const previewView = computed(() =>
-  activityScheduleView(preview.value, instant.value, basicEquivalent.value),
+  activityScheduleView(preview.value, instant.value, basicEquivalent.value, model.value.labels),
 )
 const resolved = computed(() => {
   try {
@@ -245,6 +262,20 @@ const overrideEnd = computed({
       ><AdminText v-model="model.timezone" label="IANA 时区" :max="100" />
     </div>
     <p v-if="error" role="alert" class="schedule-error">{{ error }}</p>
+    <details class="admin-details">
+      <summary>状态文字</summary>
+      <div class="admin-fields">
+        <AdminText
+          v-for="field in labelFields"
+          :key="field.key"
+          :model-value="model.labels?.[field.key] ?? ''"
+          :label="field.label"
+          :max="120"
+          @update:model-value="setLabel(field.key, $event)"
+        />
+      </div>
+      <p class="admin-note">留空沿用原有文案；自定义时段单独设置的状态文字优先。</p>
+    </details>
     <template v-if="!custom">
       <div class="admin-fields">
         <AdminText v-model="basic.start" label="上班时间 HH:mm" :max="5" /><AdminText

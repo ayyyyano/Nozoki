@@ -1,16 +1,28 @@
-import type { LegacySchedule, ScheduleEvaluation, ScheduleIssue } from '../schedule/index.ts'
+import type {
+  LegacySchedule,
+  ScheduleEvaluation,
+  ScheduleIssue,
+  ScheduleLabels,
+} from '../schedule/index.ts'
 import { legacyScheduleView, countdownText } from './schedule.ts'
 export function activityScheduleView(
   state: ScheduleEvaluation,
   now: number,
   legacy: LegacySchedule | null = null,
+  labels: ScheduleLabels = legacy?.labels ?? {},
 ) {
   const old = legacy && state.valid ? legacyScheduleView(state, legacy, now) : null
   const label =
     state.override?.text ??
-    old?.label ??
     state.current?.display?.label ??
+    (state.current ? labels[state.current.category] : undefined) ??
+    old?.label ??
     state.current?.name ??
+    (state.phase === 'between'
+      ? labels.free
+      : state.phase === 'invalid' || state.phase === 'period'
+        ? undefined
+        : labels[state.phase]) ??
     {
       before: '等待安排',
       between: '自由时间',

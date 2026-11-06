@@ -1,6 +1,9 @@
 export type Weekday = '1' | '2' | '3' | '4' | '5' | '6' | '7'
 export type PeriodCategory = 'active' | 'break' | 'free'
 export type DstDisambiguation = 'reject' | 'earlier' | 'later'
+export type ScheduleLabels = Partial<
+  Record<'active' | 'break' | 'free' | 'before' | 'after' | 'rest' | 'empty', string>
+>
 export interface SchedulePeriod {
   id: string
   name: string
@@ -35,6 +38,7 @@ export interface WeeklySchedule {
   dstDisambiguation: DstDisambiguation
   calendarVersion: string | null
   override?: ScheduleOverride
+  labels?: ScheduleLabels
 }
 export interface LegacySchedule {
   timezone: string
@@ -45,6 +49,7 @@ export interface LegacySchedule {
   restMode: 'single' | 'double'
   calendarVersion: string | null
   calendar?: Record<string, { workday: boolean; name?: string }>
+  labels?: ScheduleLabels
 }
 export type ScheduleInput = LegacySchedule | WeeklySchedule
 export interface ScheduleIssue {

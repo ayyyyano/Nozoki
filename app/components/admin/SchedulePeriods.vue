@@ -11,12 +11,25 @@ function add() {
 function sort() {
   model.value = sortSchedulePeriods(toRaw(model.value))
 }
+function setLabel(period: SchedulePeriod, label: string) {
+  const display = { ...period.display }
+  if (label) display.label = label
+  else delete display.label
+  if (Object.keys(display).length) period.display = display
+  else delete period.display
+}
 </script>
 <template>
   <div class="schedule-periods">
     <div v-for="(period, index) in model" :key="period.id" class="schedule-period">
       <div class="admin-fields">
         <AdminText v-model="period.name" :label="`${label}时段 ${index + 1} 名称`" :max="120" />
+        <AdminText
+          :model-value="period.display?.label ?? ''"
+          :label="`${label}时段 ${index + 1} 状态文字（可选）`"
+          :max="120"
+          @update:model-value="setLabel(period, $event)"
+        />
         <VarSelect
           v-model="period.category"
           :aria-label="`${label}时段 ${index + 1} 类别`"

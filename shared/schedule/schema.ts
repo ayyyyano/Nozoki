@@ -8,6 +8,15 @@ const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 const zone = z.string().max(100).refine(isTimeZone, 'Invalid IANA timezone')
 const date = z.string().refine(isLocalDate, 'Invalid local date')
 const offset = z.union([z.literal(0), z.literal(1)]).default(0)
+const labels = z.strictObject({
+  active: name.optional(),
+  break: name.optional(),
+  free: name.optional(),
+  before: name.optional(),
+  after: name.optional(),
+  rest: name.optional(),
+  empty: name.optional(),
+})
 export const PeriodSchema = z
   .strictObject({
     id,
@@ -60,6 +69,7 @@ function overlaps(periods: { start: number; end: number }[]) {
 export const WeeklyScheduleSchema = z
   .strictObject({
     version: z.literal(2),
+    labels: labels.optional(),
     timezone: zone,
     templates: z.array(z.strictObject({ id, name, slots })).max(32),
     weekdays: z.strictObject({
@@ -134,6 +144,7 @@ export const WeeklyScheduleSchema = z
   })
 export const LegacyScheduleSchema = z
   .strictObject({
+    labels: labels.optional(),
     timezone: zone,
     start: time,
     end: time,
