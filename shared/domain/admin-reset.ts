@@ -58,6 +58,10 @@ export function defaultSectionPatch(
       return {
         integrations: defaults.integrations.map((source) => ({
           ...source,
+          fieldMappings:
+            config.integrations.find((i) => i.id === source.id)?.fieldMappings ??
+            source.fieldMappings,
+          capabilities: config.integrations.find((i) => i.id === source.id)?.capabilities ?? {},
           credential: { operation: 'clear' },
         })),
       }

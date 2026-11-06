@@ -30,31 +30,25 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
   }
   await page.getByRole('button', { name: '数据源', exact: true }).click()
   await page.getByRole('button', { name: '添加来源', exact: true }).click()
-  const source = page.locator('fieldset:visible .admin-editor-item').last()
-  await select(source, '凭据操作', 'replace · 替换')
-  await source.locator('input[aria-label="新凭据"]').fill('null')
-  await select(source, 'Provider', 'tailscale')
-  await source.getByRole('textbox', { name: '来源 ID', exact: true }).fill('tailscale-ui')
-  await expect(source.getByRole('textbox', { name: '服务根 HTTPS 地址', exact: true })).toHaveValue(
-    'https://api.tailscale.com/',
-  )
+  await page
+    .getByRole('dialog', { name: '选择数据源类型', exact: true })
+    .getByRole('button', { name: /^Tailscale / })
+    .click()
+  const source = page.locator('fieldset:visible .source-card').last()
+  const tailId = await source.getAttribute('data-source-id')
+  await expect(source.getByRole('textbox', { name: 'OAuth Client ID', exact: true })).toBeVisible()
   await source
     .getByRole('textbox', { name: 'OAuth Client ID', exact: true })
     .fill('synthetic-client')
   await source.locator('input[aria-label="OAuth Client Secret"]').fill('synthetic-secret')
-  await source.getByRole('button', { name: '批准此来源', exact: true }).click()
-  await page
-    .getByRole('alertdialog', { name: '批准来源访问？' })
-    .getByRole('button', { name: '确认批准', exact: true })
-    .click()
   // Keep the synthetic credential source disabled until offline snapshots are seeded.
   await save()
   const savedSourceConfig = await (await context.request.get(origin + '/api/admin/config')).json()
   assert.ok(!JSON.stringify(savedSourceConfig).includes('synthetic-secret'))
   assert.ok(!JSON.stringify(savedSourceConfig).includes('synthetic-client'))
   assert.equal(
-    savedSourceConfig.integrations.find((integration) => integration.id === 'tailscale-ui')
-      .credentialState.configured,
+    savedSourceConfig.integrations.find((integration) => integration.id === tailId).credentialState
+      .configured,
     true,
   )
   await expect(source.getByLabel('OAuth Client Secret', { exact: true })).toHaveCount(0)
@@ -67,7 +61,7 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
   await refs.locator('summary').focus()
   await page.keyboard.press('Space')
   await refs.getByRole('button', { name: '添加 main 引用', exact: true }).click()
-  await select(refs, 'tailscale main 来源', 'tailscale-ui')
+  await select(refs, 'tailscale main 来源', tailId)
   await expect(item('tailscale').getByLabel('Tailscale IP 显示')).toContainText('登录后显示')
   await save()
 
@@ -75,8 +69,8 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
   const db = new SqliteDatabase(databasePath)
   try {
     const config = await readConfig(db),
-      tailnet = config.integrations.find((i) => i.id === 'tailscale-ui')
-    await db.prepare("UPDATE integrations SET enabled=1 WHERE id='tailscale-ui'").run()
+      tailnet = config.integrations.find((i) => i.id === tailId)
+    await db.prepare('UPDATE integrations SET enabled=1 WHERE id=?').bind(tailId).run()
     tailnet.enabled = true
     const now = new Date()
     const read = await runAdapter({

@@ -14,6 +14,8 @@ import {
   deferIntegrationTest,
 } from './integration-test-limits.ts'
 import type { Database } from '../types/database.ts'
+import { integrationWriteIssue } from '../../shared/integration-presets/index.ts'
+import { normalizeServiceTarget } from './service-target.ts'
 
 export async function saveAdminConfig(
   db: Database,
@@ -50,6 +52,22 @@ export async function saveAdminConfig(
   const request = { scope, key: key.toLowerCase(), mac: digest }
   const prior = await savedRequest(db, request, new Date().toISOString())
   if (prior) return prior
+  const current = await readStoredState(db)
+  if (current.config.site.configVersion !== parsed.data.expectedVersion)
+    return { success: false as const, code: 'CONFIG_CONFLICT' as const }
+  for (const source of parsed.data.config.integrations) {
+    const issue = integrationWriteIssue(
+      { ...source, baseUrl: normalizeServiceTarget(source.baseUrl) },
+      current.config.integrations.find((i) => i.id === source.id),
+    )
+    if (issue)
+      return {
+        success: false as const,
+        code: 'VALIDATION_ERROR' as const,
+        fieldErrors: ['integrations.' + source.id],
+        reason: issue,
+      }
+  }
   let keys
   if (
     parsed.data.config.integrations.some(
@@ -92,9 +110,6 @@ export async function saveAdminConfig(
   }
   const verifiedIdentityImports: string[] = []
   if (parsed.data.config.integrations.some((i) => i.identityCredential)) {
-    const current = await readStoredState(db)
-    if (current.config.site.configVersion !== parsed.data.expectedVersion)
-      return { success: false as const, code: 'CONFIG_CONFLICT' as const }
     for (const source of parsed.data.config.integrations) {
       if (!source.identityCredential) continue
       const old = current.integrations.find((i) => i.settings.id === source.id)

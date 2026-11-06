@@ -264,12 +264,12 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 
 ### 在后台接入自建来源
 
-1. 打开「数据源」，添加来源并选择 Provider。协议会跟随 Provider 填入。填写完整服务根 HTTPS 地址，例如 `https://alive.example.com/` 或 `https://example.com/sleepy/`。
-2. 来源统一使用「后台管理 · 公网 HTTPS」。无认证的状态接口选择「不发送凭据」；自己的服务要求 Bearer Key 时选择 Bearer，在「凭据操作 → replace」填写密钥。
-3. 启用来源，点击「批准此来源」，确认地址、协议和凭据用途，再点击顶栏「保存配置」。批准和撤销都在保存后生效。
-4. 点击「只读测试连接」。测试通过后，在「Dashboard 模块」为对应模块选择该来源的 `main` 引用并保存。Collector 会按刷新间隔采集。
+1. 打开「数据源 → 添加来源」，选择 DeepSeek、Sleepy、CLIProxyAPI 或其他已支持的类型。系统会填入协议和认证方式，并生成来源标识。
+2. 按表单填写实例 HTTPS 地址或凭据。Sleepy 地址例如 `https://alive.example.com/`。DeepSeek 填写 API Key，CLIProxyAPI 填写 Management Key。腾讯行情已在全新配置中预置，无需密钥。
+3. 自建地址点击「确认来源访问」，核对目标后确认。使用标题行开关启用来源，再点击顶栏「保存配置」。
+4. 点击「测试连接」。测试通过后，在「Dashboard 模块」为对应模块选择该来源的 `main` 引用并保存。Collector 会按刷新间隔采集。
 
-更改来源 ID、Provider、协议、服务根地址或认证方式后，需要重新批准。更改服务根地址或 Provider 时还需要替换或清除已保存凭据。凭据加密保存在数据库中，后台读取时仅返回配置状态。每份配置最多 10 个来源。
+来源创建后类型和协议固定。更换实例地址需要重新确认访问，并更新或清除绑定在旧地址上的凭据。已保存的密钥显示为占位符；点击「编辑」填写新值，点击删除图标并确认可在下次保存时清除凭据，保存前可以撤销。凭据加密保存在数据库中，后台读取时仅返回配置状态。每份配置最多 10 个来源。
 
 Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cliproxy-bridge` / `cliproxy-v8-accounts`，使用 Management Key 作为 Bearer 凭据。账户身份密钥自动生成并加密保存。建议用反向代理仅开放该协议读取的 `v8/management/credentials` 端点。后台不能将任意 URL 当作自定义协议调用。
 
@@ -289,16 +289,16 @@ Worker 使用 `fetch` 读取已批准的来源，无需额外服务器、连接�
 
 部署命令会应用 `0019_public_sources.sql`。旧内置 DeepSeek、腾讯、Yahoo 双镜像和 Tailscale 来源，只有 Provider、协议与官方根地址精确匹配时才会自动转成后台批准。迁移保留来源 ID、加密凭据、模块引用、行情绑定和历史数据，配置版本递增。升级前打开的后台草稿需要重新读取。
 
-其他旧来源会暂停采集，并保留配置供管理员确认。在「数据源」核对公网根地址、协议与认证方式，补齐凭据，点击「批准此来源」并保存。旧 `NOZOKI_PUBLIC_ROUTES`、`NOZOKI_PRIVATE_ROUTES` 与 Relay 路由不再授权生产采集，完成迁移后可清理这些变量及 Relay 配置。
+其他旧来源会暂停采集，并保留配置供管理员确认。在「数据源」核对公网实例地址、补齐凭据，点击「确认来源访问」并保存。旧协议无法识别时，页面显示只读提示，需要新建受支持的来源。旧 `NOZOKI_PUBLIC_ROUTES`、`NOZOKI_PRIVATE_ROUTES` 与 Relay 路由不再授权生产采集，完成迁移后可清理这些变量及 Relay 配置。
 
-Codex 的 Management Key 填入 Bearer 凭据。若旧 Relay 存放过 Management Key，需要在后台重新填写。已有按账户 ID 配置的权限时，还需在「旧 Relay 账户身份密钥」填入原 `NOZOKI_RELAY_ID_KEY`。保存会只读获取账户并核对 ID；密钥不匹配、目标不可达或原账户已删除时，保存被拒绝，请核实密钥和账户权限。身份密钥加密保存，页面只显示是否已配置。新来源可留空，系统自动生成身份密钥。
+添加 CLIProxyAPI 来源后填写 Management Key。若旧 Relay 存放过 Management Key，需要在后台重新填写。已有按账户 ID 配置的权限时，打开「迁移已有账户权限」，在「原账户身份密钥（迁移时填写）」填入原 `NOZOKI_RELAY_ID_KEY`。保存会只读获取账户并核对 ID；密钥不匹配、目标不可达或原账户已删除时，保存被拒绝，请核实密钥和账户权限。身份密钥加密保存，页面只显示是否已配置。新来源可留空，系统自动生成身份密钥。
 
 ### Tailscale 设备列表
 
 Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 Devices 与 Codex 之间。
 
 1. 在 Tailscale 的 Trust credentials 中创建 OAuth Client，仅授予 `devices:core:read`。
-2. 后台「数据源」添加来源，Provider 选择 `tailscale`。协议和官方地址会自动填入；凭据选择 `replace`，填写 Client ID 和 Client Secret，启用来源，批准目标并保存。
+2. 后台「数据源 → 添加来源」选择 Tailscale，填写 OAuth Client ID 和 Client Secret，在标题行启用来源，再点击全局「保存配置」。官方地址、认证方式和访问批准由预设填入。
 3. 在「Dashboard 模块」启用 Tailscale，添加 main 来源引用并选择刚才保存的来源。需要向访客展示设备时，将模块权限设为公开。
 4. IP 可以选择「显示」「不显示」「登录后显示」，默认登录后显示。无权查看时仍保留设备和 IP 行，以 `****` 代替地址；真实地址不会发送给该访问者。
 

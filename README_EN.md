@@ -264,12 +264,12 @@ The collection environment follows the [Cloudflare deployment version](https://d
 
 ### Adding custom sources in the admin page
 
-1. Add a source under Data sources and choose its provider. The protocol follows the provider. Enter the full HTTPS service root, such as `https://alive.example.com/` or `https://example.com/sleepy/`.
-2. All sources use managed public HTTPS access. Select no credentials for a public status endpoint. For a service that requires a Bearer Key, select Bearer and enter the key with credential operation `replace`.
-3. Enable the source, approve its target, review the address and credential use, then save the configuration. Approval and revocation take effect after saving.
-4. Run the read-only connection test. Bind the source to the corresponding Dashboard module's `main` reference and save. The Collector reads it at the configured interval.
+1. Open Data sources, click Add source and choose DeepSeek, Sleepy, CLIProxyAPI or another supported type. The app fills in the protocol and authentication scheme and generates an instance ID.
+2. Enter the instance HTTPS address or credentials shown for that type. A Sleepy address might be `https://alive.example.com/`. DeepSeek needs an API Key; CLIProxyAPI needs a Management Key. New installations already include Tencent quotes, which needs no credentials.
+3. Confirm access to a custom instance, enable the source with its header switch and save the configuration.
+4. Run Test connection. Bind the source to the corresponding Dashboard module's `main` reference and save. The Collector reads it at the configured interval.
 
-Changes to the source ID, provider, protocol, root or authentication require approval again. Changing the root or provider also requires replacing or clearing a saved credential. Credentials are encrypted in the database; admin reads return their configuration status. Each configuration supports up to 10 sources.
+An instance's type and protocol are fixed after creation. Changing its address requires approval again and replacement or deletion of credentials bound to the old address. Saved secrets appear as placeholders. Edit opens an empty field for a new value; Delete asks for confirmation and schedules removal for the next save. You can undo deletion before saving. Credentials are encrypted in the database; admin reads return their configuration status. Each configuration supports up to 10 sources.
 
 Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI uses `cliproxy-bridge` / `cliproxy-v8-accounts`, with its Management Key as the Bearer credential. A stable account identity key is generated and stored encrypted. Use a reverse proxy to expose only the protocol's `v8/management/credentials` endpoint. The admin page accepts registered protocols rather than arbitrary endpoint URLs.
 
@@ -289,16 +289,16 @@ Admin sources use public HTTPS. Private IPs, LAN-only names and Tailscale networ
 
 The deployment command applies `0019_public_sources.sql`. Legacy DeepSeek, Tencent, both Yahoo mirrors and Tailscale sources receive equivalent admin approval only when their provider, protocol and official root match exactly. Source IDs, encrypted credentials, module references, quote bindings and history remain stored. The configuration version increases; reload admin drafts opened before the upgrade.
 
-Other legacy sources pause collection and retain their settings for review. Check the public root, protocol and authentication under Data sources, supply credentials, approve the target and save. `NOZOKI_PUBLIC_ROUTES`, `NOZOKI_PRIVATE_ROUTES` and relay routes no longer authorize production collection. Remove those variables and relay settings after migration.
+Other legacy sources pause collection and retain their settings for review. Check their public instance addresses under Data sources, supply credentials, confirm access and save. An unrecognized old protocol has a read-only editor; create a supported source to replace it. `NOZOKI_PUBLIC_ROUTES`, `NOZOKI_PRIVATE_ROUTES` and relay routes no longer authorize production collection. Remove those variables and relay settings after migration.
 
-Enter the Codex Management Key as a Bearer credential. A key previously held only by a relay must be entered in the admin page. If account-specific field permissions exist, also import the original `NOZOKI_RELAY_ID_KEY` in the legacy account identity key field. Saving reads accounts and checks their IDs. A mismatched key, unreachable target or deleted account blocks the save; check the key and account policies. The identity key is encrypted, and admin reads return its configured status. New sources can leave it blank to generate a key automatically.
+Add a CLIProxyAPI source and enter its Management Key. A key previously held only by a relay must be entered in the admin page. If account-specific field permissions exist, open the account permission migration section and import the original `NOZOKI_RELAY_ID_KEY` in the original account identity key field. Saving reads accounts and checks their IDs. A mismatched key, unreachable target or deleted account blocks the save; check the key and account policies. The identity key is encrypted, and admin reads return its configured status. New sources can leave it blank to generate a key automatically.
 
 ### Tailscale devices
 
 Tailscale and Sleepy are independent modules. Tailscale is disabled by default and ordered between Devices and Codex.
 
 1. Create an OAuth Client in Tailscale Trust credentials with only `devices:core:read`.
-2. Add an integration in the admin panel and select `tailscale`. The protocol and official URL are filled automatically. Choose `replace`, enter the Client ID and Client Secret, enable the source, approve its target, and save.
+2. Under Data sources → Add source, select Tailscale. Enter the OAuth Client ID and Client Secret, enable the source in its header, and select Save configuration. The preset supplies the official URL, authentication scheme and target approval.
 3. Enable the Tailscale Dashboard module and bind its main source to that integration. Set the module to public if guests should see the devices.
 4. Choose whether IP addresses are visible, hidden, or visible after login. The default is after login. Hidden addresses appear as `****`; the server does not send their real values to unauthorized viewers.
 

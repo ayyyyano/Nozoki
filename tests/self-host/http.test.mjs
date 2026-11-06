@@ -9,7 +9,7 @@ import { randomUUID, randomBytes } from 'node:crypto'
 import { SqliteDatabase } from '../../platform/node/sqlite.mjs'
 import { readConfig, saveConfig } from '../../server/services/config.ts'
 import { editableConfig, CONFIG_BODY_LIMIT } from '../../shared/contracts/admin.ts'
-import { formatTimestamp } from '../../shared/domain/format.ts'
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 
 async function portNumber() {
   const server = createServer()
@@ -355,187 +355,103 @@ test(
         await page.waitForURL('**/admin')
         await exerciseSectionResets(page, context, origin)
         await page.getByRole('button', { name: '数据源', exact: true }).click()
-        const item = (id) =>
-          page.locator('.admin-editor-item').filter({ has: page.getByText(id, { exact: true }) })
-        const accounts = item('saved-accounts'),
-          legacy = item('saved-legacy')
-        await accounts.locator('.admin-item-toggle').click()
-        assert.equal(
-          await accounts
-            .getByLabel('协议版本', { exact: true })
-            .locator('.var-select__label')
-            .textContent(),
-          'cliproxy-v8-accounts',
-        )
-        const testStarted = Date.now()
-        const probeResponse = page.waitForResponse((response) =>
-          response.url().endsWith('/api/admin/integrations/saved-accounts/test'),
-        )
-        await accounts.getByRole('button', { name: '只读测试连接', exact: true }).click()
-        const probe = await (await probeResponse).json()
-        assert.equal(probe.code, 'SOURCE_DISABLED')
-        assert.ok(probe.collectedAt.endsWith('Z'))
-        assert.ok(Date.parse(probe.collectedAt) >= testStarted - 1000)
-        assert.ok(Date.parse(probe.collectedAt) <= Date.now() + 1000)
-        await expect(accounts.locator('time')).toHaveText(
-          formatTimestamp(probe.collectedAt, 'Asia/Shanghai'),
-        )
-        await expect(accounts.locator('time')).toHaveAttribute('datetime', probe.collectedAt)
-        await expect(accounts.getByRole('status').filter({ hasText: '测试时间' })).toContainText(
-          '（Asia/Shanghai）',
-        )
-        await legacy.locator('.admin-item-toggle').click()
-        assert.equal(
-          await legacy
-            .getByLabel('协议版本', { exact: true })
-            .locator('.var-select__label')
-            .textContent(),
-          '未支持：legacy-custom-version',
-        )
+        const item = (id) => page.locator('[data-source-id="' + id + '"]')
+        await item('saved-accounts').locator('.admin-item-toggle').click()
+        await expect(page.getByLabel('协议版本', { exact: true })).toHaveCount(0)
+        await item('saved-legacy').locator('.admin-item-toggle').click()
+        await expect(item('saved-legacy').getByText(/旧协议暂不支持编辑/)).toBeVisible()
         await page.getByRole('button', { name: '添加来源', exact: true }).click()
-        const added = page
-          .locator('fieldset')
-          .filter({ has: page.locator('legend').getByText('数据源', { exact: true }) })
-          .locator('.admin-editor-item')
-          .last()
-        const protocol = added.getByLabel('协议版本', { exact: true }).locator('.var-select__label')
-        await expect(protocol).toHaveText('sleepy-v5-status')
-        const urlField = added.locator('input[aria-label="服务根 HTTPS 地址"]'),
-          refreshField = added.locator('input[aria-label="来源刷新间隔（秒）"]'),
-          urlControl = added.locator('.admin-text').filter({
-            has: page.getByLabel('服务根 HTTPS 地址', { exact: true }),
-          }),
-          details = urlControl.locator('.var-form-details'),
-          originalUrl = await urlField.inputValue()
-        const checkCounter = async (width, scenario) => {
-          await expect(details).toBeVisible()
-          const counter = await details.boundingBox()
-          const next = await refreshField.evaluate((el) =>
-            el
-              .closest('.var-input')
-              .querySelector('.var-field-decorator__line')
-              .getBoundingClientRect()
-              .toJSON(),
-          )
-          const control = await urlControl.boundingBox()
-          assert.ok(
-            counter.y + counter.height <= control.y + control.height + 1,
-            `${width} ${scenario}: counter must fit inside its input's layout box`,
-          )
-          assert.ok(
-            counter.y + counter.height + 4 <= next.top,
-            `${width} ${scenario}: counter overlaps next field (${counter.y + counter.height} vs ${next.top})`,
-          )
-          assert.equal(
-            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-            true,
-          )
-        }
-        for (const width of [1440, 768, 390, 320]) {
-          await page.setViewportSize({ width, height: 900 })
-          await urlField.fill('')
-          await checkCounter(width, 'focused empty field')
-          await refreshField.focus()
-          await expect(details).toBeHidden()
-          await urlField.fill('https://example.invalid/' + 'x'.repeat(1850))
-          await refreshField.focus()
-          await checkCounter(width, 'near-limit blurred field')
-        }
-        await urlField.fill(originalUrl)
-        await refreshField.focus()
-        await page.setViewportSize({ width: 1280, height: 720 })
-        const select = async (label, value) => {
-          await added.getByLabel(label, { exact: true }).click()
-          await page
-            .locator('.var-menu__menu:visible .var-option')
-            .filter({ hasText: new RegExp('^' + value + '$') })
-            .click()
-        }
-        for (const [provider, expected] of [
-          ['deepseek', 'deepseek-balance-v1'],
-          ['uptime-kuma', 'kuma-public-2.0.2'],
-          ['uptimeflare', 'uptimeflare-data-2024'],
-          ['cliproxy-bridge', 'cliproxy-v8-accounts'],
-        ]) {
-          await select('Provider', provider)
-          await expect(protocol).toHaveText(expected)
-        }
-        await select('协议版本', 'cliproxy-v8-accounts')
-        await expect(protocol).toHaveText('cliproxy-v8-accounts')
-        await select('Provider', 'cliproxy-bridge')
-        await expect(protocol).toHaveText('cliproxy-v8-accounts')
-        await select('Provider', 'quotes-custom')
-        await expect(protocol).toHaveText('tencent-us-v1')
-        await select('Provider', 'sleepy')
-        await expect(protocol).toHaveText('sleepy-v5-status')
-        assert.equal(
-          await added
-            .getByLabel('凭据操作', { exact: true })
-            .locator('.var-select__label')
-            .textContent(),
-          'keep · 保留',
-        )
+        await page
+          .getByRole('dialog', { name: '选择数据源类型', exact: true })
+          .getByRole('button', { name: /^Sleepy / })
+          .click()
+        const added = page.locator('.source-card').last()
+        const addedId = await added.getAttribute('data-source-id')
+        assert.match(addedId, /^sleepy-/)
+        await expect(added.getByLabel('Provider', { exact: true })).toHaveCount(0)
+        await expect(added.getByLabel('实例 HTTPS 地址', { exact: true })).toBeVisible()
         await page.getByRole('button', { name: '站点与外观', exact: true }).click()
         await page.getByLabel('站点名称', { exact: true }).fill('Browser self-host save')
         await page.getByRole('button', { name: '保存配置', exact: true }).click()
         await page.getByText('已保存并确认持久化', { exact: true }).waitFor()
-        await page.reload()
+        const read = async () => (await context.request.get(origin + '/api/admin/config')).json()
+        const put = async (config) => {
+          const c = await read(),
+            token = await (await context.request.get(origin + '/api/auth/csrf')).json()
+          const r = await context.request.put(origin + '/api/admin/config', {
+            headers: {
+              Origin: origin,
+              'X-Nozoki-CSRF': token.token,
+              'Idempotency-Key': randomUUID(),
+            },
+            data: { expectedVersion: c.site.configVersion, config },
+          })
+          assert.equal(r.status(), 200, await r.text())
+        }
+        const persisted = await read()
         assert.equal(
-          await page.getByLabel('站点名称', { exact: true }).inputValue(),
-          'Browser self-host save',
-        )
-        const persisted = (await (await context.request.get(origin + '/api/admin/config')).json())
-          .integrations
-        assert.equal(
-          persisted.find((i) => i.id === 'saved-accounts').protocolVersion,
-          'cliproxy-v8-accounts',
-        )
-        assert.equal(
-          persisted.find((i) => i.id === 'saved-legacy').protocolVersion,
-          'legacy-custom-version',
-        )
-        assert.equal(
-          persisted.find((i) => i.id.startsWith('source-')).protocolVersion,
+          persisted.integrations.find((i) => i.id === addedId).protocolVersion,
           'sleepy-v5-status',
         )
-        // Fixed probe fixtures exercise display only; disabled sources never contact an upstream.
+        assert.equal(
+          persisted.integrations.find((i) => i.id === 'saved-legacy').protocolVersion,
+          'legacy-custom-version',
+        )
+        const probeDraft = editableConfig(persisted)
+        const probeSource = probeDraft.integrations.find((i) => i.id === 'saved-accounts')
+        probeSource.baseUrl = 'https://codex.example.com/'
+        probeSource.enabled = true
+        probeSource.access = {
+          mode: 'public',
+          authentication: 'bearer',
+          approved: true,
+          approvedTarget: null,
+        }
+        probeSource.access.approvedTarget = sourceTargetKey(probeSource, probeSource.access)
+        await put(probeDraft)
+        // Read-only presentation fixtures test both winter and summer offsets without an upstream.
         let collectedAt = '2026-11-02T05:02:48.141Z'
         await page.route('**/api/admin/integrations/saved-accounts/test', (route) =>
-          route.fulfill({ json: { ...probe, collectedAt } }),
+          route.fulfill({
+            json: {
+              sourceId: 'saved-accounts',
+              provider: 'cliproxy-bridge',
+              protocolVersion: 'cliproxy-v8-accounts',
+              configVersion: 1,
+              status: 'error',
+              reachable: null,
+              protocolMatched: false,
+              authentication: 'unverified',
+              capabilities: { accounts: { supported: true, verified: false } },
+              observedAt: null,
+              collectedAt,
+              code: 'AUTH_REQUIRED',
+              summary: { items: 0, views: 0 },
+            },
+          }),
         )
+        await page.reload()
         const verifyProbeTime = async (expected, timezone) => {
           await page.getByRole('button', { name: '数据源', exact: true }).click()
           const source = item('saved-accounts')
-          await source.locator('.admin-item-toggle').click()
-          await source.getByRole('button', { name: '只读测试连接', exact: true }).click()
+          if ((await source.locator('.admin-item-toggle').getAttribute('aria-expanded')) !== 'true')
+            await source.locator('.admin-item-toggle').click()
+          await source.getByRole('button', { name: '测试连接', exact: true }).click()
           await expect(source.locator('time')).toHaveText(expected)
           await expect(source.locator('time')).toHaveAttribute('datetime', collectedAt)
           await expect(source.getByRole('status').filter({ hasText: '测试时间' })).toContainText(
-            `（${timezone}）`,
+            '（' + timezone + '）',
           )
         }
         await verifyProbeTime('2026-11-02 13:02', 'Asia/Shanghai')
-        const current = await (await context.request.get(origin + '/api/admin/config')).json()
-        const timezoneDraft = editableConfig(current)
+        const timezoneDraft = editableConfig(await read())
         timezoneDraft.site.timezone = 'America/New_York'
         timezoneDraft.site.schedule.timezone = 'America/New_York'
-        const browserCsrf = await (await context.request.get(origin + '/api/auth/csrf')).json()
-        const timezoneSave = await context.request.put(origin + '/api/admin/config', {
-          headers: {
-            Origin: origin,
-            'X-Nozoki-CSRF': browserCsrf.token,
-            'Idempotency-Key': randomUUID(),
-          },
-          data: { expectedVersion: current.site.configVersion, config: timezoneDraft },
-        })
-        assert.equal(timezoneSave.status(), 200)
+        await put(timezoneDraft)
         await page.reload()
         await verifyProbeTime('2026-11-02 00:02', 'America/New_York')
         collectedAt = '2026-07-02T05:02:48.141Z'
-        await item('saved-accounts')
-          .getByRole('button', { name: '只读测试连接', exact: true })
-          .click()
-        await expect(item('saved-accounts').locator('time')).toHaveText('2026-07-02 01:02')
+        await verifyProbeTime('2026-07-02 01:02', 'America/New_York')
         await verifyResetSave(page, context, origin)
         await exerciseTailscale(page, context, origin, env.NOZOKI_SQLITE_PATH)
         await page.getByRole('button', { name: '更多管理操作', exact: true }).click()

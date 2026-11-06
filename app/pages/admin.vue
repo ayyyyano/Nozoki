@@ -7,7 +7,7 @@ import {
   type ConfigWrite,
 } from '../../shared/contracts/config'
 import { editableConfig, canonical } from '../../shared/contracts/admin'
-import { defaultProtocol } from '../../shared/contracts/adapter'
+import { SOURCE_WRITE_ERRORS } from '../../shared/integration-presets'
 import { COLOR_PRESETS, parseSourceColor } from '../../shared/domain/color-input'
 import type { Appearance } from '../../shared/contracts/appearance'
 import {
@@ -90,7 +90,6 @@ function resetCurrentSection() {
   if (target === 'links') expandedLinks.value = {}
   if (target === 'quotes') expandedQuotes.value = {}
   if (target === 'modules') expandedModules.value = {}
-  if (target === 'integrations') expandedSources.value = {}
   pending = null
   errors.value = []
   message.value = `已恢复${resetTarget.value.label}默认设置，保存配置后生效`
@@ -160,7 +159,7 @@ function themeFromMenu() {
 }
 const expandedLinks = ref<Record<string, boolean>>({})
 const expandedQuotes = ref<Record<string, boolean>>({})
-const expandedSources = ref<Record<string, boolean>>({})
+const sourceManager = useTemplateRef('sourceManager')
 const expandedModules = ref<Record<string, boolean>>({})
 function linkSummary(url: string) {
   try {
@@ -228,7 +227,7 @@ function locate(error: string) {
   if (draft.value) {
     draft.value.links.forEach((l) => (expandedLinks.value[l.id] = true))
     draft.value.modules.forEach((m) => (expandedModules.value[m.id] = true))
-    draft.value.integrations.forEach((_, i) => (expandedSources.value[String(i)] = true))
+    sourceManager.value?.expandAll()
     draft.value.quotes.forEach((_, i) => (expandedQuotes.value[String(i)] = true))
   }
   nextTick(() =>
@@ -304,17 +303,19 @@ async function save() {
     errors.value = data?.fieldErrors ?? []
     message.value = savedNeedsReload.value
       ? '配置已保存，但重新读取失败；请读取最新配置确认。凭据输入已清除。'
-      : conflict.value
-        ? '配置已被其他窗口修改。草稿已保留，请读取最新版本后决定如何处理。'
-        : data?.code === 'MIGRATIONS_REQUIRED'
-          ? '数据库等待迁移，已暂停保存。草稿已保留，完成迁移后请读取最新配置。'
-          : data?.reason === 'CREDENTIAL_KEY_UNAVAILABLE'
-            ? '未配置服务端集成加密密钥；请配置本地密钥后重试，凭据不会明文保存。'
-            : data?.reason === 'IDENTITY_IMPORT_UNVERIFIED'
-              ? '旧账户身份密钥未通过核对。请检查原 Relay 密钥、Management Key 和来源地址；现有权限与配置未更改。'
-              : data?.code === 'VALIDATION_ERROR'
-                ? '配置校验未通过。请检查字段、来源引用和地址变化后的凭据操作。'
-                : '未能确认保存结果。草稿已保留；原样重试会复用请求标识。'
+      : data?.reason && data.reason in SOURCE_WRITE_ERRORS
+        ? SOURCE_WRITE_ERRORS[data.reason as keyof typeof SOURCE_WRITE_ERRORS]
+        : conflict.value
+          ? '配置已被其他窗口修改。草稿已保留，请读取最新版本后决定如何处理。'
+          : data?.code === 'MIGRATIONS_REQUIRED'
+            ? '数据库等待迁移，已暂停保存。草稿已保留，完成迁移后请读取最新配置。'
+            : data?.reason === 'CREDENTIAL_KEY_UNAVAILABLE'
+              ? '未配置服务端集成加密密钥；请配置本地密钥后重试，凭据不会明文保存。'
+              : data?.reason === 'IDENTITY_IMPORT_UNVERIFIED'
+                ? '旧账户身份密钥未通过核对。请检查原 Relay 密钥、Management Key 和来源地址；现有权限与配置未更改。'
+                : data?.code === 'VALIDATION_ERROR'
+                  ? '配置校验未通过。请检查字段、来源引用和地址变化后的凭据操作。'
+                  : '未能确认保存结果。草稿已保留；原样重试会复用请求标识。'
   } finally {
     busy.value = false
   }
@@ -333,22 +334,6 @@ function move<T extends { sortOrder: number }>(items: T[], index: number, offset
 function makePrivate(module: ConfigWrite['modules'][number]) {
   if (module.visibility === 'admin')
     for (const policy of Object.values(module.fields)) policy.visibility = 'admin'
-}
-function addSource() {
-  const id = 'source-' + crypto.randomUUID().slice(0, 8)
-  expandedSources.value[String(draft.value!.integrations.length)] = true
-  draft.value!.integrations.push({
-    id,
-    provider: 'sleepy',
-    protocolVersion: defaultProtocol('sleepy'),
-    access: { mode: 'public', authentication: 'none', approved: false, approvedTarget: null },
-    baseUrl: null,
-    enabled: false,
-    refreshInterval: 300,
-    fieldMappings: {},
-    capabilities: {},
-    credential: { operation: 'keep' },
-  })
 }
 function addQuote() {
   expandedQuotes.value[String(draft.value!.quotes.length)] = true
@@ -728,32 +713,15 @@ onBeforeRouteLeave(() => {
           </fieldset>
           <fieldset v-show="section === 'integrations'" :disabled="readOnly">
             <legend class="sr-only">数据源</legend>
-            <AdminEditorItem
-              v-for="(i, index) in draft.integrations"
-              :key="index"
-              v-model:open="expandedSources[String(index)]"
-              :title="i.id"
-              :description="i.provider"
-              :status="i.enabled ? '启用 · 未验证' : '已关闭'"
-              icon="server"
-            >
-              <AdminIntegrationEditor
-                v-model="draft.integrations[index]!"
-                :timezone="baseline?.site.timezone ?? 'Asia/Shanghai'"
-                :state="baseline?.integrations.find((v) => v.id === i.id)?.credentialState"
-                :saved="baseline?.integrations.find((v) => v.id === i.id)"
-              /><VarButton text @click="draft.integrations.splice(index, 1)"
-                >删除来源 {{ i.id }}</VarButton
-              >
-            </AdminEditorItem>
-            <VarButton
-              class="admin-add-button"
-              type="primary"
-              tonal
-              :disabled="draft.integrations.length >= 10"
-              @click="addSource"
-              ><CommonAppIcon name="AddRound" :size="20" />添加来源</VarButton
-            >
+            <AdminSourceManager
+              ref="sourceManager"
+              v-model="draft.integrations"
+              :saved="baseline?.integrations ?? []"
+              :modules="draft.modules"
+              :quotes="draft.quotes"
+              :timezone="draft.site.timezone"
+              :read-only="readOnly"
+            />
           </fieldset>
           <fieldset v-show="section === 'schedule'" :disabled="readOnly">
             <legend class="sr-only">日程安排</legend>

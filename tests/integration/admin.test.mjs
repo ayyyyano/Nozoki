@@ -7,6 +7,8 @@ import { build } from 'esbuild'
 import { readConfig } from '../../server/services/config.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
 import { randomToken } from '../../server/services/auth-crypto.ts'
+import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 const require = createRequire(import.meta.url),
   wrangler = createRequire(require.resolve('wrangler/package.json'))
 const { Miniflare, convertV4MiniflareOptions } = process.env.NOZOKI_TEST_MINIFLARE
@@ -177,25 +179,25 @@ test('phase 04 atomic HTTP-save core in real D1/workerd', async (t) => {
     async () => {
       let i = await input()
       i.config.modules.find((m) => m.id === 'quotes').sources = {}
-      i.config.integrations = [
-        {
-          id: 'sleepy',
-          provider: 'sleepy',
-          protocolVersion: 'v1',
-          baseUrl: 'https://source.invalid/api',
-          enabled: true,
-          refreshInterval: 300,
-          fieldMappings: {},
-          capabilities: {},
-          credential: { operation: 'replace', value: 'SYNTHETIC_PRIVATE_CREDENTIAL' },
-        },
-      ]
+      i.config.quotes.forEach((q) => {
+        q.provider = null
+      })
+      const source = createIntegrationDraft('cliproxy', [], 'credential-fixture')
+      source.baseUrl = 'https://source.example.com/api/'
+      source.access.approved = true
+      source.access.approvedTarget = sourceTargetKey(source, source.access)
+      source.credential = { operation: 'replace', value: 'SYNTHETIC_PRIVATE_CREDENTIAL' }
+      i.config.integrations = [source]
       assert.equal((await save(i)).success, true)
       let c = await readConfig(db)
       assert.equal(c.integrations[0].credentialState.configured, true)
       assert.ok(!JSON.stringify(c).includes('SYNTHETIC_PRIVATE'))
       i = await input()
-      i.config.integrations[0].baseUrl = 'https://source.invalid/other'
+      i.config.integrations[0].baseUrl = 'https://source.example.com/other/'
+      i.config.integrations[0].access.approvedTarget = sourceTargetKey(
+        i.config.integrations[0],
+        i.config.integrations[0].access,
+      )
       const version = i.expectedVersion
       assert.equal((await save(i)).code, 'VALIDATION_ERROR')
       assert.equal((await readConfig(db)).site.configVersion, version)

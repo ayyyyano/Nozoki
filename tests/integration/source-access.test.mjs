@@ -7,7 +7,9 @@ import { build } from 'esbuild'
 import { hmacKey, mac, hex, randomToken } from '../../server/services/auth-crypto.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
-import { source, sleepMeta, sleepStatus } from '../fixtures/adapters.ts'
+import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
+import { saveConfig } from '../../server/services/config.ts'
+import { source, sleepMeta, sleepStatus, balance } from '../fixtures/adapters.ts'
 import { expect } from 'playwright/test'
 
 const require = createRequire(import.meta.url),
@@ -50,8 +52,8 @@ test(
   { timeout: 180000 },
   async (t) => {
     const folder = await mkdtemp(resolve('.wrangler/source-access-test-')),
-      evidence = resolve(folder, 'evidence')
-    if (process.env.NOZOKI_TEST_BROWSER === '1') await mkdir(evidence)
+      evidence = process.env.NOZOKI_SOURCE_UI_EVIDENCE ?? resolve(folder, 'evidence')
+    if (process.env.NOZOKI_TEST_BROWSER === '1') await mkdir(evidence, { recursive: true })
     const origin = 'http://127.0.0.1:8808',
       password = 'Synthetic-' + randomToken()
     const env = {
@@ -90,9 +92,11 @@ test(
                 },
               ],
             }
-          : url.pathname.endsWith('api/meta')
-            ? sleepMeta
-            : structuredClone(sleepStatus)
+          : url.pathname.endsWith('user/balance')
+            ? structuredClone(balance)
+            : url.pathname.endsWith('api/meta')
+              ? sleepMeta
+              : structuredClone(sleepStatus)
         if (payload.device) {
           payload.time = Date.now() / 1000
           payload.last_updated = payload.time
@@ -149,6 +153,7 @@ test(
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       })
     assert.equal((await request('/api/admin/source-connector')).status, 401)
+    assert.equal((await request('/api/admin/integrations/fixture/removal')).status, 401)
     const login = await request('/api/auth/login', 'POST', { email: env.ADMIN_EMAIL, password })
     assert.equal(login.status, 200)
     cookie = login.headers.get('set-cookie').split(';')[0]
@@ -177,6 +182,9 @@ test(
     }
     let value = await input()
     for (const m of value.config.modules) m.sources = {}
+    value.config.quotes.forEach((q) => {
+      q.provider = null
+    })
     value.config.integrations = [approved('fixture'), approved('blocked', 'blocked.example.com')]
     const devices = value.config.modules.find((m) => m.id === 'devices')
     devices.enabled = true
@@ -271,21 +279,67 @@ test(
         .first()
     ).changed_fields_json
     assert.match(revocationAudit, /integrations.access/)
-    // Use a saved bearer credential through native Worker fetch; only the exact approved endpoint sees it.
+    // The preset fixes authentication; a forged Sleepy auth mode cannot send a secret.
     value = await input()
     const first = value.config.integrations.find((s) => s.id === 'fixture')
     first.access.authentication = 'bearer'
     first.access.approved = true
     first.access.approvedTarget = sourceTargetKey(first, first.access)
     first.credential = { operation: 'replace', value: 'Synthetic-source-key' }
+    assert.equal((await save(value)).status, 400)
+    assert.equal(upstream.length, before)
+    value = await input()
+    const sleep = value.config.integrations.find((s) => s.id === 'fixture')
+    sleep.access.approved = true
+    sleep.access.approvedTarget = sourceTargetKey(sleep, sleep.access)
+    // A fixed DeepSeek preset is the supported bearer flow.
+    const deep = createIntegrationDraft('deepseek', value.config.integrations, 'http-fixture')
+    deep.enabled = true
+    deep.credential = { operation: 'replace', value: 'Synthetic-source-key' }
+    value.config.integrations.push(deep)
+    value.config.modules.find((m) => m.id === 'deepseek').sources.main = {
+      sourceId: deep.id,
+      subject: 'default',
+    }
     assert.equal((await save(value)).status, 200)
-    await expect.poll(() => upstream.at(-1)?.authorization).toBe('Bearer Synthetic-source-key')
+    await expect
+      .poll(
+        () =>
+          upstream.filter((r) => new URL(r.url).hostname === 'api.deepseek.com').at(-1)
+            ?.authorization,
+      )
+      .toBe('Bearer Synthetic-source-key')
     const bearerResult = await (await collector.fetch(origin + '/collect')).json()
     assert.equal(bearerResult.fatal, null)
-    assert.equal(upstream.at(-1).authorization, 'Bearer Synthetic-source-key')
+    assert.equal(
+      upstream.filter((r) => new URL(r.url).hostname === 'api.deepseek.com').at(-1).authorization,
+      'Bearer Synthetic-source-key',
+    )
     const adminText = await (await request('/api/admin/config')).text()
     assert.ok(!adminText.includes('Synthetic-source-key'))
     assert.ok(!adminText.includes('identityEnvelope'))
+    const removal = await (await request('/api/admin/integrations/' + deep.id + '/removal')).json()
+    assert.equal(removal.protectedHistory, true)
+    assert.equal(removal.hasSnapshots, true)
+    assert.deepEqual(Object.keys(removal).sort(), ['exists', 'hasSnapshots', 'protectedHistory'])
+    for (const mutate of [
+      (s) => {
+        s.provider = 'sleepy'
+      },
+      (s) => {
+        s.protocolVersion = 'unknown'
+      },
+      (s) => {
+        s.capabilities.fake = { supported: true, verified: true }
+      },
+      (s) => {
+        s.fieldMappings.unknown = 'arbitrary.path'
+      },
+    ]) {
+      const forged = await input()
+      mutate(forged.config.integrations.find((s) => s.id === deep.id))
+      assert.equal((await save(forged)).status, 400)
+    }
     // Codex account identity is generated once and survives credential replacement and retry.
     value = await input()
     const codex = approved('codex-fixture', 'codex.example.com', 'bearer')
@@ -310,11 +364,13 @@ test(
     const legacyCodex = structuredClone(value),
       legacySource = legacyCodex.config.integrations.find((s) => s.id === codex.id)
     legacySource.access = { mode: 'legacy' }
+    legacySource.credential = { operation: 'keep' }
     legacySource.enabled = false
     legacyCodex.config.modules.find((m) => m.id === 'codex').fields = {
       ['/accounts/@' + expectedAccountId + '/state']: { enabled: false, visibility: 'admin' },
     }
-    assert.equal((await save(legacyCodex)).status, 200)
+    // Existing legacy data is imported internally, never created through the new admin form.
+    assert.equal((await saveConfig(db, legacyCodex, { actor: { kind: 'system' } })).success, true)
     value = await input()
     value.config.integrations[value.config.integrations.findIndex((s) => s.id === codex.id)] = codex
     assert.equal((await save(value)).status, 400)
@@ -378,97 +434,21 @@ test(
       (i) => i.id === 'fixture',
     ).refreshInterval
     await t.test(
-      'mobile approval focus and layout',
+      'provider-driven source manager, credential lifecycle and responsive dialogs',
       { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
       async () => {
         const { launch, settle } = await import('../browser/support.mjs')
+        const { exerciseSourceManager } = await import('../browser/source-manager.mjs')
         await mf.ready
         browser = await launch()
-        const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
+        const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
         await context.addCookies([
           { name: cookie.split('=')[0], value: cookie.slice(cookie.indexOf('=') + 1), url: origin },
         ])
-        const page = await context.newPage(),
-          errors = []
-        page.on('pageerror', (e) => errors.push(e.message))
+        const page = await context.newPage()
         await page.goto(origin + '/admin')
         await settle(page)
-        await page.getByRole('button', { name: '选择管理分区', exact: true }).click()
-        await page
-          .getByRole('dialog', { name: '选择管理分区' })
-          .getByRole('button', { name: '数据源', exact: true })
-          .click()
-        await expect(page.getByLabel('接入方式', { exact: true })).toHaveCount(0)
-        const scope = page
-          .locator('.admin-editor-item')
-          .filter({ has: page.getByRole('button', { name: /^fixture/ }) })
-          .first()
-        await scope.locator('.admin-item-toggle').click()
-        await expect(
-          scope.getByText('使用 Workers 原生公网 HTTPS 出站，在此批准并保存即可接入。', {
-            exact: true,
-          }),
-        ).toBeVisible()
-        await scope.getByRole('button', { name: '撤销批准', exact: true }).first().click()
-        await scope.getByRole('button', { name: '批准此来源', exact: true }).first().click()
-        const dialog = page.getByRole('alertdialog', { name: '批准来源访问？' })
-        const settledDialog = () =>
-          dialog.evaluate(async (el) => {
-            for (let node = el; node; node = node.parentElement)
-              await Promise.all(
-                node
-                  .getAnimations()
-                  .filter((a) => a.effect?.getTiming().iterations !== Infinity)
-                  .map((a) => a.finished.catch(() => {})),
-              )
-          })
-        await expect(dialog).toBeVisible()
-        await settledDialog()
-        await dialog.getByRole('button', { name: '取消', exact: true }).click()
-        await expect(dialog).toBeHidden()
-        await expect(scope.getByRole('button', { name: '批准此来源', exact: true })).toBeFocused()
-        await scope.getByRole('button', { name: '批准此来源', exact: true }).first().click()
-        await dialog.getByRole('button', { name: '确认批准', exact: true }).click()
-        await expect(dialog).toBeHidden()
-        await expect(scope.getByRole('button', { name: '撤销批准', exact: true })).toBeFocused()
-        await scope.getByLabel('来源刷新间隔（秒）', { exact: true }).fill('75')
-        await scope
-          .getByLabel('服务根 HTTPS 地址', { exact: true })
-          .fill('https://SOURCE.example.com/service')
-        await expect(scope.getByRole('button', { name: '撤销批准', exact: true })).toBeVisible()
-        const browserSaved = page.waitForResponse(
-          (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
-        )
-        await page.getByRole('button', { name: '保存配置', exact: true }).click()
-        assert.equal((await browserSaved).status(), 200)
-        await expect(page.getByText(/^(?:已保存并确认持久化|配置已保存，)/)).toBeVisible()
-        await expect(scope.getByRole('button', { name: '撤销批准', exact: true })).toBeVisible()
-        await expect(scope.getByLabel('服务根 HTTPS 地址', { exact: true })).toHaveValue(
-          'https://source.example.com/service/',
-        )
-        await page.screenshot({ path: resolve(evidence, 'admin-managed-390.png'), fullPage: true })
-        assert.equal(
-          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-          true,
-        )
-        assert.deepEqual(errors, [])
-        assert.equal((await page.locator('body').innerText()).includes('Token 用量'), false)
-        await page.setViewportSize({ width: 1440, height: 900 })
-        await page.screenshot({ path: resolve(evidence, 'admin-managed-1440.png'), fullPage: true })
-        await page.setViewportSize({ width: 320, height: 844 })
-        await scope.getByRole('button', { name: '撤销批准', exact: true }).click()
-        await scope.getByRole('button', { name: '批准此来源', exact: true }).click()
-        await expect(dialog).toBeVisible()
-        assert.equal(
-          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-          true,
-        )
-        await settledDialog()
-        const bounds = await dialog.boundingBox()
-        assert.ok(bounds.width >= 280 && bounds.x >= 0 && bounds.x + bounds.width <= 320)
-        await page.screenshot({ path: resolve(evidence, 'approval-320.png') })
-        await page.keyboard.press('Escape')
-        await expect(dialog).toBeHidden()
+        await exerciseSourceManager(page, { input, save, deepId: deep.id, evidence })
         await context.close()
         await browser.close()
         browser = null
