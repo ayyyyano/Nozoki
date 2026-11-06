@@ -37,6 +37,7 @@ export function legacyToWeekly(value: LegacySchedule): WeeklySchedule {
   const work: DayRule = { kind: 'template', templateId: 'workday' }
   return {
     version: 2,
+    ...(value.labels === undefined ? {} : { labels: { ...value.labels } }),
     timezone: value.timezone,
     templates: [{ id: 'workday', name: '工作日', slots }],
     weekdays: Object.fromEntries(

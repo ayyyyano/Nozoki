@@ -48,6 +48,25 @@ test('modular schedules persist with existing D1 config service', async (t) => {
           db.prepare(s),
         ),
       )
+    await check('basic and custom state labels persist in the existing settings JSON', async () => {
+      const initial = (await readConfig(db)).site.schedule
+      const first = await input()
+      first.config.site.schedule.labels = { active: '专注中', break: '午间休息' }
+      assert.equal((await saveConfig(db, first, { actor })).success, true)
+      assert.deepEqual(
+        (await readConfig(db)).site.schedule.labels,
+        first.config.site.schedule.labels,
+      )
+      const next = await input()
+      next.config.site.schedule = normalizeSchedule(next.config.site.schedule)
+      next.config.site.schedule.labels.break = '休息一下'
+      assert.equal((await saveConfig(db, next, { actor })).success, true)
+      const row = await db.prepare('SELECT settings_json FROM site_settings WHERE id=1').first()
+      assert.equal(JSON.parse(row.settings_json).schedule.labels.break, '休息一下')
+      const restore = await input()
+      restore.config.site.schedule = initial
+      assert.equal((await saveConfig(db, restore, { actor })).success, true)
+    })
     await check(
       'legacy reads remain unchanged while pure normalization supports evening periods',
       async () => {

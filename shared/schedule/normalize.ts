@@ -85,6 +85,7 @@ export function toLegacySchedule(value: unknown): LegacySchedule | null {
       afternoon = t?.slots.find((p) => p.id === 'afternoon')
     if (!t || !lunch || schedule.override) return null
     const candidate: LegacySchedule = {
+      ...(schedule.labels === undefined ? {} : { labels: { ...schedule.labels } }),
       timezone: schedule.timezone,
       start: morning?.start ?? lunch.start,
       end: afternoon?.end ?? lunch.end,
