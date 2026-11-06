@@ -25,8 +25,12 @@ export function collectionPlans(state: StoredState): CollectionPlan[] {
     )
       return []
     const refs = state.config.modules
-      .filter((m) => m.enabled && m.sources.main?.sourceId === i.settings.id)
-      .map((m) => ({ moduleId: m.id, subject: m.sources.main!.subject }))
+      .filter((m) => m.enabled)
+      .flatMap((m) =>
+        Object.values(m.sources)
+          .filter((s) => s.sourceId === i.settings.id)
+          .map((s) => ({ moduleId: m.id, subject: s.subject })),
+      )
     // Local schedule/links alone never create external requests. A future confirmed activity view can piggyback.
     if (!refs.some((r) => !['activity', 'links'].includes(r.moduleId))) return []
     const quoteSymbols =

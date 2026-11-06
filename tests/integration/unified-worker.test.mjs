@@ -1,3 +1,5 @@
+import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
@@ -158,13 +160,22 @@ test(
     csrf = (await (await request('/api/auth/csrf')).json()).token
     const config = await (await request('/api/admin/config')).json()
     const value = editableConfig(config)
-    const { credentialState: _, ...s } = source('deepseek')
+    const s = createIntegrationDraft('deepseek', value.integrations, 'fixture')
     s.baseUrl = 'https://api.deepseek.com/'
     s.id = 'single-secret'
-    value.integrations.push({
-      ...s,
-      credential: { operation: 'replace', value: 'synthetic-balance-key' },
-    })
+    s.enabled = true
+    s.access.approvedTarget = sourceTargetKey(s, s.access)
+    s.credential = { operation: 'replace', value: 'synthetic-balance-key' }
+    const probe = await (
+      await request('/api/admin/integrations/' + s.id + '/test', 'POST', {
+        expectedVersion: config.site.configVersion,
+        draft: s,
+        quoteSymbols: [],
+      })
+    ).json()
+    assert.ok(probe.connectionProof, JSON.stringify(probe))
+    s.connectionProof = probe.connectionProof
+    value.integrations.push(s)
     const module = value.modules.find((m) => m.id === 'deepseek')
     module.enabled = true
     module.visibility = 'admin'

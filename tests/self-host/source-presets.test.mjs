@@ -112,7 +112,10 @@ test('provider form policy preserves legacy metadata and encryption; rejects typ
     value = await input()
     value.config.integrations = value.config.integrations.filter((i) => i.id !== tencent.id)
     value.config.modules.find((m) => m.id === 'quotes').sources = {}
-    assert.equal((await saveConfig(db, value, { actor, keys })).reason, 'SOURCE_IN_USE')
+    assert.equal((await saveConfig(db, value, { actor, keys })).success, true)
+    const detached = await readConfig(db)
+    assert.deepEqual(detached.modules.find((m) => m.id === 'quotes').sources, {})
+    assert.ok(detached.quotes.every((q) => q.provider === null))
     await db
       .prepare(
         'INSERT INTO balance_observations(source_id,series_revision,currency,collected_at,total,granted,topped_up) VALUES(?,?,?,?,?,?,?)',

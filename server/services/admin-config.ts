@@ -1,3 +1,5 @@
+import { requiresSourceTest, verifySourceTestProof } from './source-test-proof.ts'
+import { duplicateSourceType } from '../../shared/integration-presets/bindings.ts'
 import { savedRequest } from '../repositories/config-requests.ts'
 import type { AuthSession } from './sessions.ts'
 import { mac, hex } from './auth-crypto.ts'
@@ -55,7 +57,16 @@ export async function saveAdminConfig(
   const current = await readStoredState(db)
   if (current.config.site.configVersion !== parsed.data.expectedVersion)
     return { success: false as const, code: 'CONFIG_CONFLICT' as const }
+  if (duplicateSourceType(parsed.data.config.integrations, current.config.integrations))
+    return {
+      success: false as const,
+      code: 'VALIDATION_ERROR' as const,
+      fieldErrors: ['integrations'],
+      reason: 'SOURCE_TYPE_DUPLICATE' as const,
+    }
   for (const source of parsed.data.config.integrations) {
+    const old = current.config.integrations.find((i) => i.id === source.id)
+
     const issue = integrationWriteIssue(
       { ...source, baseUrl: normalizeServiceTarget(source.baseUrl) },
       current.config.integrations.find((i) => i.id === source.id),
@@ -66,6 +77,21 @@ export async function saveAdminConfig(
         code: 'VALIDATION_ERROR' as const,
         fieldErrors: ['integrations.' + source.id],
         reason: issue,
+      }
+    if (
+      requiresSourceTest(source, old) &&
+      !(await verifySourceTestProof(
+        source,
+        current.integrations.find((i) => i.settings.id === source.id),
+        session,
+        parsed.data.expectedVersion,
+      ))
+    )
+      return {
+        success: false as const,
+        code: 'VALIDATION_ERROR' as const,
+        fieldErrors: ['integrations.' + source.id],
+        reason: 'SOURCE_TEST_REQUIRED' as const,
       }
   }
   let keys

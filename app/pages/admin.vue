@@ -8,6 +8,8 @@ import {
 } from '../../shared/contracts/config'
 import { editableConfig, canonical } from '../../shared/contracts/admin'
 import { SOURCE_WRITE_ERRORS } from '../../shared/integration-presets'
+import { bindSources, SOURCE_MODULES } from '../../shared/integration-presets/bindings'
+import { integrationPreset } from '../../shared/integration-presets'
 import { MODULE_ICONS } from '../../shared/icons/modules'
 import { COLOR_PRESETS, parseSourceColor } from '../../shared/domain/color-input'
 import type { Appearance } from '../../shared/contracts/appearance'
@@ -40,6 +42,38 @@ const themeLabel = computed(() =>
 )
 const baseline = ref<Config | null>(initial.value ? ConfigSchema.parse(initial.value) : null)
 const draft = ref<ConfigWrite | null>(baseline.value ? editableConfig(baseline.value) : null)
+watch(
+  () =>
+    draft.value &&
+    canonical([
+      draft.value.integrations.map(({ id, provider, protocolVersion, enabled }) => [
+        id,
+        provider,
+        protocolVersion,
+        enabled,
+      ]),
+      draft.value.modules.map((m) => m.sources),
+      draft.value.quotes.map((q) => [q.market, q.symbol, q.provider]),
+    ]),
+  () => {
+    if (!draft.value) return
+    const bound = bindSources(draft.value)
+    if (canonical(bound.modules) !== canonical(draft.value.modules))
+      draft.value.modules = bound.modules
+    if (canonical(bound.quotes) !== canonical(draft.value.quotes)) draft.value.quotes = bound.quotes
+  },
+  { flush: 'sync' },
+)
+function moduleSources(module: ConfigWrite['modules'][number]) {
+  const names = Object.values(module.sources)
+    .map(
+      (ref) =>
+        integrationPreset(draft.value!.integrations.find((i) => i.id === ref.sourceId))?.name ??
+        '旧协议来源',
+    )
+    .filter(Boolean)
+  return names.length ? '自动匹配：' + names.join('、') : '添加对应类型的数据源后自动匹配'
+}
 const backgroundProcessing = ref(false)
 const backgroundUpload = ref<{ url: string; data: string } | null>(null)
 const backgroundPreview = useState<{ url: string; preview: string } | null>(
@@ -227,6 +261,7 @@ function clearSecrets() {
   if (draft.value)
     for (const i of draft.value.integrations) {
       if (i.credential.operation === 'replace') i.credential.value = ''
+      delete i.connectionProof
       delete i.identityCredential
     }
 }
@@ -241,6 +276,11 @@ function accept(config: Config) {
   errors.value = []
   preview.value = false
   savedNeedsReload.value = false
+}
+function errorLabel(error: string) {
+  if (!error.startsWith('integrations.')) return error
+  const source = draft.value?.integrations.find((s) => error.startsWith('integrations.' + s.id))
+  return source ? '数据源 · ' + (integrationPreset(source)?.name ?? '旧配置') : '数据源配置'
 }
 function locate(error: string) {
   section.value = error.includes('schedule')
@@ -576,7 +616,7 @@ onBeforeRouteLeave(() => {
           <ul v-if="errors.length">
             <li v-for="error in errors" :key="error">
               <button type="button" class="admin-error-link" @click="locate(error)">
-                {{ error }}
+                {{ errorLabel(error) }}
               </button>
             </li>
           </ul>
@@ -720,43 +760,9 @@ onBeforeRouteLeave(() => {
                   value="hidden"
                 /><VarOption label="登录后显示" value="admin" />
               </VarSelect>
-              <details class="admin-details">
-                <summary>数据源引用</summary>
-                <div
-                  v-for="(s, key) in Object.fromEntries(
-                    Object.entries(m.sources).filter(
-                      ([key]) => m.id !== 'deepseek' || key === 'main',
-                    ),
-                  )"
-                  :key="key"
-                  class="admin-fields"
-                >
-                  <span>{{ key }}</span
-                  ><VarSelect
-                    v-model="s.sourceId"
-                    :aria-label="`${m.id} ${key} 来源`"
-                    placeholder="来源 ID"
-                    variant="outlined"
-                    ><VarOption
-                      v-for="i in draft.integrations"
-                      :key="i.id"
-                      :label="i.id"
-                      :value="i.id" /></VarSelect
-                  ><AdminText v-model="s.subject" :label="`${m.id} ${key} subject`" /><VarButton
-                    text
-                    @click="delete m.sources[key]"
-                    >移除引用</VarButton
-                  >
-                </div>
-                <VarButton
-                  text
-                  :disabled="!draft.integrations.length || !!m.sources.main"
-                  @click="
-                    m.sources.main = { sourceId: draft.integrations[0]!.id, subject: 'default' }
-                  "
-                  >添加 main 引用</VarButton
-                >
-              </details>
+              <p v-if="Object.values(SOURCE_MODULES).includes(m.id)" class="admin-note">
+                {{ moduleSources(m) }}
+              </p>
               <AdminFieldEditor v-model="draft.modules[index]!" />
             </AdminEditorItem>
           </fieldset>
@@ -837,17 +843,17 @@ onBeforeRouteLeave(() => {
                   v-model="q.displayName"
                   :label="`标的 ${index + 1} 名称`"
                   reserve-details
-                /><VarSelect
-                  v-model="q.provider"
-                  :aria-label="`标的 ${index + 1} Provider`"
-                  placeholder="供应商槽位"
-                  variant="outlined"
-                  ><VarOption label="未选定" :value="null" /><VarOption
-                    v-for="i in draft.integrations.filter((i) => i.provider === 'quotes-custom')"
-                    :key="i.id"
-                    :label="i.id"
-                    :value="i.id" /></VarSelect
-                ><AdminNumber
+                />
+                <p class="admin-note">
+                  {{
+                    q.provider
+                      ? '行情来源：' +
+                        (integrationPreset(draft.integrations.find((i) => i.id === q.provider))
+                          ?.name ?? '待配置')
+                      : '添加行情来源后自动匹配'
+                  }}
+                </p>
+                <AdminNumber
                   v-model="q.refreshInterval"
                   :label="`标的 ${index + 1} 刷新间隔`"
                   class="admin-quote-refresh"

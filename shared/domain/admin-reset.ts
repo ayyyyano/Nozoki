@@ -1,21 +1,11 @@
+import { integrationPreset } from '../integration-presets/index.ts'
 import { createDefaultConfig, type ConfigWrite } from '../contracts/config.ts'
 import { editableConfig } from '../contracts/admin.ts'
 
 export type AdminSection = 'site' | 'modules' | 'integrations' | 'schedule' | 'quotes' | 'links'
 
 export function sectionResetIssue(config: ConfigWrite, section: AdminSection): string | null {
-  if (section !== 'integrations') return null
-  const retained = new Set(createDefaultConfig().integrations.map((source) => source.id))
-  const references = [
-    ...config.modules.flatMap((module) =>
-      Object.values(module.sources).map((source) => source.sourceId),
-    ),
-    ...config.quotes.flatMap((quote) => (quote.provider ? [quote.provider] : [])),
-  ]
-  const removed = [...new Set(references.filter((id) => !retained.has(id)))]
-  return removed.length
-    ? `以下来源仍被模块或行情引用：${removed.join('、')}。请先解除这些引用，再重置数据源。`
-    : null
+  return null
 }
 
 /** Return only the fields owned by this editor section. The caller applies them to its draft. */
@@ -56,14 +46,23 @@ export function defaultSectionPatch(
       }
     case 'integrations':
       return {
-        integrations: defaults.integrations.map((source) => ({
-          ...source,
-          fieldMappings:
-            config.integrations.find((i) => i.id === source.id)?.fieldMappings ??
-            source.fieldMappings,
-          capabilities: config.integrations.find((i) => i.id === source.id)?.capabilities ?? {},
-          credential: { operation: 'clear' },
-        })),
+        integrations: defaults.integrations.flatMap((source) => {
+          const existing = config.integrations.find(
+            (i) => integrationPreset(i)?.id === integrationPreset(source)?.id,
+          )
+          // Reset never re-adds an untested source or changes an existing encrypted identity.
+          return existing
+            ? [
+                {
+                  ...source,
+                  id: existing.id,
+                  fieldMappings: existing.fieldMappings,
+                  capabilities: existing.capabilities,
+                  credential: { operation: 'clear' as const },
+                },
+              ]
+            : []
+        }),
       }
     case 'quotes':
       return {

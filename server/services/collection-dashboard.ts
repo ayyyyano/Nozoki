@@ -76,6 +76,43 @@ export async function withCollectionState(
     }
     return [{ ...row, snapshot_json: JSON.stringify(snapshot) }]
   })
+  for (const module of state.config.modules.filter((m) => m.enabled)) {
+    for (const ref of Object.values(module.sources)) {
+      if (
+        snapshots.some(
+          (s) =>
+            s.source_id === ref.sourceId && s.module_id === module.id && s.subject === ref.subject,
+        )
+      )
+        continue
+      const source = state.integrations.find((i) => i.settings.id === ref.sourceId)
+      const collection = rows.find(
+        (s) =>
+          s.source_id === ref.sourceId &&
+          s.source_revision === source?.revision &&
+          s.environment_epoch === s.current_epoch,
+      )
+      if (!source || !collection || !collection.error_code) continue
+      const stub = {
+        status: ['error', 'unconfigured', 'unsupported'].includes(String(collection.status))
+          ? collection.status
+          : 'error',
+        data: null,
+        sourceId: ref.sourceId,
+        observedAt: null,
+        collectedAt: null,
+        lastSuccessAt: null,
+        expiresAt: null,
+        errorCode: safeCollectionCode(collection.error_code),
+      }
+      snapshots.push({
+        source_id: ref.sourceId,
+        subject: ref.subject,
+        module_id: module.id,
+        snapshot_json: JSON.stringify(stub),
+      })
+    }
+  }
   for (const row of snapshots) {
     if (row.module_id !== 'deepseek') continue
     if (state.storageMode === 'read-only') continue
@@ -110,41 +147,6 @@ export async function withCollectionState(
     )
     data.timezone = state.config.site.timezone
     row.snapshot_json = JSON.stringify(parsed.data)
-  }
-  // No successful row yet: surface a safe collection state for the configured module.
-  for (const m of state.config.modules) {
-    const ref = m.sources.main,
-      c = ref && rows.find((r) => r.source_id === ref.sourceId)
-    if (
-      !ref ||
-      !c ||
-      snapshots.some(
-        (r) => r.source_id === ref.sourceId && r.subject === ref.subject && r.module_id === m.id,
-      )
-    )
-      continue
-    const source = state.integrations.find((i) => i.settings.id === ref.sourceId)
-    if (
-      c.source_revision !== source?.revision ||
-      c.environment_epoch !== c.current_epoch ||
-      !c.error_code
-    )
-      continue
-    snapshots.push({
-      source_id: ref.sourceId,
-      subject: ref.subject,
-      module_id: m.id,
-      snapshot_json: JSON.stringify({
-        status: c.status,
-        data: null,
-        sourceId: ref.sourceId,
-        observedAt: null,
-        collectedAt: null,
-        lastSuccessAt: null,
-        expiresAt: null,
-        errorCode: safeCollectionCode(c.error_code),
-      }),
-    })
   }
   return { ...state, snapshots }
 }

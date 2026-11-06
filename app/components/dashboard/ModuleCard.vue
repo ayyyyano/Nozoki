@@ -23,8 +23,13 @@ defineProps<{
       <h2 :id="`heading-${id}`">{{ title }}</h2>
     </header>
     <div class="module-body"><slot /></div>
-    <footer v-if="observedAt" class="sync-time">
-      观测于 <time :datetime="observedAt">{{ formatTimestamp(observedAt, timezone) }}</time>
+    <footer v-if="observedAt || $slots.footer" class="sync-time">
+      <slot name="footer"
+        >观测于
+        <time :datetime="observedAt ?? undefined">{{
+          formatTimestamp(observedAt ?? null, timezone)
+        }}</time></slot
+      >
     </footer>
   </section>
 </template>

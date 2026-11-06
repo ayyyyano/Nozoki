@@ -27,6 +27,36 @@ function tested(id: string, result: ProbeResult | null, draft = false) {
   probes.value[id] = result
   draftProbes.value[id] = draft
 }
+const candidate = ref<IntegrationDraft | null>(null)
+const adding = ref(false)
+const clock = useLocalClock()
+const canAdd = computed(
+  () =>
+    !!candidate.value?.connectionProof &&
+    Number(candidate.value.connectionProof.split('.')[0]) > clock.value,
+)
+function addCandidate() {
+  if (!candidate.value || !canAdd.value || props.readOnly) return
+  const source = candidate.value
+  source.enabled = true
+  model.value.push(source)
+  open.value[source.id] = true
+  createdId = source.id
+  adding.value = false
+  candidate.value = null
+}
+onBeforeUnmount(() => cancelCandidate())
+function candidateClosed() {
+  cancelCandidate()
+  afterPicker()
+}
+function cancelCandidate() {
+  if (candidate.value) {
+    candidate.value.credential = { operation: 'keep' }
+    delete candidate.value.identityCredential
+  }
+  candidate.value = null
+}
 const picker = ref(false),
   pickerError = ref('')
 let createdId = ''
@@ -34,9 +64,7 @@ function choose(preset: IntegrationPreset) {
   if (props.readOnly || model.value.length >= 10) return
   try {
     const source = createIntegrationDraft(preset.id, model.value, crypto.randomUUID())
-    model.value.push(source)
-    open.value[source.id] = true
-    createdId = source.id
+    candidate.value = source
     picker.value = false
     pickerError.value = ''
   } catch {
@@ -44,7 +72,14 @@ function choose(preset: IntegrationPreset) {
   }
 }
 function afterPicker() {
-  if (!createdId) return
+  if (candidate.value && !adding.value) {
+    adding.value = true
+    return
+  }
+  if (!createdId) {
+    root.value?.querySelector<HTMLButtonElement>('.admin-add-button')?.focus()
+    return
+  }
   const card = [...(root.value?.querySelectorAll<HTMLElement>('[data-source-id]') ?? [])].find(
     (e) => e.dataset.sourceId === createdId,
   )
@@ -58,9 +93,10 @@ function testSymbols(source: IntegrationDraft) {
   if (source.provider !== 'quotes-custom') return []
   const enabled = props.quotes.filter((q) => q.enabled)
   const bound = enabled.filter((q) => q.provider === source.id)
-  return (bound.length ? bound : enabled)
+  const symbols = (bound.length ? bound : enabled)
     .slice(0, 1)
     .map(({ market, symbol }) => ({ market, symbol }))
+  return symbols.length ? symbols : [{ market: 'US', symbol: 'QQQM' }]
 }
 function title(source: IntegrationDraft) {
   return integrationPreset(source)?.name ?? '旧数据源'
@@ -95,12 +131,7 @@ const removal = ref<{ protectedHistory: boolean; hasSnapshots: boolean } | null>
 const target = computed(() => model.value.find((s) => s.id === removingId.value))
 const references = computed(() => sourceReferences(props, removingId.value))
 const removalBlocked = computed(
-  () =>
-    loading.value ||
-    !!removalError.value ||
-    !!references.value.length ||
-    !!removal.value?.protectedHistory ||
-    !target.value,
+  () => loading.value || !!removalError.value || !!removal.value?.protectedHistory || !target.value,
 )
 async function requestRemoval(source: IntegrationDraft) {
   removingId.value = source.id
@@ -152,14 +183,14 @@ defineExpose({
       class="source-card"
       :data-source-id="source.id"
       :title="title(source)"
-      :description="hint(source) + ' · ' + source.id"
+      :description="hint(source)"
       :icon="integrationPreset(source)?.icon ?? 'server'"
     >
       <template #actions
         ><div class="source-enable">
           <VarSwitch
             v-model="source.enabled"
-            :aria-label="`启用 ${title(source)} ${source.id}`"
+            :aria-label="`启用 ${title(source)}`"
             :title="`启用或停用 ${title(source)}`"
           /></div
       ></template>
@@ -209,6 +240,24 @@ defineExpose({
       <p v-if="pickerError" role="alert">{{ pickerError }}</p>
     </AdminSourceDialog>
     <AdminSourceDialog
+      v-model:show="adding"
+      :title="`配置 ${candidate ? title(candidate) : '数据源'}`"
+      confirm="添加来源"
+      :blocked="!canAdd"
+      @confirm="addCandidate"
+      @closed="candidateClosed"
+    >
+      <template v-if="candidate">
+        <AdminIntegrationEditor
+          v-model="candidate"
+          :timezone="timezone"
+          :expected-version="expectedVersion"
+          :quote-symbols="testSymbols(candidate)"
+        />
+        <p class="admin-note">测试通过后可添加到草稿，点击顶部“保存配置”后生效。</p>
+      </template>
+    </AdminSourceDialog>
+    <AdminSourceDialog
       v-model:show="removing"
       :title="`删除 ${target ? title(target) : '此来源'}？`"
       confirm="删除来源"
@@ -218,12 +267,12 @@ defineExpose({
       @confirm="confirmRemoval"
       @closed="afterRemoval"
     >
-      <p class="source-target">{{ removingId }}</p>
+      <p class="source-target">{{ target ? title(target) : '数据源' }}</p>
       <p>
         从草稿中移除此来源及其凭据，全局保存后生效。缓存快照也会随来源移除；保存前可通过「放弃修改」恢复。
       </p>
       <p v-if="references.length" class="source-warning">
-        仍被 {{ [...new Set(references)].join('、') }} 引用。请先解除这些引用。
+        保存后将自动解除 {{ [...new Set(references)].join('、') }} 的来源匹配。
       </p>
       <p v-if="removal?.protectedHistory" class="source-warning">
         此来源存在受保护的历史数据，无法删除。可以使用标题行开关停用。

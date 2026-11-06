@@ -4,7 +4,7 @@ import { expect } from 'playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-export async function exerciseSourceManager(page, { input, save, deepId, evidence }) {
+export async function exerciseSourceManager(page, { input, save, deepId, evidence, db }) {
   await mkdir(evidence, { recursive: true })
   const errors = []
   const measurements = []
@@ -66,13 +66,6 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
     assert.equal(r.status(), 200, await r.text())
     await expect(page.getByText(/^(?:已保存并确认持久化|配置已保存，)/).first()).toBeVisible()
   }
-  const pick = async (name) => {
-    await page.getByRole('button', { name: '添加来源', exact: true }).click()
-    const dialog = page.getByRole('dialog', { name: '选择数据源类型', exact: true })
-    await dialog.getByRole('button', { name: new RegExp('^' + name + ' ') }).click()
-    await expect(dialog).toBeHidden()
-    return page.locator('.source-card').last()
-  }
   await section()
   const initial = await input()
   await measure('desktop-list')
@@ -121,9 +114,14 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   await expect(deep.getByText('API Key · 保存后清除', { exact: true })).toBeVisible()
   await deep.getByRole('button', { name: '撤销删除', exact: true }).click()
   await deep.getByRole('button', { name: '编辑', exact: true }).click()
+  const prove = async () => {
+    await db.prepare('DELETE FROM login_limits').run()
+    await deep.getByRole('button', { name: '测试并确认访问', exact: true }).click()
+    await expect(deep.locator('[data-test-status="ok"]')).toBeVisible()
+  }
   const newKey = 'SYNTHETIC-UI-REPLACEMENT'
   await deep.locator('input[aria-label="新 API Key"]').fill(newKey)
-  await expect(deep.getByRole('button', { name: '测试连接', exact: true })).toBeEnabled()
+  await expect(deep.getByRole('button', { name: '测试并确认访问', exact: true })).toBeEnabled()
   await expect(deep.locator('input[aria-label="新 API Key"]')).toHaveAttribute('type', 'password')
   await deep.getByRole('button', { name: '显示新API Key', exact: true }).click()
   await expect(deep.locator('input[aria-label="新 API Key"]')).toHaveAttribute('type', 'text')
@@ -152,6 +150,7 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   await expand(deepId)
   await deep.getByRole('button', { name: '编辑', exact: true }).click()
   await deep.locator('input[aria-label="新 API Key"]').fill(newKey)
+  await prove()
   await commit()
   await expect(deep.locator('.source-credential input')).toHaveCount(0)
   assert.ok(!JSON.stringify(await input()).includes(newKey))
@@ -164,6 +163,7 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   )
   // The new empty input is not a returned secret; restore the fixture account for the remaining tests.
   await deep.locator('input[aria-label="API Key"]').fill(newKey)
+  await prove()
   await commit()
 
   await deep.getByRole('button', { name: '删除来源', exact: true }).click()
@@ -172,97 +172,22 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   await expect(removal.getByText(/受保护的历史数据/)).toBeVisible()
   await page.keyboard.press('Escape')
 
-  const added = await pick('Sleepy')
-  const id = await added.getAttribute('data-source-id')
-  assert.match(id, /^sleepy-[a-z0-9-]+$/)
-  await added.locator('input[aria-label="实例 HTTPS 地址"]').fill('https://ui.example.com/')
-  await expect(added.getByRole('button', { name: '测试连接', exact: true })).toBeDisabled()
-  await added.getByRole('button', { name: '确认来源访问', exact: true }).click()
-  const approval = page.getByRole('dialog', { name: '允许访问此服务？', exact: true })
-  await expect(approval)
-    .toBeVisible({ timeout: 3000 })
-    .catch(async (e) => {
-      await page.screenshot({ path: resolve(evidence, 'draft-approval-failure.png') })
-      throw new Error(JSON.stringify({ errors, text: await added.innerText() }), { cause: e })
-    })
-  await approval.getByRole('button', { name: '确认访问', exact: true }).click()
-  const beforeDraftTest = await input()
-  const probe = page.waitForResponse((r) => r.url().endsWith(`/integrations/${id}/test`))
-  await added.getByRole('button', { name: '测试连接', exact: true }).click()
-  assert.equal((await (await probe).json()).protocolMatched, true)
-  await expect(added.getByText(/草稿测试通过，尚未保存；/)).toBeVisible()
-  assert.deepEqual(await input(), beforeDraftTest)
-  await expect(added.getByRole('switch')).not.toBeChecked()
-  await added.getByRole('switch').click()
-  await expect(added.locator('.source-test-result')).toHaveCount(0)
-  await commit()
-  await added.locator('input[aria-label="刷新间隔（秒）"]').fill('600')
-  await expect(added.getByRole('button', { name: '测试连接', exact: true })).toBeEnabled()
-  // A real probe finishing after another edit must not restore an outdated success message.
-  let release
-  const gate = new Promise((resolve) => {
-    release = resolve
-  })
-  let arrived
-  const ready = new Promise((resolve) => {
-    arrived = resolve
-  })
-  const delayed = `**/integrations/${id}/test`
-  await page.route(delayed, async (route) => {
-    const response = await route.fetch()
-    assert.equal(response.status(), 200)
-    assert.equal((await response.json()).protocolMatched, true)
-    arrived()
-    await gate
-    await route.fulfill({ response })
-  })
-  await added.getByRole('button', { name: '测试连接', exact: true }).click()
-  await ready
-  await added.locator('input[aria-label="刷新间隔（秒）"]').fill('601')
-  release()
-  await expect(added.getByRole('button', { name: '测试连接', exact: true })).toBeEnabled()
-  await expect(added.locator('.source-test-result')).toHaveCount(0)
-  await page.unroute(delayed)
-  await added.locator('input[aria-label="刷新间隔（秒）"]').fill('600')
-  // Independent drafts survive section changes.
-  await page.getByRole('button', { name: '站点与外观', exact: true }).click()
-  await section()
-  await expect(added.locator('input[aria-label="刷新间隔（秒）"]')).toHaveValue('600')
-  await commit()
-  // Unreferenced, history-free instances can be deleted after confirmation.
-  await added.getByRole('button', { name: '删除来源', exact: true }).click()
-  const deleteSleep = page.getByRole('dialog', { name: '删除 Sleepy？', exact: true })
-  await deleteSleep.getByRole('button', { name: '删除来源', exact: true }).click()
-  await expect(card(id)).toHaveCount(0)
-  assert.ok((await input()).config.integrations.some((s) => s.id === id))
-  await commit()
-  assert.ok(!(await input()).config.integrations.some((s) => s.id === id))
-
-  // Check each existing provider's necessary fields without persisting extra fixtures.
+  // Existing singleton types are disabled; unadded types open cancellable local forms.
   for (const [name, label] of [
-    ['CLIProxyAPI', 'Management Key'],
     ['Tailscale', 'OAuth Client ID'],
     ['Uptime Kuma', '状态页标识（slug）'],
-    ['UptimeFlare', '实例 HTTPS 地址'],
     ['Yahoo 行情', null],
   ]) {
-    const c = await pick(name)
-    if (label) await expect(c.locator('input[aria-label="' + label + '"]')).toBeVisible()
-    await expect(c.getByLabel('Provider', { exact: true })).toHaveCount(0)
-    await c.getByRole('button', { name: '删除来源', exact: true }).click()
-    await page
-      .getByRole('dialog', { name: `删除 ${name}？`, exact: true })
-      .getByRole('button', { name: '删除来源', exact: true })
-      .click()
+    await page.getByRole('button', { name: '添加来源', exact: true }).click()
+    await picker.getByRole('button').filter({ hasText: name }).click()
+    const dialog = page.getByRole('dialog', { name: '配置 ' + name, exact: true })
+    await settleDialog(dialog)
+    if (label) await expect(dialog.getByRole('textbox', { name: label, exact: true })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: '添加来源', exact: true })).toBeDisabled()
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    await expect(page.getByRole('button', { name: '添加来源', exact: true })).toBeFocused()
   }
-  const tencent = await pick('腾讯行情')
-  await expect(tencent.getByText('内置 · 无需凭据 · tencent', { exact: true })).toBeVisible()
-  await expect(tencent.locator('input[type="password"]')).toHaveCount(0)
-  await expect(tencent.getByLabel('实例 HTTPS 地址', { exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: '添加来源', exact: true }).click()
-  await expect(picker.getByRole('button', { name: /^腾讯行情 / })).toBeDisabled()
-  await page.keyboard.press('Escape')
-  await commit()
   // Both saved scopes now use human-readable presets; the existing ID stays unchanged.
   await expand('fixture')
   await first.locator('input[aria-label="刷新间隔（秒）"]').fill('75')

@@ -2,6 +2,8 @@
 import type { DataStatus } from '../../../shared/contracts/dashboard'
 withDefaults(
   defineProps<{
+    configured?: boolean
+    errorCode?: string
     status: DataStatus
     empty?: boolean
     loading?: boolean
@@ -35,7 +37,17 @@ const notes: Partial<Record<DataStatus, string>> = {
     :aria-busy="loading"
   >
     <div>
-      <span>{{ loading ? '正在加载' : labels[status] }}</span
+      <span>{{
+        loading
+          ? '正在加载'
+          : status === 'unconfigured' && errorCode === 'SOURCE_DISABLED'
+            ? '来源已停用'
+            : status === 'unconfigured' && configured
+              ? errorCode === 'NOT_CONFIGURED'
+                ? '来源配置尚未完成'
+                : '来源已匹配，等待采集结果'
+              : labels[status]
+      }}</span
       ><small v-if="!compact && notes[status]">{{ notes[status] }}</small
       ><small v-if="(status === 'stale' || status === 'error') && lastSuccessAt"
         >最近成功 {{ formatTimestamp(lastSuccessAt, timezone) }}</small

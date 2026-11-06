@@ -1,4 +1,5 @@
 import type { Config, ModuleSettings } from '../../shared/contracts/config.ts'
+import type { DataSnapshot } from '../../shared/contracts/dashboard.ts'
 import type { ModuleId } from '../../shared/contracts/dashboard.ts'
 import { snapshotSchema, DataSchemas } from '../../shared/contracts/snapshots.ts'
 import {
@@ -125,7 +126,46 @@ function projectValue(
   }
   return value
 }
-function rawSnapshot(state: StoredState, m: ModuleSettings, admin = false) {
+function mergedServices(state: StoredState, module: ModuleSettings): DataSnapshot<unknown> {
+  const refs = Object.values(module.sources).filter((ref) =>
+    state.config.integrations.some((i) => i.id === ref.sourceId && i.enabled),
+  )
+  if (!refs.length)
+    return {
+      ...snapshot(
+        'unconfigured',
+        null,
+        Object.values(module.sources)[0]?.sourceId ?? 'not-configured',
+      ),
+      errorCode: 'SOURCE_DISABLED',
+    }
+  const parts = refs.map((ref) => rawSnapshot(state, { ...module, sources: { main: ref } }))
+  const failures = parts.filter(
+    (s) => !s.data || !['ok', 'stale', 'offline'].includes(s.status),
+  ).length
+  const monitors = parts.flatMap(
+    (s) =>
+      (s.data as import('../../shared/contracts/dashboard.ts').ServicesData | null)?.monitors ?? [],
+  )
+  if (new Set(monitors.map((m) => m.id)).size !== monitors.length) return snapshot('error')
+  const result = snapshot(
+    failures ? 'error' : parts.some((s) => s.status === 'stale') ? 'stale' : 'ok',
+    { monitors },
+  )
+  const earliest = (key: 'observedAt' | 'collectedAt' | 'expiresAt' | 'lastSuccessAt') =>
+    parts.flatMap((s) => (s[key] ? [s[key]!] : [])).sort()[0] ?? null
+  return {
+    ...result,
+    observedAt: earliest('observedAt'),
+    collectedAt: earliest('collectedAt'),
+    expiresAt: earliest('expiresAt'),
+    lastSuccessAt: earliest('lastSuccessAt'),
+    ...(failures ? { partialFailures: failures } : {}),
+  }
+}
+function rawSnapshot(state: StoredState, m: ModuleSettings, admin = false): DataSnapshot<unknown> {
+  if (m.id === 'services' && Object.keys(m.sources).length > 1) return mergedServices(state, m)
+
   if (m.id === 'activity')
     return snapshot(
       'ok',
@@ -150,6 +190,11 @@ function rawSnapshot(state: StoredState, m: ModuleSettings, admin = false) {
       'local-links',
     )
   const source = m.sources.main
+  const mapped = state.config.integrations.find((i) => i.id === source?.sourceId)
+  if (mapped && !mapped.enabled)
+    return { ...snapshot('unconfigured', null, mapped.id), errorCode: 'SOURCE_DISABLED' }
+  if (mapped && !isIntegrationConfigured(mapped))
+    return { ...snapshot('unconfigured', null, mapped.id), errorCode: 'NOT_CONFIGURED' }
   if (source) {
     const integration = state.config.integrations.find(
       (i) => i.id === source.sourceId && isIntegrationConfigured(i),
@@ -193,21 +238,25 @@ function rawSnapshot(state: StoredState, m: ModuleSettings, admin = false) {
   }
   if (m.id === 'quotes') {
     const blank = createUnconfiguredDashboard().quotes.data!.items[0]!
-    return snapshot('unconfigured', {
-      items: state.config.quotes
-        .filter((q) => q.enabled)
-        .map((q) => ({
-          ...blank,
-          market: q.market,
-          symbol: q.symbol,
-          name: q.displayName,
-          provider: q.provider,
-          currency: null,
-          history: [],
-        })),
-    })
+    return snapshot(
+      'unconfigured',
+      {
+        items: state.config.quotes
+          .filter((q) => q.enabled)
+          .map((q) => ({
+            ...blank,
+            market: q.market,
+            symbol: q.symbol,
+            name: q.displayName,
+            provider: q.provider,
+            currency: null,
+            history: [],
+          })),
+      },
+      mapped?.id ?? 'not-configured',
+    )
   }
-  return snapshot('unconfigured')
+  return snapshot('unconfigured', null, mapped?.id ?? 'not-configured')
 }
 async function publicVersion(config: Config, modules: GuestModule[]) {
   // Ignore snapshots, generation times and private/global versions: private edits cannot bump this hash.
@@ -219,6 +268,7 @@ async function publicVersion(config: Config, modules: GuestModule[]) {
           title: m.title,
           sortOrder: m.sortOrder,
           kind: m.kind,
+          sourceConfigured: m.snapshot?.sourceConfigured ?? false,
           publicShape: publicShape(m.snapshot?.data ?? null),
           defaults:
             m.id === 'links'
@@ -319,7 +369,11 @@ async function projectDashboard(state: StoredState, now = new Date(), admin = fa
       title: m.title,
       sortOrder: m.sortOrder,
       kind: 'data',
-      snapshot: { ...safe, data: projected ?? null } as Record<string, Json>,
+      snapshot: {
+        ...safe,
+        sourceConfigured: Object.keys(m.sources).length > 0,
+        data: projected ?? null,
+      } as Record<string, Json>,
     })
   }
   const services = modules.find((m) => m.id === 'services' && m.kind === 'data')?.snapshot?.data as

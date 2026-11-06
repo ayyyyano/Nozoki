@@ -22,6 +22,8 @@ const devices = computed(() =>
     :observed-at="snapshot.observedAt"
   >
     <DashboardDataState
+      :configured="snapshot.sourceConfigured"
+      :error-code="snapshot.errorCode"
       :status="snapshot.status"
       :empty="!snapshot.data?.devices.length"
       :last-success-at="snapshot.lastSuccessAt"

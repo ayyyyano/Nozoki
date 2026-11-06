@@ -38,6 +38,7 @@ export const AdapterCodeSchema = z.enum([
 ])
 export type AdapterCode = z.infer<typeof AdapterCodeSchema>
 export const ProbeResultSchema = z.strictObject({
+  connectionProof: z.string().max(100).optional(),
   sourceId: IdSchema,
   provider: z.string().max(64),
   protocolVersion: z.string().max(64),

@@ -24,6 +24,12 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ tested: [ProbeResult | null, boolean?] }>()
 const preset = computed(() => integrationPreset(model.value))
+const clock = useLocalClock()
+const proofExpired = computed(
+  () =>
+    !!model.value.connectionProof &&
+    Number(model.value.connectionProof.split('.')[0]) <= clock.value,
+)
 const knownTarget = computed(() => fixedPresetTarget(model.value))
 const instanceAddress = computed(
   () => preset.value?.instanceAddress || (!!model.value.baseUrl && !knownTarget.value),
@@ -55,17 +61,31 @@ const savedMatches = computed(() => {
   if (!props.saved || model.value.credential.operation !== 'keep' || model.value.identityCredential)
     return false
   const { credentialState: _state, identityConfigured: _identity, ...saved } = props.saved
-  const { credential: _credential, ...draft } = model.value
+  const { credential: _credential, connectionProof: _proof, ...draft } = model.value
   return canonical(saved) === canonical(draft)
 })
 const testInput = () => {
-  const { identityCredential: _identity, ...draft } = model.value
-  return { draft, expectedVersion: props.expectedVersion, quoteSymbols: props.quoteSymbols }
+  const { identityCredential: _identity, connectionProof: _proof, ...draft } = model.value
+  return {
+    draft: { ...draft, access: { ...approvalAccess(), approved: false } },
+    expectedVersion: props.expectedVersion,
+    quoteSymbols: props.quoteSymbols,
+  }
 }
-const testFingerprint = () => canonical(testInput())
+const testFingerprint = () => {
+  const input = testInput()
+  const {
+    enabled: _enabled,
+    refreshInterval: _interval,
+    capabilities: _caps,
+    ...connection
+  } = input.draft
+  return canonical({ ...input, draft: connection })
+}
 const canTest = computed(
   () =>
-    approved.value &&
+    !!preset.value &&
+    !!model.value.baseUrl &&
     !addressChanged.value &&
     DraftIntegrationTestSchema.safeParse(testInput()).success &&
     (!needsCredential.value ||
@@ -87,7 +107,6 @@ const approved = computed(() => {
     return false
   }
 })
-const legacy = computed(() => !model.value.access || model.value.access.mode !== 'public')
 function approvalAccess() {
   const authentication =
     props.saved?.access &&
@@ -95,7 +114,7 @@ function approvalAccess() {
     props.saved.access.authentication === 'bearer' &&
     preset.value?.authentication === 'none'
       ? ('bearer' as const)
-      : preset.value!.authentication
+      : (preset.value?.authentication ?? 'none')
   return {
     mode: 'public' as const,
     authentication,
@@ -113,9 +132,11 @@ const targetKey = () => {
     return model.value.baseUrl
   }
 }
+let acceptingTest = false
 watch(
   targetKey,
   () => {
+    if (acceptingTest) return
     if (model.value.access && model.value.access.mode !== 'legacy') {
       model.value.access.approved = false
       model.value.access.approvedTarget = null
@@ -123,34 +144,10 @@ watch(
   },
   { flush: 'sync' },
 )
-const showApproval = ref(false),
-  approvalError = ref('')
-let pendingTarget = ''
-function requestApproval() {
-  try {
-    if (!preset.value || !model.value.baseUrl) throw new Error()
-    pendingTarget = sourceTargetKey(model.value, approvalAccess())
-    approvalError.value = ''
-    showApproval.value = true
-  } catch {
-    approvalError.value = '请先填写有效的公网 HTTPS 实例地址。'
-  }
-}
-function confirmApproval() {
-  try {
-    const access = approvalAccess()
-    if (pendingTarget !== sourceTargetKey(model.value, access)) throw new Error()
-    access.approved = false
-    model.value.access = access
-    model.value.access.approvedTarget = pendingTarget
-    model.value.access.approved = true
-    showApproval.value = false
-  } catch {
-    approvalError.value = '地址已变更，请重新确认访问目标。'
-    showApproval.value = false
-  }
-}
 function revoke() {
+  delete model.value.connectionProof
+  result.value = null
+  emit('tested', null)
   if (model.value.access && model.value.access.mode !== 'legacy') {
     model.value.access.approved = false
     model.value.access.approvedTarget = null
@@ -160,11 +157,15 @@ const testing = ref(false),
   result = ref<ProbeResult | null>(null),
   testError = ref('')
 let revision = 0
+onBeforeUnmount(() => {
+  revision++
+})
 const draftResult = ref(false)
 watch(
   testFingerprint,
   () => {
     revision++
+    delete model.value.connectionProof
     result.value = null
     testError.value = ''
     emit('tested', null)
@@ -206,6 +207,7 @@ async function testConnection() {
     id = model.value.id
   let body: DraftIntegrationTest | undefined = DraftIntegrationTestSchema.parse(testInput())
   testing.value = true
+  delete model.value.connectionProof
   result.value = null
   testError.value = ''
   try {
@@ -215,6 +217,14 @@ async function testConnection() {
       { method: 'POST', headers: { 'X-Nozoki-CSRF': csrf.token }, body },
     )
     if (revision === startedRevision && testFingerprint() === submitted) {
+      if (response.connectionProof) {
+        const access = approvalAccess()
+        access.approvedTarget = sourceTargetKey(model.value, access)
+        acceptingTest = true
+        model.value.access = access
+        acceptingTest = false
+        model.value.connectionProof = response.connectionProof
+      }
       draftResult.value = unsaved
       result.value = response
       emit('tested', response, unsaved)
@@ -277,35 +287,23 @@ const identityImport = computed({
     <p v-if="addressChanged" class="source-warning" role="status">
       地址已更改。请更新或清除已保存的凭据，再保存此来源。
     </p>
-    <div v-if="!approved || !knownTarget" class="source-approval">
-      <p class="admin-note">
-        {{
-          legacy
-            ? '旧接入配置已保留；需确认公网地址后才能使用。'
-            : approved
-              ? '此地址已批准，只允许已登记的只读端点。'
-              : '保存前请确认此服务由可信运营者控制；禁止私网、回环及元数据地址。'
-        }}
-      </p>
-      <VarButton v-if="!approved" tonal type="primary" @click="requestApproval"
-        >确认来源访问</VarButton
-      >
-      <VarButton v-else tonal type="primary" @click="revoke">撤销访问批准</VarButton>
-      <p v-if="approvalError" class="source-warning" role="alert">{{ approvalError }}</p>
-    </div>
+    <p class="admin-note">
+      点击测试会访问此 HTTPS 服务{{
+        needsCredential ? '并使用填写的凭据' : '，无需凭据'
+      }}。测试通过后确认此地址；保存后开始采集。
+    </p>
     <div class="admin-actions source-test-actions">
-      <VarButton tonal :loading="testing" :disabled="testing || !canTest" @click="testConnection"
-        ><CommonAppIcon name="LinkRound" :size="18" />测试连接</VarButton
-      ><span class="admin-note">{{
-        !approved
-          ? '请先确认来源访问目标'
-          : addressChanged
-            ? '地址已更改，请更新或清除原凭据'
-            : !canTest
-              ? '请补齐此来源的必要配置'
-              : !savedMatches
-                ? '验证当前草稿，不保存配置或快照'
-                : '仅验证连接，不保存采集快照'
+      <VarButton
+        tonal
+        type="primary"
+        :loading="testing"
+        :disabled="testing || !canTest"
+        @click="testConnection"
+        ><CommonAppIcon name="LinkRound" :size="18" />测试并确认访问</VarButton
+      >
+      <VarButton v-if="approved" tonal @click="revoke">撤销访问批准</VarButton>
+      <span v-if="!canTest" class="admin-note">{{
+        addressChanged ? '地址已更改，请更新或清除原凭据' : '请补齐此来源的必要配置'
       }}</span>
     </div>
     <div
@@ -324,6 +322,9 @@ const identityImport = computed({
       >
       <p v-if="result.retryAfterSeconds">请至少等待 {{ result.retryAfterSeconds }} 秒后重试。</p>
     </div>
+    <p v-if="proofExpired" class="source-warning" role="status">
+      测试结果已过期，请重新测试后保存。
+    </p>
     <p v-if="testError" class="source-warning" role="alert">{{ testError }}</p>
     <ul v-if="preset.capabilities.length" class="source-capabilities" aria-label="能力状态">
       <li v-for="capability in preset.capabilities" :key="capability.key">
@@ -344,18 +345,6 @@ const identityImport = computed({
         新来源留空。迁移旧账户权限时填写原有密钥；保存前会只读核对账户身份，匹配后加密保存。
       </p>
     </details>
-    <AdminSourceDialog
-      v-model:show="showApproval"
-      title="允许访问此服务？"
-      confirm="确认访问"
-      @confirm="confirmApproval"
-      ><p class="source-target">{{ model.baseUrl }}</p>
-      <p>
-        {{ preset.name }} 只会请求已登记的只读端点{{
-          approvalAccess().authentication === 'none' ? '，不发送凭据' : '，会使用此来源的认证凭据'
-        }}。请确认该地址可信；确认后可测试草稿，正式采集须全局保存后生效。
-      </p></AdminSourceDialog
-    >
   </template>
   <p v-else class="source-warning" role="status">
     此来源的旧协议暂不支持编辑，原配置和历史记录已保留。可以停用，或新建受支持的来源。
