@@ -40,6 +40,20 @@ const themeLabel = computed(() =>
 )
 const baseline = ref<Config | null>(initial.value ? ConfigSchema.parse(initial.value) : null)
 const draft = ref<ConfigWrite | null>(baseline.value ? editableConfig(baseline.value) : null)
+const backgroundProcessing = ref(false)
+const backgroundUpload = ref<{ url: string; data: string } | null>(null)
+const backgroundPreview = useState<{ url: string; preview: string } | null>(
+  'nozoki-background-upload-preview',
+  () => null,
+)
+watch(backgroundUpload, (value) => {
+  backgroundPreview.value = value
+    ? { url: value.url, preview: 'data:image/webp;base64,' + value.data }
+    : null
+})
+onBeforeUnmount(() => {
+  backgroundPreview.value = null
+})
 const section = ref('site'),
   busy = ref(false),
   message = ref(''),
@@ -86,7 +100,10 @@ function resetCurrentSection() {
   const patch = defaultSectionPatch(draft.value, target)
   if (target === 'integrations') clearSecrets()
   Object.assign(draft.value, patch)
-  if (target === 'site') preview.value = false
+  if (target === 'site') {
+    preview.value = false
+    backgroundUpload.value = null
+  }
   if (target === 'schedule') scheduleDraftReset.value++
   if (target === 'links') expandedLinks.value = {}
   if (target === 'quotes') expandedQuotes.value = {}
@@ -214,6 +231,7 @@ function clearSecrets() {
     }
 }
 function accept(config: Config) {
+  backgroundUpload.value = null
   clearSecrets()
   baseline.value = ConfigSchema.parse(config)
   draft.value = editableConfig(baseline.value)
@@ -263,7 +281,7 @@ async function loadLatest() {
   }
 }
 async function save() {
-  if (busy.value || !draft.value || readOnly.value) return
+  if (busy.value || backgroundProcessing.value || !draft.value || readOnly.value) return
   errors.value = []
   message.value = ''
   conflict.value = false
@@ -272,6 +290,11 @@ async function save() {
   const parsed = SaveConfigSchema.safeParse({
     expectedVersion: baseline.value!.site.configVersion,
     config: draft.value,
+    ...(backgroundUpload.value &&
+    draft.value.site.background.source === 'uploaded' &&
+    draft.value.site.background.url === backgroundUpload.value.url
+      ? { backgroundUpload: backgroundUpload.value.data }
+      : {}),
   })
   if (!parsed.success) {
     errors.value = parsed.error.issues.map((i) => i.path.join('.') + '：' + i.message)
@@ -295,6 +318,7 @@ async function save() {
     )
     // Release plaintext before any subsequent request; do not retain it in a retry signature.
     clearSecrets()
+    backgroundUpload.value = null
     pending = null
     savedNeedsReload.value = true
     notifyDashboardSaved()
@@ -475,7 +499,7 @@ onBeforeRouteLeave(() => {
             :aria-label="busy ? '保存中' : '保存配置'"
             :title="busy ? '保存中' : '保存配置'"
             :loading="busy"
-            :disabled="busy || !draft || savedNeedsReload || readOnly"
+            :disabled="busy || backgroundProcessing || !draft || savedNeedsReload || readOnly"
             @click="save"
             ><CommonAppIcon name="save" :size="22" /><span class="admin-action-text">{{
               busy ? '保存中' : '保存配置'
@@ -614,7 +638,12 @@ onBeforeRouteLeave(() => {
                 v-model="preview"
                 aria-label="预览共享外观"
               />预览共享外观（不保存个人偏好）</label
-            ><AdminBackgroundEditor v-model="draft.site.background" />
+            ><AdminBackgroundEditor
+              v-model="draft.site.background"
+              v-model:upload="backgroundUpload"
+              :disabled="busy"
+              @processing="backgroundProcessing = $event"
+            />
           </fieldset>
           <fieldset v-show="section === 'modules'" :disabled="readOnly">
             <legend class="sr-only">Dashboard 模块</legend>

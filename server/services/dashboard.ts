@@ -278,7 +278,9 @@ function publicShape(value: Json): Json {
 function publicBackground(config: Config) {
   return {
     ...config.site.background,
-    url: config.site.background.source === 'custom' ? config.site.background.url : '',
+    url: ['custom', 'uploaded'].includes(config.site.background.source)
+      ? config.site.background.url
+      : '',
   }
 }
 async function projectDashboard(state: StoredState, now = new Date(), admin = false) {

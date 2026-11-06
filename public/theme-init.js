@@ -15,10 +15,10 @@
   function dt(t) {
     return ((t = t % 360), t < 0 && (t = t + 360), t)
   }
-  function z(t) {
+  function N(t) {
     return ((t = t % 360), t < 0 && (t = t + 360), t)
   }
-  function It(t, e) {
+  function Dt(t, e) {
     return 180 - Math.abs(Math.abs(t - e) - 180)
   }
   function st(t, e) {
@@ -37,7 +37,7 @@
       [-0.9691452513005321, 1.8758853451067872, 0.04156585616912061],
       [0.05562093689691305, -0.20395524564742123, 1.0571799111220335],
     ],
-    Kt = [95.047, 100, 108.883]
+    Xt = [95.047, 100, 108.883]
   function gt(t, e, r) {
     return ((255 << 24) | ((t & 255) << 16) | ((e & 255) << 8) | (r & 255)) >>> 0
   }
@@ -66,7 +66,7 @@
       h = tt(s)
     return gt(c, l, h)
   }
-  function Xt(t) {
+  function Zt(t) {
     let e = Q(yt(t)),
       r = Q(bt(t)),
       n = Q(Ct(t))
@@ -77,12 +77,12 @@
       r = tt(e)
     return gt(r, r, r)
   }
-  function xt(t) {
-    let e = Xt(t)[1]
+  function At(t) {
+    let e = Zt(t)[1]
     return 116 * Vt(e / 100) - 16
   }
   function _(t) {
-    return 100 * Zt((t + 16) / 116)
+    return 100 * Qt((t + 16) / 116)
   }
   function it(t) {
     return Vt(t / 100) * 116 - 16
@@ -100,20 +100,20 @@
     )
   }
   function Lt() {
-    return Kt
+    return Xt
   }
   function Vt(t) {
     let e = 0.008856451679035631,
       r = 24389 / 27
     return t > e ? Math.pow(t, 1 / 3) : (r * t + 16) / 116
   }
-  function Zt(t) {
+  function Qt(t) {
     let e = 0.008856451679035631,
       r = 24389 / 27,
       n = t * t * t
     return n > e ? n : (116 * t - 16) / r
   }
-  var N = class t {
+  var U = class t {
     static make(e = Lt(), r = ((200 / Math.PI) * _(50)) / 100, n = 50, o = 2, i = !1) {
       let s = e,
         c = s[0] * 0.401288 + s[1] * 0.650173 + s[2] * -0.051461,
@@ -129,10 +129,10 @@
         C = g * g * g * g,
         T = 1 - C,
         M = C * r + 0.1 * T * T * Math.cbrt(5 * r),
-        x = _(n) / e[1],
-        H = 1.48 + Math.sqrt(x),
-        A = 0.725 / Math.pow(x, 0.2),
-        S = A,
+        A = _(n) / e[1],
+        H = 1.48 + Math.sqrt(A),
+        x = 0.725 / Math.pow(A, 0.2),
+        S = x,
         k = [
           Math.pow((M * b[0] * c) / 100, 0.42),
           Math.pow((M * b[1] * l) / 100, 0.42),
@@ -143,8 +143,8 @@
           (400 * k[1]) / (k[1] + 27.13),
           (400 * k[2]) / (k[2] + 27.13),
         ],
-        R = (2 * F[0] + F[1] + 0.05 * F[2]) * A
-      return new t(x, R, A, S, d, f, b, M, Math.pow(M, 0.25), H)
+        R = (2 * F[0] + F[1] + 0.05 * F[2]) * x
+      return new t(A, R, x, S, d, f, b, M, Math.pow(M, 0.25), H)
     }
     constructor(e, r, n, o, i, s, c, l, h, u) {
       ;((this.n = e),
@@ -159,8 +159,8 @@
         (this.z = u))
     }
   }
-  N.DEFAULT = N.make()
-  var Y = class t {
+  U.DEFAULT = U.make()
+  var $ = class t {
     constructor(e, r, n, o, i, s, c, l, h) {
       ;((this.hue = e),
         (this.chroma = r),
@@ -180,7 +180,7 @@
       return 1.41 * Math.pow(i, 0.63)
     }
     static fromInt(e) {
-      return t.fromIntInViewingConditions(e, N.DEFAULT)
+      return t.fromIntInViewingConditions(e, U.DEFAULT)
     }
     static fromIntInViewingConditions(e, r) {
       let n = (e & 16711680) >> 16,
@@ -199,36 +199,36 @@
         C = r.rgbD[1] * f,
         T = r.rgbD[2] * b,
         M = Math.pow((r.fl * Math.abs(g)) / 100, 0.42),
-        x = Math.pow((r.fl * Math.abs(C)) / 100, 0.42),
+        A = Math.pow((r.fl * Math.abs(C)) / 100, 0.42),
         H = Math.pow((r.fl * Math.abs(T)) / 100, 0.42),
-        A = (E(g) * 400 * M) / (M + 27.13),
-        S = (E(C) * 400 * x) / (x + 27.13),
+        x = (E(g) * 400 * M) / (M + 27.13),
+        S = (E(C) * 400 * A) / (A + 27.13),
         k = (E(T) * 400 * H) / (H + 27.13),
-        F = (11 * A + -12 * S + k) / 11,
-        R = (A + S - 2 * k) / 9,
-        w = (20 * A + 20 * S + 21 * k) / 20,
-        $ = (40 * A + 20 * S + k) / 20,
+        F = (11 * x + -12 * S + k) / 11,
+        R = (x + S - 2 * k) / 9,
+        w = (20 * x + 20 * S + 21 * k) / 20,
+        K = (40 * x + 20 * S + k) / 20,
         q = (Math.atan2(R, F) * 180) / Math.PI,
-        U = q < 0 ? q + 360 : q >= 360 ? q - 360 : q,
-        ht = (U * Math.PI) / 180,
-        mt = $ * r.nbb,
+        z = q < 0 ? q + 360 : q >= 360 ? q - 360 : q,
+        ht = (z * Math.PI) / 180,
+        mt = K * r.nbb,
         X = 100 * Math.pow(mt / r.aw, r.c * r.z),
         ft = (4 / r.c) * Math.sqrt(X / 100) * (r.aw + 4) * r.fLRoot,
-        Pt = U < 20.14 ? U + 360 : U,
+        Pt = z < 20.14 ? z + 360 : z,
         kt = 0.25 * (Math.cos((Pt * Math.PI) / 180 + 2) + 3.8),
-        Dt = ((5e4 / 13) * kt * r.nc * r.ncb * Math.sqrt(F * F + R * R)) / (w + 0.305),
-        pt = Math.pow(Dt, 0.9) * Math.pow(1.64 - Math.pow(0.29, r.n), 0.73),
+        It = ((5e4 / 13) * kt * r.nc * r.ncb * Math.sqrt(F * F + R * R)) / (w + 0.305),
+        pt = Math.pow(It, 0.9) * Math.pow(1.64 - Math.pow(0.29, r.n), 0.73),
         Bt = pt * Math.sqrt(X / 100),
         Ot = Bt * r.fLRoot,
-        jt = 50 * Math.sqrt((pt * r.c) / (r.aw + 4)),
-        qt = ((1 + 100 * 0.007) * X) / (1 + 0.007 * X),
+        qt = 50 * Math.sqrt((pt * r.c) / (r.aw + 4)),
+        $t = ((1 + 100 * 0.007) * X) / (1 + 0.007 * X),
         Rt = (1 / 0.0228) * Math.log(1 + 0.0228 * Ot),
-        Yt = Rt * Math.cos(ht),
-        $t = Rt * Math.sin(ht)
-      return new t(U, Bt, X, ft, Ot, jt, qt, Yt, $t)
+        Kt = Rt * Math.cos(ht),
+        Yt = Rt * Math.sin(ht)
+      return new t(z, Bt, X, ft, Ot, qt, $t, Kt, Yt)
     }
     static fromJch(e, r, n) {
-      return t.fromJchInViewingConditions(e, r, n, N.DEFAULT)
+      return t.fromJchInViewingConditions(e, r, n, U.DEFAULT)
     }
     static fromJchInViewingConditions(e, r, n, o) {
       let i = (4 / o.c) * Math.sqrt(e / 100) * (o.aw + 4) * o.fLRoot,
@@ -243,7 +243,7 @@
       return new t(n, r, e, i, s, l, u, y, f)
     }
     static fromUcs(e, r, n) {
-      return t.fromUcsInViewingConditions(e, r, n, N.DEFAULT)
+      return t.fromUcsInViewingConditions(e, r, n, U.DEFAULT)
     }
     static fromUcsInViewingConditions(e, r, n, o) {
       let i = r,
@@ -256,7 +256,7 @@
       return t.fromJchInViewingConditions(d, h, u, o)
     }
     toInt() {
-      return this.viewed(N.DEFAULT)
+      return this.viewed(U.DEFAULT)
     }
     viewed(e) {
       let r = this.chroma === 0 || this.j === 0 ? 0 : this.chroma / Math.sqrt(this.j / 100),
@@ -276,17 +276,17 @@
         C = (460 * l - 220 * y - 6300 * f) / 1403,
         T = Math.max(0, (27.13 * Math.abs(b)) / (400 - Math.abs(b))),
         M = E(b) * (100 / e.fl) * Math.pow(T, 1 / 0.42),
-        x = Math.max(0, (27.13 * Math.abs(g)) / (400 - Math.abs(g))),
-        H = E(g) * (100 / e.fl) * Math.pow(x, 1 / 0.42),
-        A = Math.max(0, (27.13 * Math.abs(C)) / (400 - Math.abs(C))),
-        S = E(C) * (100 / e.fl) * Math.pow(A, 1 / 0.42),
+        A = Math.max(0, (27.13 * Math.abs(g)) / (400 - Math.abs(g))),
+        H = E(g) * (100 / e.fl) * Math.pow(A, 1 / 0.42),
+        x = Math.max(0, (27.13 * Math.abs(C)) / (400 - Math.abs(C))),
+        S = E(C) * (100 / e.fl) * Math.pow(x, 1 / 0.42),
         k = M / e.rgbD[0],
         F = H / e.rgbD[1],
         R = S / e.rgbD[2],
         w = 1.86206786 * k - 1.01125463 * F + 0.14918677 * R,
-        $ = 0.38752654 * k + 0.62144744 * F - 0.00897398 * R,
-        K = -0.0158415 * k - 0.03412294 * F + 1.04996444 * R
-      return Et(w, $, K)
+        K = 0.38752654 * k + 0.62144744 * F - 0.00897398 * R,
+        J = -0.0158415 * k - 0.03412294 * F + 1.04996444 * R
+      return Et(w, K, J)
     }
     static fromXyzInViewingConditions(e, r, n, o) {
       let i = 0.401288 * e + 0.650173 * r - 0.051461 * n,
@@ -303,26 +303,26 @@
         C = (E(u) * 400 * f) / (f + 27.13),
         T = (11 * b + -12 * g + C) / 11,
         M = (b + g - 2 * C) / 9,
-        x = (20 * b + 20 * g + 21 * C) / 20,
+        A = (20 * b + 20 * g + 21 * C) / 20,
         H = (40 * b + 20 * g + C) / 20,
         S = (Math.atan2(M, T) * 180) / Math.PI,
         k = S < 0 ? S + 360 : S >= 360 ? S - 360 : S,
         F = (k * Math.PI) / 180,
         R = H * o.nbb,
         w = 100 * Math.pow(R / o.aw, o.c * o.z),
-        $ = (4 / o.c) * Math.sqrt(w / 100) * (o.aw + 4) * o.fLRoot,
-        K = k < 20.14 ? k + 360 : k,
-        q = (1 / 4) * (Math.cos((K * Math.PI) / 180 + 2) + 3.8),
-        ht = ((5e4 / 13) * q * o.nc * o.ncb * Math.sqrt(T * T + M * M)) / (x + 0.305),
+        K = (4 / o.c) * Math.sqrt(w / 100) * (o.aw + 4) * o.fLRoot,
+        J = k < 20.14 ? k + 360 : k,
+        q = (1 / 4) * (Math.cos((J * Math.PI) / 180 + 2) + 3.8),
+        ht = ((5e4 / 13) * q * o.nc * o.ncb * Math.sqrt(T * T + M * M)) / (A + 0.305),
         mt = Math.pow(ht, 0.9) * Math.pow(1.64 - Math.pow(0.29, o.n), 0.73),
         X = mt * Math.sqrt(w / 100),
         ft = X * o.fLRoot,
         Pt = 50 * Math.sqrt((mt * o.c) / (o.aw + 4)),
         kt = ((1 + 100 * 0.007) * w) / (1 + 0.007 * w),
         Mt = Math.log(1 + 0.0228 * ft) / 0.0228,
-        Dt = Mt * Math.cos(F),
+        It = Mt * Math.cos(F),
         pt = Mt * Math.sin(F)
-      return new t(k, X, w, $, ft, Pt, kt, Dt, pt)
+      return new t(k, X, w, K, ft, Pt, kt, It, pt)
     }
     xyzInViewingConditions(e) {
       let r = this.chroma === 0 || this.j === 0 ? 0 : this.chroma / Math.sqrt(this.j / 100),
@@ -342,17 +342,17 @@
         C = (460 * l - 220 * y - 6300 * f) / 1403,
         T = Math.max(0, (27.13 * Math.abs(b)) / (400 - Math.abs(b))),
         M = E(b) * (100 / e.fl) * Math.pow(T, 1 / 0.42),
-        x = Math.max(0, (27.13 * Math.abs(g)) / (400 - Math.abs(g))),
-        H = E(g) * (100 / e.fl) * Math.pow(x, 1 / 0.42),
-        A = Math.max(0, (27.13 * Math.abs(C)) / (400 - Math.abs(C))),
-        S = E(C) * (100 / e.fl) * Math.pow(A, 1 / 0.42),
+        A = Math.max(0, (27.13 * Math.abs(g)) / (400 - Math.abs(g))),
+        H = E(g) * (100 / e.fl) * Math.pow(A, 1 / 0.42),
+        x = Math.max(0, (27.13 * Math.abs(C)) / (400 - Math.abs(C))),
+        S = E(C) * (100 / e.fl) * Math.pow(x, 1 / 0.42),
         k = M / e.rgbD[0],
         F = H / e.rgbD[1],
         R = S / e.rgbD[2],
         w = 1.86206786 * k - 1.01125463 * F + 0.14918677 * R,
-        $ = 0.38752654 * k + 0.62144744 * F - 0.00897398 * R,
-        K = -0.0158415 * k - 0.03412294 * F + 1.04996444 * R
-      return [w, $, K]
+        K = 0.38752654 * k + 0.62144744 * F - 0.00897398 * R,
+        J = -0.0158415 * k - 0.03412294 * F + 1.04996444 * R
+      return [w, K, J]
     }
   }
   var j = class t {
@@ -481,7 +481,7 @@
     }
     static findResultByJ(e, r, n) {
       let o = Math.sqrt(n) * 11,
-        i = N.DEFAULT,
+        i = U.DEFAULT,
         s = 1 / Math.pow(1.64 - Math.pow(0.29, i.n), 0.73),
         l = 0.25 * (Math.cos(e + 2) + 3.8) * (5e4 / 13) * i.nc * i.ncb,
         h = Math.sin(e),
@@ -493,29 +493,29 @@
           C = (i.aw * Math.pow(y, 1 / i.c / i.z)) / i.nbb,
           T = (23 * (C + 0.305) * b) / (23 * l + 11 * b * u + 108 * b * h),
           M = T * u,
-          x = T * h,
-          H = (460 * C + 451 * M + 288 * x) / 1403,
-          A = (460 * C - 891 * M - 261 * x) / 1403,
-          S = (460 * C - 220 * M - 6300 * x) / 1403,
+          A = T * h,
+          H = (460 * C + 451 * M + 288 * A) / 1403,
+          x = (460 * C - 891 * M - 261 * A) / 1403,
+          S = (460 * C - 220 * M - 6300 * A) / 1403,
           k = t.inverseChromaticAdaptation(H),
-          F = t.inverseChromaticAdaptation(A),
+          F = t.inverseChromaticAdaptation(x),
           R = t.inverseChromaticAdaptation(S),
           w = st([k, F, R], t.LINRGB_FROM_SCALED_DISCOUNT)
         if (w[0] < 0 || w[1] < 0 || w[2] < 0) return 0
-        let $ = t.Y_FROM_LINRGB[0],
-          K = t.Y_FROM_LINRGB[1],
+        let K = t.Y_FROM_LINRGB[0],
+          J = t.Y_FROM_LINRGB[1],
           q = t.Y_FROM_LINRGB[2],
-          U = $ * w[0] + K * w[1] + q * w[2]
-        if (U <= 0) return 0
-        if (d === 4 || Math.abs(U - n) < 0.002)
+          z = K * w[0] + J * w[1] + q * w[2]
+        if (z <= 0) return 0
+        if (d === 4 || Math.abs(z - n) < 0.002)
           return w[0] > 100.01 || w[1] > 100.01 || w[2] > 100.01 ? 0 : Tt(w)
-        o = o - ((U - n) * o) / (2 * U)
+        o = o - ((z - n) * o) / (2 * z)
       }
       return 0
     }
     static solveToInt(e, r, n) {
       if (r < 1e-4 || n < 1e-4 || n > 99.9999) return Ht(n)
-      e = z(e)
+      e = N(e)
       let o = (e / 180) * Math.PI,
         i = _(n),
         s = t.findResultByJ(o, r, i)
@@ -524,7 +524,7 @@
       return Tt(c)
     }
     static solveToCam(e, r, n) {
-      return Y.fromInt(t.solveToInt(e, r, n))
+      return $.fromInt(t.solveToInt(e, r, n))
     }
   }
   j.SCALED_DISCOUNT_FROM_LINRGB = [
@@ -596,7 +596,7 @@
     93.43925555268066, 94.29903859396902, 95.16341895893969, 96.03240364439274, 96.9059996312159,
     97.78421388448044, 98.6670533535366, 99.55452497210776,
   ]
-  var D = class t {
+  var I = class t {
     static from(e, r, n) {
       return new t(j.solveToInt(e, r, n))
     }
@@ -626,22 +626,22 @@
     }
     constructor(e) {
       this.argb = e
-      let r = Y.fromInt(e)
+      let r = $.fromInt(e)
       ;((this.internalHue = r.hue),
         (this.internalChroma = r.chroma),
-        (this.internalTone = xt(e)),
+        (this.internalTone = At(e)),
         (this.argb = e))
     }
     setInternalState(e) {
-      let r = Y.fromInt(e)
+      let r = $.fromInt(e)
       ;((this.internalHue = r.hue),
         (this.internalChroma = r.chroma),
-        (this.internalTone = xt(e)),
+        (this.internalTone = At(e)),
         (this.argb = e))
     }
     inViewingConditions(e) {
-      let n = Y.fromInt(this.toInt()).xyzInViewingConditions(e),
-        o = Y.fromXyzInViewingConditions(n[0], n[1], n[2], N.make())
+      let n = $.fromInt(this.toInt()).xyzInViewingConditions(e),
+        o = $.fromXyzInViewingConditions(n[0], n[1], n[2], U.make())
       return t.from(o.hue, o.chroma, it(n[1]))
     }
   }
@@ -691,7 +691,7 @@
       return r && n && o
     }
     static fixIfDisliked(e) {
-      return t.isDisliked(e) ? D.from(e.hue, e.chroma, 70) : e
+      return t.isDisliked(e) ? I.from(e.hue, e.chroma, 70) : e
     }
   }
   var m = class t {
@@ -754,27 +754,27 @@
           C = y.contrastCurve.get(e.contrastLevel),
           T = f.contrastCurve.get(e.contrastLevel),
           M = y.tone(e),
-          x = V.ratioOfTones(u, M) >= C ? M : t.foregroundTone(u, C),
+          A = V.ratioOfTones(u, M) >= C ? M : t.foregroundTone(u, C),
           H = f.tone(e),
-          A = V.ratioOfTones(u, H) >= T ? H : t.foregroundTone(u, T)
+          x = V.ratioOfTones(u, H) >= T ? H : t.foregroundTone(u, T)
         return (
-          r && ((x = t.foregroundTone(u, C)), (A = t.foregroundTone(u, T))),
-          (A - x) * g >= s ||
-            ((A = rt(0, 100, x + s * g)), (A - x) * g >= s || (x = rt(0, 100, A - s * g))),
-          50 <= x && x < 60
+          r && ((A = t.foregroundTone(u, C)), (x = t.foregroundTone(u, T))),
+          (x - A) * g >= s ||
+            ((x = rt(0, 100, A + s * g)), (x - A) * g >= s || (A = rt(0, 100, x - s * g))),
+          50 <= A && A < 60
             ? g > 0
-              ? ((x = 60), (A = Math.max(A, x + s * g)))
-              : ((x = 49), (A = Math.min(A, x + s * g)))
-            : 50 <= A &&
-              A < 60 &&
+              ? ((A = 60), (x = Math.max(x, A + s * g)))
+              : ((A = 49), (x = Math.min(x, A + s * g)))
+            : 50 <= x &&
+              x < 60 &&
               (l
                 ? g > 0
-                  ? ((x = 60), (A = Math.max(A, x + s * g)))
-                  : ((x = 49), (A = Math.min(A, x + s * g)))
+                  ? ((A = 60), (x = Math.max(x, A + s * g)))
+                  : ((A = 49), (x = Math.min(x, A + s * g)))
                 : g > 0
-                  ? (A = 60)
-                  : (A = 49)),
-          b ? x : A
+                  ? (x = 60)
+                  : (x = 49)),
+          b ? A : x
         )
       } else {
         let n = this.tone(e)
@@ -836,7 +836,7 @@
   }
   var P = class t {
       static fromInt(e) {
-        let r = D.fromInt(e)
+        let r = I.fromInt(e)
         return t.fromHct(r)
       }
       static fromHct(e) {
@@ -852,12 +852,12 @@
       tone(e) {
         let r = this.cache.get(e)
         return (
-          r === void 0 && ((r = D.from(this.hue, this.chroma, e).toInt()), this.cache.set(e, r)),
+          r === void 0 && ((r = I.from(this.hue, this.chroma, e).toInt()), this.cache.set(e, r)),
           r
         )
       }
       getHct(e) {
-        return D.fromInt(this.tone(e))
+        return I.fromInt(this.tone(e))
       }
     },
     wt = class {
@@ -876,16 +876,16 @@
           if (this.maxChroma(s) >= this.requestedChroma - 0.01)
             if (Math.abs(o - 50) < Math.abs(i - 50)) i = s
             else {
-              if (o === s) return D.from(this.hue, this.requestedChroma, o)
+              if (o === s) return I.from(this.hue, this.requestedChroma, o)
               o = s
             }
           else c ? (o = s + 1) : (i = s)
         }
-        return D.from(this.hue, this.requestedChroma, o)
+        return I.from(this.hue, this.requestedChroma, o)
       }
       maxChroma(e) {
         if (this.chromaCache.has(e)) return this.chromaCache.get(e)
-        let r = D.from(this.hue, this.maxChromaValue, e).chroma
+        let r = I.from(this.hue, this.maxChromaValue, e).chroma
         return (this.chromaCache.set(e, r), r)
       }
     }
@@ -929,17 +929,17 @@
   function ot(t) {
     return t.variant === B.FIDELITY || t.variant === B.CONTENT
   }
-  function I(t) {
+  function D(t) {
     return t.variant === B.MONOCHROME
   }
-  function Qt(t, e, r, n) {
+  function te(t, e, r, n) {
     let o = r,
-      i = D.from(t, e, r)
+      i = I.from(t, e, r)
     if (i.chroma < e) {
       let s = i.chroma
       for (; i.chroma < e;) {
         o += n ? -1 : 1
-        let c = D.from(t, e, o)
+        let c = I.from(t, e, o)
         if (s > c.chroma || Math.abs(c.chroma - e) < 0.4) break
         let l = Math.abs(c.chroma - e),
           h = Math.abs(i.chroma - e)
@@ -1109,7 +1109,7 @@
   a.primary = m.fromPalette({
     name: 'primary',
     palette: (t) => t.primaryPalette,
-    tone: (t) => (I(t) ? (t.isDark ? 100 : 0) : t.isDark ? 80 : 40),
+    tone: (t) => (D(t) ? (t.isDark ? 100 : 0) : t.isDark ? 80 : 40),
     isBackground: !0,
     background: (t) => a.highestSurface(t),
     contrastCurve: new p(3, 4.5, 7, 7),
@@ -1118,14 +1118,14 @@
   a.onPrimary = m.fromPalette({
     name: 'on_primary',
     palette: (t) => t.primaryPalette,
-    tone: (t) => (I(t) ? (t.isDark ? 10 : 90) : t.isDark ? 20 : 100),
+    tone: (t) => (D(t) ? (t.isDark ? 10 : 90) : t.isDark ? 20 : 100),
     background: (t) => a.primary,
     contrastCurve: new p(4.5, 7, 11, 21),
   })
   a.primaryContainer = m.fromPalette({
     name: 'primary_container',
     palette: (t) => t.primaryPalette,
-    tone: (t) => (ot(t) ? t.sourceColorHct.tone : I(t) ? (t.isDark ? 85 : 25) : t.isDark ? 30 : 90),
+    tone: (t) => (ot(t) ? t.sourceColorHct.tone : D(t) ? (t.isDark ? 85 : 25) : t.isDark ? 30 : 90),
     isBackground: !0,
     background: (t) => a.highestSurface(t),
     contrastCurve: new p(1, 1, 3, 4.5),
@@ -1137,7 +1137,7 @@
     tone: (t) =>
       ot(t)
         ? m.foregroundTone(a.primaryContainer.tone(t), 4.5)
-        : I(t)
+        : D(t)
           ? t.isDark
             ? 0
             : 100
@@ -1166,7 +1166,7 @@
   a.onSecondary = m.fromPalette({
     name: 'on_secondary',
     palette: (t) => t.secondaryPalette,
-    tone: (t) => (I(t) ? (t.isDark ? 10 : 100) : t.isDark ? 20 : 100),
+    tone: (t) => (D(t) ? (t.isDark ? 10 : 100) : t.isDark ? 20 : 100),
     background: (t) => a.secondary,
     contrastCurve: new p(4.5, 7, 11, 21),
   })
@@ -1175,12 +1175,12 @@
     palette: (t) => t.secondaryPalette,
     tone: (t) => {
       let e = t.isDark ? 30 : 90
-      return I(t)
+      return D(t)
         ? t.isDark
           ? 30
           : 85
         : ot(t)
-          ? Qt(t.secondaryPalette.hue, t.secondaryPalette.chroma, e, !t.isDark)
+          ? te(t.secondaryPalette.hue, t.secondaryPalette.chroma, e, !t.isDark)
           : e
     },
     isBackground: !0,
@@ -1192,7 +1192,7 @@
     name: 'on_secondary_container',
     palette: (t) => t.secondaryPalette,
     tone: (t) =>
-      I(t)
+      D(t)
         ? t.isDark
           ? 90
           : 10
@@ -1207,7 +1207,7 @@
   a.tertiary = m.fromPalette({
     name: 'tertiary',
     palette: (t) => t.tertiaryPalette,
-    tone: (t) => (I(t) ? (t.isDark ? 90 : 25) : t.isDark ? 80 : 40),
+    tone: (t) => (D(t) ? (t.isDark ? 90 : 25) : t.isDark ? 80 : 40),
     isBackground: !0,
     background: (t) => a.highestSurface(t),
     contrastCurve: new p(3, 4.5, 7, 7),
@@ -1216,7 +1216,7 @@
   a.onTertiary = m.fromPalette({
     name: 'on_tertiary',
     palette: (t) => t.tertiaryPalette,
-    tone: (t) => (I(t) ? (t.isDark ? 10 : 90) : t.isDark ? 20 : 100),
+    tone: (t) => (D(t) ? (t.isDark ? 10 : 90) : t.isDark ? 20 : 100),
     background: (t) => a.tertiary,
     contrastCurve: new p(4.5, 7, 11, 21),
   })
@@ -1224,7 +1224,7 @@
     name: 'tertiary_container',
     palette: (t) => t.tertiaryPalette,
     tone: (t) => {
-      if (I(t)) return t.isDark ? 60 : 49
+      if (D(t)) return t.isDark ? 60 : 49
       if (!ot(t)) return t.isDark ? 30 : 90
       let e = t.tertiaryPalette.getHct(t.sourceColorHct.tone)
       return nt.fixIfDisliked(e).tone
@@ -1238,7 +1238,7 @@
     name: 'on_tertiary_container',
     palette: (t) => t.tertiaryPalette,
     tone: (t) =>
-      I(t)
+      D(t)
         ? t.isDark
           ? 0
           : 100
@@ -1278,14 +1278,14 @@
   a.onErrorContainer = m.fromPalette({
     name: 'on_error_container',
     palette: (t) => t.errorPalette,
-    tone: (t) => (I(t) ? (t.isDark ? 90 : 10) : t.isDark ? 90 : 30),
+    tone: (t) => (D(t) ? (t.isDark ? 90 : 10) : t.isDark ? 90 : 30),
     background: (t) => a.errorContainer,
     contrastCurve: new p(3, 4.5, 7, 11),
   })
   a.primaryFixed = m.fromPalette({
     name: 'primary_fixed',
     palette: (t) => t.primaryPalette,
-    tone: (t) => (I(t) ? 40 : 90),
+    tone: (t) => (D(t) ? 40 : 90),
     isBackground: !0,
     background: (t) => a.highestSurface(t),
     contrastCurve: new p(1, 1, 3, 4.5),
@@ -1294,7 +1294,7 @@
   a.primaryFixedDim = m.fromPalette({
     name: 'primary_fixed_dim',
     palette: (t) => t.primaryPalette,
-    tone: (t) => (I(t) ? 30 : 80),
+    tone: (t) => (D(t) ? 30 : 80),
     isBackground: !0,
     background: (t) => a.highestSurface(t),
     contrastCurve: new p(1, 1, 3, 4.5),
@@ -1303,7 +1303,7 @@
   a.onPrimaryFixed = m.fromPalette({
     name: 'on_primary_fixed',
     palette: (t) => t.primaryPalette,
-    tone: (t) => (I(t) ? 100 : 10),
+    tone: (t) => (D(t) ? 100 : 10),
     background: (t) => a.primaryFixedDim,
     secondBackground: (t) => a.primaryFixed,
     contrastCurve: new p(4.5, 7, 11, 21),
@@ -1311,7 +1311,7 @@
   a.onPrimaryFixedVariant = m.fromPalette({
     name: 'on_primary_fixed_variant',
     palette: (t) => t.primaryPalette,
-    tone: (t) => (I(t) ? 90 : 30),
+    tone: (t) => (D(t) ? 90 : 30),
     background: (t) => a.primaryFixedDim,
     secondBackground: (t) => a.primaryFixed,
     contrastCurve: new p(3, 4.5, 7, 11),
@@ -1319,7 +1319,7 @@
   a.secondaryFixed = m.fromPalette({
     name: 'secondary_fixed',
     palette: (t) => t.secondaryPalette,
-    tone: (t) => (I(t) ? 80 : 90),
+    tone: (t) => (D(t) ? 80 : 90),
     isBackground: !0,
     background: (t) => a.highestSurface(t),
     contrastCurve: new p(1, 1, 3, 4.5),
@@ -1328,7 +1328,7 @@
   a.secondaryFixedDim = m.fromPalette({
     name: 'secondary_fixed_dim',
     palette: (t) => t.secondaryPalette,
-    tone: (t) => (I(t) ? 70 : 80),
+    tone: (t) => (D(t) ? 70 : 80),
     isBackground: !0,
     background: (t) => a.highestSurface(t),
     contrastCurve: new p(1, 1, 3, 4.5),
@@ -1345,7 +1345,7 @@
   a.onSecondaryFixedVariant = m.fromPalette({
     name: 'on_secondary_fixed_variant',
     palette: (t) => t.secondaryPalette,
-    tone: (t) => (I(t) ? 25 : 30),
+    tone: (t) => (D(t) ? 25 : 30),
     background: (t) => a.secondaryFixedDim,
     secondBackground: (t) => a.secondaryFixed,
     contrastCurve: new p(3, 4.5, 7, 11),
@@ -1353,7 +1353,7 @@
   a.tertiaryFixed = m.fromPalette({
     name: 'tertiary_fixed',
     palette: (t) => t.tertiaryPalette,
-    tone: (t) => (I(t) ? 40 : 90),
+    tone: (t) => (D(t) ? 40 : 90),
     isBackground: !0,
     background: (t) => a.highestSurface(t),
     contrastCurve: new p(1, 1, 3, 4.5),
@@ -1362,7 +1362,7 @@
   a.tertiaryFixedDim = m.fromPalette({
     name: 'tertiary_fixed_dim',
     palette: (t) => t.tertiaryPalette,
-    tone: (t) => (I(t) ? 30 : 80),
+    tone: (t) => (D(t) ? 30 : 80),
     isBackground: !0,
     background: (t) => a.highestSurface(t),
     contrastCurve: new p(1, 1, 3, 4.5),
@@ -1371,7 +1371,7 @@
   a.onTertiaryFixed = m.fromPalette({
     name: 'on_tertiary_fixed',
     palette: (t) => t.tertiaryPalette,
-    tone: (t) => (I(t) ? 100 : 10),
+    tone: (t) => (D(t) ? 100 : 10),
     background: (t) => a.tertiaryFixedDim,
     secondBackground: (t) => a.tertiaryFixed,
     contrastCurve: new p(4.5, 7, 11, 21),
@@ -1379,7 +1379,7 @@
   a.onTertiaryFixedVariant = m.fromPalette({
     name: 'on_tertiary_fixed_variant',
     palette: (t) => t.tertiaryPalette,
-    tone: (t) => (I(t) ? 90 : 30),
+    tone: (t) => (D(t) ? 90 : 30),
     background: (t) => a.tertiaryFixedDim,
     secondBackground: (t) => a.tertiaryFixed,
     contrastCurve: new p(3, 4.5, 7, 11),
@@ -1390,7 +1390,7 @@
         (this.variant = e.variant),
         (this.contrastLevel = e.contrastLevel),
         (this.isDark = e.isDark),
-        (this.sourceColorHct = D.fromInt(e.sourceColorArgb)),
+        (this.sourceColorHct = I.fromInt(e.sourceColorArgb)),
         (this.primaryPalette = e.primaryPalette),
         (this.secondaryPalette = e.secondaryPalette),
         (this.tertiaryPalette = e.tertiaryPalette),
@@ -1402,12 +1402,12 @@
       let o = e.hue
       if (r.length !== n.length)
         throw new Error(`mismatch between hue length ${r.length} & rotations ${n.length}`)
-      if (n.length === 1) return z(e.hue + n[0])
+      if (n.length === 1) return N(e.hue + n[0])
       let i = r.length
       for (let s = 0; s <= i - 2; s++) {
         let c = r[s],
           l = r[s + 1]
-        if (c < o && o < l) return z(o + n[s])
+        if (c < o && o < l) return N(o + n[s])
       }
       return o
     }
@@ -1587,7 +1587,7 @@
         variant: B.EXPRESSIVE,
         contrastLevel: n,
         isDark: r,
-        primaryPalette: P.fromHueAndChroma(z(e.hue + 240), 40),
+        primaryPalette: P.fromHueAndChroma(N(e.hue + 240), 40),
         secondaryPalette: P.fromHueAndChroma(O.getRotatedHue(e, t.hues, t.secondaryRotations), 24),
         tertiaryPalette: P.fromHueAndChroma(O.getRotatedHue(e, t.hues, t.tertiaryRotations), 32),
         neutralPalette: P.fromHueAndChroma(e.hue + 15, 8),
@@ -1598,7 +1598,7 @@
   ct.hues = [0, 21, 51, 121, 151, 191, 271, 321, 360]
   ct.secondaryRotations = [45, 95, 45, 20, 45, 90, 45, 45, 45]
   ct.tertiaryRotations = [120, 120, 20, 45, 20, 15, 20, 120, 120]
-  var At = class extends O {
+  var xt = class extends O {
     constructor(e, r, n) {
       super({
         sourceColorArgb: e.toInt(),
@@ -1607,7 +1607,7 @@
         isDark: r,
         primaryPalette: P.fromHueAndChroma(e.hue, 36),
         secondaryPalette: P.fromHueAndChroma(e.hue, 16),
-        tertiaryPalette: P.fromHueAndChroma(z(e.hue + 60), 24),
+        tertiaryPalette: P.fromHueAndChroma(N(e.hue + 60), 24),
         neutralPalette: P.fromHueAndChroma(e.hue, 6),
         neutralVariantPalette: P.fromHueAndChroma(e.hue, 8),
       })
@@ -1631,19 +1631,19 @@
   lt.hues = [0, 41, 61, 101, 131, 181, 251, 301, 360]
   lt.secondaryRotations = [18, 15, 10, 12, 15, 18, 15, 12, 12]
   lt.tertiaryRotations = [35, 30, 20, 25, 30, 35, 30, 25, 25]
-  var re = { desired: 4, fallbackColorARGB: 4282549748, filter: !0 }
-  function ne(t, e) {
+  var ne = { desired: 4, fallbackColorARGB: 4282549748, filter: !0 }
+  function oe(t, e) {
     return t.score > e.score ? -1 : t.score < e.score ? 1 : 0
   }
-  var W = class t {
+  var Y = class t {
     constructor() {}
     static score(e, r) {
-      let { desired: n, fallbackColorARGB: o, filter: i } = { ...re, ...r },
+      let { desired: n, fallbackColorARGB: o, filter: i } = { ...ne, ...r },
         s = [],
         c = new Array(360).fill(0),
         l = 0
       for (let [f, b] of e.entries()) {
-        let g = D.fromInt(f)
+        let g = I.fromInt(f)
         s.push(g)
         let C = Math.floor(g.hue)
         ;((c[C] += b), (l += b))
@@ -1664,15 +1664,15 @@
         let C = g * 100 * t.WEIGHT_PROPORTION,
           T = f.chroma < t.TARGET_CHROMA ? t.WEIGHT_CHROMA_BELOW : t.WEIGHT_CHROMA_ABOVE,
           M = (f.chroma - t.TARGET_CHROMA) * T,
-          x = C + M
-        u.push({ hct: f, score: x })
+          A = C + M
+        u.push({ hct: f, score: A })
       }
-      u.sort(ne)
+      u.sort(oe)
       let d = []
       for (let f = 90; f >= 15; f--) {
         d.length = 0
         for (let { hct: b } of u)
-          if ((d.find((C) => It(b.hue, C.hue) < f) || d.push(b), d.length >= n)) break
+          if ((d.find((C) => Dt(b.hue, C.hue) < f) || d.push(b), d.length >= n)) break
         if (d.length >= n) break
       }
       let y = []
@@ -1681,12 +1681,12 @@
       return y
     }
   }
-  W.TARGET_CHROMA = 48
-  W.WEIGHT_PROPORTION = 0.7
-  W.WEIGHT_CHROMA_ABOVE = 0.3
-  W.WEIGHT_CHROMA_BELOW = 0.1
-  W.CUTOFF_CHROMA = 5
-  W.CUTOFF_EXCITED_PROPORTION = 0.01
+  Y.TARGET_CHROMA = 48
+  Y.WEIGHT_PROPORTION = 0.7
+  Y.WEIGHT_CHROMA_ABOVE = 0.3
+  Y.WEIGHT_CHROMA_BELOW = 0.1
+  Y.CUTOFF_CHROMA = 5
+  Y.CUTOFF_EXCITED_PROPORTION = 0.01
   function Ft(t) {
     let e = yt(t),
       r = bt(t),
@@ -1695,7 +1695,7 @@
     for (let [i, s] of o.entries()) s.length === 1 && (o[i] = '0' + s)
     return '#' + o.join('')
   }
-  function Nt(t) {
+  function Ut(t) {
     t = t.replace('#', '')
     let e = t.length === 3,
       r = t.length === 6,
@@ -1706,16 +1706,16 @@
       s = 0
     return (
       e
-        ? ((o = J(t.slice(0, 1).repeat(2))),
-          (i = J(t.slice(1, 2).repeat(2))),
-          (s = J(t.slice(2, 3).repeat(2))))
+        ? ((o = W(t.slice(0, 1).repeat(2))),
+          (i = W(t.slice(1, 2).repeat(2))),
+          (s = W(t.slice(2, 3).repeat(2))))
         : r
-          ? ((o = J(t.slice(0, 2))), (i = J(t.slice(2, 4))), (s = J(t.slice(4, 6))))
-          : n && ((o = J(t.slice(2, 4))), (i = J(t.slice(4, 6))), (s = J(t.slice(6, 8)))),
+          ? ((o = W(t.slice(0, 2))), (i = W(t.slice(2, 4))), (s = W(t.slice(4, 6))))
+          : n && ((o = W(t.slice(2, 4))), (i = W(t.slice(4, 6))), (s = W(t.slice(6, 8)))),
       ((255 << 24) | ((o & 255) << 16) | ((i & 255) << 8) | (s & 255)) >>> 0
     )
   }
-  function J(t) {
+  function W(t) {
     return parseInt(t, 16)
   }
   function et(t) {
@@ -1733,7 +1733,7 @@
             .join('')
             .toUpperCase()
   }
-  var oe = {
+  var ae = {
     primary: 'primary',
     'on-primary': 'onPrimary',
     'primary-container': 'primaryContainer',
@@ -1765,7 +1765,7 @@
     'inverse-on-surface': 'inverseOnSurface',
     'inverse-primary': 'inversePrimary',
   }
-  function ae(t) {
+  function se(t) {
     let [e, r, n] = [1, 3, 5].map((u) => parseInt(t.slice(u, u + 2), 16) / 255),
       o = Math.max(e, r, n),
       i = Math.min(e, r, n),
@@ -1780,16 +1780,16 @@
     return `${l.toFixed(3)}, ${(h * 100).toFixed(3)}%, ${(c * 100).toFixed(3)}%`
   }
   var at = new Map()
-  function Ut(t, e) {
+  function zt(t, e) {
     let r = et(t) ?? '#6750A4',
       n = r + e
     if (at.has(n)) return at.get(n)
-    let o = new At(D.fromInt(Nt(r)), e, 0),
+    let o = new xt(I.fromInt(Ut(r)), e, 0),
       i = {},
       s = (c, l) => {
-        ;((i[`--color-${c}`] = l), (i[`--hsl-${c}`] = ae(l)))
+        ;((i[`--color-${c}`] = l), (i[`--hsl-${c}`] = se(l)))
       }
-    for (let [c, l] of Object.entries(oe)) s(c, Ft(o[l]))
+    for (let [c, l] of Object.entries(ae)) s(c, Ft(o[l]))
     for (let [c, l] of Object.entries({
       body: 'surface',
       text: 'on-surface',
@@ -1817,6 +1817,10 @@
       i
     )
   }
+  var ie = /^\/api\/background\/([a-f0-9]{64})$/
+  function _t(t) {
+    return ie.test(t)
+  }
   var ut = {
     mode: 'system',
     sourceColor: '#6750A4',
@@ -1842,8 +1846,12 @@
       typeof r.reduceMotion == 'boolean' && (e.reduceMotion = r.reduceMotion))
     let n = r.background
     if (n && typeof n == 'object') {
-      ;(['off', 'builtin', 'custom'].includes(n.source) && (e.background.source = n.source),
-        typeof n.url == 'string' && n.url.length <= 2048 && se(n.url) && (e.background.url = n.url),
+      ;(['off', 'builtin', 'custom', 'uploaded'].includes(n.source) &&
+        (e.background.source = n.source),
+        typeof n.url == 'string' &&
+          n.url.length <= 2048 &&
+          (ce(n.url) || _t(n.url)) &&
+          (e.background.url = n.url),
         (n.layout === 'banner' || n.layout === 'page') && (e.background.layout = n.layout),
         (n.fit === 'cover' || n.fit === 'contain') && (e.background.fit = n.fit))
       for (let o of ['x', 'y', 'overlay', 'cardOpacity', 'cardBlur'])
@@ -1853,7 +1861,7 @@
     }
     return e
   }
-  function se(t) {
+  function ce(t) {
     if (!t) return !1
     try {
       let e = new URL(t)
@@ -1862,7 +1870,7 @@
       return !1
     }
   }
-  function _t(t) {
+  function Gt(t) {
     if (!t || typeof t != 'object') return {}
     let e = t
     if (e.version === 2 && e.overrides && typeof e.overrides == 'object') {
@@ -1887,7 +1895,7 @@
         ((n.background ??= {}), Object.assign(n.background, { [o]: r.background[o] }))
     return n
   }
-  function Gt() {
+  function jt() {
     let t = window,
       e = matchMedia('(prefers-reduced-motion: reduce)')
     if (
@@ -1936,7 +1944,7 @@
   try {
     let t = null
     try {
-      t = _t(
+      t = Gt(
         JSON.parse(
           localStorage.getItem('nozoki-appearance-v2') ||
             localStorage.getItem('nozoki-appearance-v1') ||
@@ -1953,13 +1961,13 @@
       i = () => {
         let s = r.dataset.nozokiMode
         for (let [c, l] of Object.entries(
-          Ut(r.dataset.nozokiSource ?? n, s === 'dark' || (s === 'system' && o.matches)),
+          zt(r.dataset.nozokiSource ?? n, s === 'dark' || (s === 'system' && o.matches)),
         ))
           r.style.setProperty(c, l)
       }
     ;(i(), o.addEventListener('change', i))
   } catch {}
-  Gt()
+  jt()
 })()
 /*! Bundled license information:
 

@@ -1,3 +1,4 @@
+import { BACKGROUND_IMAGE_LIMIT, isUploadedBackgroundUrl } from './background-image.ts'
 import { z } from 'zod'
 import { MODULE_IDS } from './dashboard.ts'
 import { DEFAULT_APPEARANCE } from './appearance.ts'
@@ -68,8 +69,8 @@ export const SourceColorSchema = z
 const percent = z.number().finite().min(0).max(100)
 export const BackgroundSchema = z
   .strictObject({
-    source: z.enum(['off', 'builtin', 'custom']),
-    url: z.union([z.literal(''), HttpsSchema]),
+    source: z.enum(['off', 'builtin', 'custom', 'uploaded']),
+    url: z.union([z.literal(''), HttpsSchema, z.string().refine(isUploadedBackgroundUrl)]),
     layout: z.enum(['banner', 'page']),
     fit: z.enum(['cover', 'contain']),
     x: percent,
@@ -78,7 +79,14 @@ export const BackgroundSchema = z
     cardOpacity: percent,
     cardBlur: z.number().finite().min(0).max(20),
   })
-  .refine((b) => b.source !== 'custom' || b.url !== '', 'Custom background needs a URL')
+  .refine(
+    (b) => b.source !== 'custom' || HttpsSchema.safeParse(b.url).success,
+    'Custom background needs HTTPS',
+  )
+  .refine(
+    (b) => b.source !== 'uploaded' || isUploadedBackgroundUrl(b.url),
+    'Uploaded background needs a site image',
+  )
 export const ScheduleSchema = ScheduleInputSchema.transform((value): ScheduleInput =>
   'version' in value ? normalizeSchedule(value) : value,
 )
@@ -320,6 +328,11 @@ export const SaveConfigSchema = z
       .min(1)
       .max(Number.MAX_SAFE_INTEGER - 1),
     config: ConfigWriteSchema,
+    backgroundUpload: z
+      .string()
+      .min(1)
+      .max(Math.ceil(BACKGROUND_IMAGE_LIMIT / 3) * 4)
+      .optional(),
   })
   .refine(
     (v) => v.expectedVersion === v.config.site.configVersion,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Appearance } from '../../../shared/contracts/appearance'
+import { isUploadedBackgroundUrl } from '../../../shared/contracts/background-image'
 import { isHttpsImageUrl } from '../../../shared/contracts/appearance'
 const props = defineProps<{ config: Appearance['background'] }>()
 const loaded = ref(false)
@@ -10,12 +11,20 @@ const readiness = useState<'loading' | 'loaded' | 'failed' | 'off'>(
   'nozoki-background-state',
   () => 'loading',
 )
+const uploadPreview = useState<{ url: string; preview: string } | null>(
+  'nozoki-background-upload-preview',
+  () => null,
+)
 const source = computed(() =>
   props.config.source === 'builtin'
     ? '/media/wallpaper-glass-picnic.webp'
-    : props.config.source === 'custom' && isHttpsImageUrl(props.config.url)
-      ? props.config.url
-      : null,
+    : props.config.source === 'uploaded' && isUploadedBackgroundUrl(props.config.url)
+      ? uploadPreview.value?.url === props.config.url
+        ? uploadPreview.value.preview
+        : props.config.url
+      : props.config.source === 'custom' && isHttpsImageUrl(props.config.url)
+        ? props.config.url
+        : null,
 )
 watch(source, () => {
   loaded.value = false
