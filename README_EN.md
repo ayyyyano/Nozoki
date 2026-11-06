@@ -449,25 +449,17 @@ public/              Static assets, fonts and third-party notices
 
 ## Development checks
 
-Choose checks that cover your changes:
+Routine checks:
 
 ```sh
-pnpm typecheck
 pnpm test
+pnpm typecheck
 pnpm format:check
-pnpm build
-pnpm test:d1
 ```
 
-`test:d1` builds the complete Worker and runs on isolated local workerd/D1 databases. Browser tests need a running local service. They use Microsoft Edge by default; set `PLAYWRIGHT_EXECUTABLE_PATH` to select another browser.
+For D1 or Worker API changes, run `pnpm build`, then `pnpm test:d1`. Tests reuse the existing build. For self-hosted server changes, run `pnpm build:node`, then `pnpm test:node`. Both test groups run without a browser by default. Build and deployment commands run independently.
 
-For server tests, run `pnpm build:node` followed by `pnpm test:node`. Tests use isolated SQLite files and cover transactions, cross-connection CAS, collection leases, authentication, CSRF, HTTP idempotency, restart persistence and browser saves.
-
-```sh
-pnpm test:browser
-pnpm test:sliders
-pnpm test:dx
-```
+Run `pnpm test:browser` when interaction checks are needed, after building both Worker and Node targets. Tests use Microsoft Edge by default; set `PLAYWRIGHT_EXECUTABLE_PATH` to select another browser. Run `pnpm test:layout` against a running local preview for layout changes. Screenshots go to the ignored `.wrangler/test-results/` directory.
 
 `pnpm theme:generate` generates the default M3 palette. `pnpm dx:generate` generates the early loading script. Development and build commands run their preparation hooks.
 

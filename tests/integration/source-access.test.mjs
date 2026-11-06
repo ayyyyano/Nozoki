@@ -1,14 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { readFile, readdir, mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { readFile, readdir, mkdtemp, mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { build } from 'esbuild'
 import { hmacKey, mac, hex, randomToken } from '../../server/services/auth-crypto.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
 import { source, sleepMeta, sleepStatus } from '../fixtures/adapters.ts'
-import { launch, settle, select } from '../browser/support.mjs'
 import { expect } from 'playwright/test'
 
 const require = createRequire(import.meta.url),
@@ -52,7 +51,7 @@ test(
   async (t) => {
     const folder = await mkdtemp(resolve('.wrangler/source-access-test-')),
       evidence = resolve(folder, 'evidence')
-    await mkdir(evidence)
+    if (process.env.NOZOKI_TEST_BROWSER === '1') await mkdir(evidence)
     const origin = 'http://127.0.0.1:8808',
       password = 'Synthetic-' + randomToken()
     const env = {
@@ -375,96 +374,106 @@ test(
     const guest = await dash.fetch(origin + '/api/dashboard')
     assert.equal((await guest.json()).modules.find((m) => m.id === 'codex').kind, 'login_required')
 
-    await mf.ready
-    browser = await launch()
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
-    await context.addCookies([
-      { name: cookie.split('=')[0], value: cookie.slice(cookie.indexOf('=') + 1), url: origin },
-    ])
-    const page = await context.newPage(),
-      errors = []
-    page.on('pageerror', (e) => errors.push(e.message))
-    await page.goto(origin + '/admin')
-    await settle(page)
-    await page.getByRole('button', { name: '选择管理分区', exact: true }).click()
-    await page
-      .getByRole('dialog', { name: '选择管理分区' })
-      .getByRole('button', { name: '数据源', exact: true })
-      .click()
-    await expect(page.getByLabel('接入方式', { exact: true })).toHaveCount(0)
-    const scope = page
-      .locator('.admin-editor-item')
-      .filter({ has: page.getByRole('button', { name: /^fixture/ }) })
-      .first()
-    await scope.locator('.admin-item-toggle').click()
-    await expect(
-      scope.getByText('使用 Workers 原生公网 HTTPS 出站，在此批准并保存即可接入。', {
-        exact: true,
-      }),
-    ).toBeVisible()
-    await scope.getByRole('button', { name: '撤销批准', exact: true }).first().click()
-    await scope.getByRole('button', { name: '批准此来源', exact: true }).first().click()
-    const dialog = page.getByRole('alertdialog', { name: '批准来源访问？' })
-    const settledDialog = () =>
-      dialog.evaluate(async (el) => {
-        for (let node = el; node; node = node.parentElement)
-          await Promise.all(
-            node
-              .getAnimations()
-              .filter((a) => a.effect?.getTiming().iterations !== Infinity)
-              .map((a) => a.finished.catch(() => {})),
-          )
-      })
-    await expect(dialog).toBeVisible()
-    await settledDialog()
-    await dialog.getByRole('button', { name: '取消', exact: true }).click()
-    await expect(dialog).toBeHidden()
-    await expect(scope.getByRole('button', { name: '批准此来源', exact: true })).toBeFocused()
-    await scope.getByRole('button', { name: '批准此来源', exact: true }).first().click()
-    await dialog.getByRole('button', { name: '确认批准', exact: true }).click()
-    await expect(dialog).toBeHidden()
-    await expect(scope.getByRole('button', { name: '撤销批准', exact: true })).toBeFocused()
-    await scope.getByLabel('来源刷新间隔（秒）', { exact: true }).fill('75')
-    await scope
-      .getByLabel('服务根 HTTPS 地址', { exact: true })
-      .fill('https://SOURCE.example.com/service')
-    await expect(scope.getByRole('button', { name: '撤销批准', exact: true })).toBeVisible()
-    const browserSaved = page.waitForResponse(
-      (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
+    const refreshBeforeBrowser = (await input()).config.integrations.find(
+      (i) => i.id === 'fixture',
+    ).refreshInterval
+    await t.test(
+      'mobile approval focus and layout',
+      { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
+      async () => {
+        const { launch, settle } = await import('../browser/support.mjs')
+        await mf.ready
+        browser = await launch()
+        const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
+        await context.addCookies([
+          { name: cookie.split('=')[0], value: cookie.slice(cookie.indexOf('=') + 1), url: origin },
+        ])
+        const page = await context.newPage(),
+          errors = []
+        page.on('pageerror', (e) => errors.push(e.message))
+        await page.goto(origin + '/admin')
+        await settle(page)
+        await page.getByRole('button', { name: '选择管理分区', exact: true }).click()
+        await page
+          .getByRole('dialog', { name: '选择管理分区' })
+          .getByRole('button', { name: '数据源', exact: true })
+          .click()
+        await expect(page.getByLabel('接入方式', { exact: true })).toHaveCount(0)
+        const scope = page
+          .locator('.admin-editor-item')
+          .filter({ has: page.getByRole('button', { name: /^fixture/ }) })
+          .first()
+        await scope.locator('.admin-item-toggle').click()
+        await expect(
+          scope.getByText('使用 Workers 原生公网 HTTPS 出站，在此批准并保存即可接入。', {
+            exact: true,
+          }),
+        ).toBeVisible()
+        await scope.getByRole('button', { name: '撤销批准', exact: true }).first().click()
+        await scope.getByRole('button', { name: '批准此来源', exact: true }).first().click()
+        const dialog = page.getByRole('alertdialog', { name: '批准来源访问？' })
+        const settledDialog = () =>
+          dialog.evaluate(async (el) => {
+            for (let node = el; node; node = node.parentElement)
+              await Promise.all(
+                node
+                  .getAnimations()
+                  .filter((a) => a.effect?.getTiming().iterations !== Infinity)
+                  .map((a) => a.finished.catch(() => {})),
+              )
+          })
+        await expect(dialog).toBeVisible()
+        await settledDialog()
+        await dialog.getByRole('button', { name: '取消', exact: true }).click()
+        await expect(dialog).toBeHidden()
+        await expect(scope.getByRole('button', { name: '批准此来源', exact: true })).toBeFocused()
+        await scope.getByRole('button', { name: '批准此来源', exact: true }).first().click()
+        await dialog.getByRole('button', { name: '确认批准', exact: true }).click()
+        await expect(dialog).toBeHidden()
+        await expect(scope.getByRole('button', { name: '撤销批准', exact: true })).toBeFocused()
+        await scope.getByLabel('来源刷新间隔（秒）', { exact: true }).fill('75')
+        await scope
+          .getByLabel('服务根 HTTPS 地址', { exact: true })
+          .fill('https://SOURCE.example.com/service')
+        await expect(scope.getByRole('button', { name: '撤销批准', exact: true })).toBeVisible()
+        const browserSaved = page.waitForResponse(
+          (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
+        )
+        await page.getByRole('button', { name: '保存配置', exact: true }).click()
+        assert.equal((await browserSaved).status(), 200)
+        await expect(page.getByText(/^(?:已保存并确认持久化|配置已保存，)/)).toBeVisible()
+        await expect(scope.getByRole('button', { name: '撤销批准', exact: true })).toBeVisible()
+        await expect(scope.getByLabel('服务根 HTTPS 地址', { exact: true })).toHaveValue(
+          'https://source.example.com/service/',
+        )
+        await page.screenshot({ path: resolve(evidence, 'admin-managed-390.png'), fullPage: true })
+        assert.equal(
+          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          true,
+        )
+        assert.deepEqual(errors, [])
+        assert.equal((await page.locator('body').innerText()).includes('Token 用量'), false)
+        await page.setViewportSize({ width: 1440, height: 900 })
+        await page.screenshot({ path: resolve(evidence, 'admin-managed-1440.png'), fullPage: true })
+        await page.setViewportSize({ width: 320, height: 844 })
+        await scope.getByRole('button', { name: '撤销批准', exact: true }).click()
+        await scope.getByRole('button', { name: '批准此来源', exact: true }).click()
+        await expect(dialog).toBeVisible()
+        assert.equal(
+          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          true,
+        )
+        await settledDialog()
+        const bounds = await dialog.boundingBox()
+        assert.ok(bounds.width >= 280 && bounds.x >= 0 && bounds.x + bounds.width <= 320)
+        await page.screenshot({ path: resolve(evidence, 'approval-320.png') })
+        await page.keyboard.press('Escape')
+        await expect(dialog).toBeHidden()
+        await context.close()
+        await browser.close()
+        browser = null
+      },
     )
-    await page.getByRole('button', { name: '保存配置', exact: true }).click()
-    assert.equal((await browserSaved).status(), 200)
-    await expect(page.getByText(/^(?:已保存并确认持久化|配置已保存，)/)).toBeVisible()
-    await expect(scope.getByRole('button', { name: '撤销批准', exact: true })).toBeVisible()
-    await expect(scope.getByLabel('服务根 HTTPS 地址', { exact: true })).toHaveValue(
-      'https://source.example.com/service/',
-    )
-    await page.screenshot({ path: resolve(evidence, 'admin-managed-390.png'), fullPage: true })
-    assert.equal(
-      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-      true,
-    )
-    assert.deepEqual(errors, [])
-    assert.equal((await page.locator('body').innerText()).includes('Token 用量'), false)
-    await page.setViewportSize({ width: 1440, height: 900 })
-    await page.screenshot({ path: resolve(evidence, 'admin-managed-1440.png'), fullPage: true })
-    await page.setViewportSize({ width: 320, height: 844 })
-    await scope.getByRole('button', { name: '撤销批准', exact: true }).click()
-    await scope.getByRole('button', { name: '批准此来源', exact: true }).click()
-    await expect(dialog).toBeVisible()
-    assert.equal(
-      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-      true,
-    )
-    await settledDialog()
-    const bounds = await dialog.boundingBox()
-    assert.ok(bounds.width >= 280 && bounds.x >= 0 && bounds.x + bounds.width <= 320)
-    await page.screenshot({ path: resolve(evidence, 'approval-320.png') })
-    await page.keyboard.press('Escape')
-    await expect(dialog).toBeHidden()
-    await context.close()
-    await browser.close()
-    browser = null
     await mf.dispose()
     mf = new Miniflare(options)
     db = await mf.getD1Database('DB', 'dashboard')
@@ -490,7 +499,7 @@ test(
       (await (await request('/api/admin/config')).json()).integrations.find(
         (s) => s.id === 'fixture',
       ).refreshInterval,
-      75,
+      process.env.NOZOKI_TEST_BROWSER === '1' ? 75 : refreshBeforeBrowser,
     )
     const beforeMismatch = upstream.length
     await mf.dispose()
@@ -512,32 +521,5 @@ test(
     const mismatched = await request('/api/admin/integrations/fixture/test', 'POST', {})
     assert.equal((await mismatched.json()).code, 'CONNECTOR_UNAVAILABLE')
     assert.equal(upstream.length, beforeMismatch)
-    await writeFile(
-      resolve(evidence, 'result.json'),
-      JSON.stringify(
-        {
-          fixture: true,
-          requests: upstream.length,
-          checks: [
-            'auth',
-            'csrf',
-            'CAS',
-            'idempotency',
-            'probe',
-            'collect',
-            'ACL',
-            'network refusal',
-            'revocation fences lease',
-            'encrypted credentials',
-            'stable Codex identity',
-            'mobile approval focus',
-            'restart',
-          ],
-          pageErrors: errors,
-        },
-        null,
-        2,
-      ),
-    )
   },
 )

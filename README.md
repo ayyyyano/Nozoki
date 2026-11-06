@@ -450,25 +450,17 @@ public/              静态资源、字体和第三方声明
 
 ## 开发检查
 
-按修改范围运行需要的命令：
+常规检查：
 
 ```sh
-pnpm typecheck
 pnpm test
+pnpm typecheck
 pnpm format:check
-pnpm build
-pnpm test:d1
 ```
 
-`test:d1` 构建完整 Worker，并使用隔离的本地 workerd/D1。浏览器测试需要已启动的本地服务，默认使用 Microsoft Edge，可通过 `PLAYWRIGHT_EXECUTABLE_PATH` 指定其他浏览器。
+涉及 D1 或 Worker API 时，先运行 `pnpm build`，再运行 `pnpm test:d1`；测试会复用构建产物。涉及自部署服务时，先运行 `pnpm build:node`，再运行 `pnpm test:node`。两组测试默认都不启动浏览器。构建与部署命令独立执行。
 
-服务器专项测试先运行 `pnpm build:node`，再运行 `pnpm test:node`。测试使用隔离 SQLite，覆盖事务、跨连接 CAS、采集租约、认证、CSRF、HTTP 幂等、重启恢复和浏览器保存。
-
-```sh
-pnpm test:browser
-pnpm test:sliders
-pnpm test:dx
-```
+浏览器交互回归按需运行 `pnpm test:browser`，需要先完成 Worker 和 Node 两端构建。测试默认使用 Microsoft Edge，可通过 `PLAYWRIGHT_EXECUTABLE_PATH` 指定其他浏览器。布局专项使用 `pnpm test:layout`，需要已启动的本地预览服务。截图保存至忽略版本控制的 `.wrangler/test-results/`。
 
 `pnpm theme:generate` 生成 M3 默认色板，`pnpm dx:generate` 生成早期加载脚本。开发和构建命令会调用相应的准备步骤。
 

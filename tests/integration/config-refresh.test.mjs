@@ -7,7 +7,6 @@ import { resolve } from 'node:path'
 import { randomToken } from '../../server/services/auth-crypto.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
 import { tencentFixtures } from '../fixtures/tencent-quotes.ts'
-import { launch, settle } from '../browser/support.mjs'
 import { expect } from 'playwright/test'
 
 const require = createRequire(import.meta.url),
@@ -202,73 +201,83 @@ test(
       )
     assert.equal(requests, 3, 'saving again cannot bypass Retry-After')
 
-    browser = await launch()
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
-    await context.addCookies([
-      { name: 'nozoki_dev_session', value: cookie.split('=')[1], url: origin },
-    ])
-    const home = await context.newPage(),
-      admin = await context.newPage(),
-      errors = []
-    home.on('pageerror', (e) => errors.push(e.message))
-    admin.on('pageerror', (e) => errors.push(e.message))
-    await home.clock.install()
-    await home.goto(origin + '/')
-    await settle(home)
-    await admin.goto(origin + '/admin')
-    await settle(admin)
-    await admin.getByLabel('站点名称', { exact: true }).last().fill('Browser synchronized fixture')
-    await admin.getByRole('button', { name: '保存配置', exact: true }).click()
-    await admin.getByText('已保存并确认持久化', { exact: true }).waitFor()
-    await expect(home).toHaveTitle('Browser synchronized fixture')
-    // A server-side update has no browser notification. Visible-page polling must discover it.
-    await home.bringToFront()
-    await home.waitForLoadState('networkidle')
-    value = await input()
-    value.config.site.siteName = 'Polled fixture'
-    await put(value)
-    await home.clock.fastForward(30001)
-    await expect(home).toHaveTitle('Polled fixture')
-    await home.route('**/api/dashboard', (route) =>
-      route.fulfill({
-        status: 503,
-        contentType: 'application/json',
-        body: '{"code":"DATABASE_ERROR"}',
-      }),
+    await t.test(
+      'browser tab synchronization',
+      { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
+      async () => {
+        const { launch, settle } = await import('../browser/support.mjs')
+        browser = await launch()
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+        await context.addCookies([
+          { name: 'nozoki_dev_session', value: cookie.split('=')[1], url: origin },
+        ])
+        const home = await context.newPage(),
+          admin = await context.newPage(),
+          errors = []
+        home.on('pageerror', (e) => errors.push(e.message))
+        admin.on('pageerror', (e) => errors.push(e.message))
+        await home.clock.install()
+        await home.goto(origin + '/')
+        await settle(home)
+        await admin.goto(origin + '/admin')
+        await settle(admin)
+        await admin
+          .getByLabel('站点名称', { exact: true })
+          .last()
+          .fill('Browser synchronized fixture')
+        await admin.getByRole('button', { name: '保存配置', exact: true }).click()
+        await admin.getByText('已保存并确认持久化', { exact: true }).waitFor()
+        await expect(home).toHaveTitle('Browser synchronized fixture')
+        // A server-side update has no browser notification. Visible-page polling must discover it.
+        await home.bringToFront()
+        await home.waitForLoadState('networkidle')
+        value = await input()
+        value.config.site.siteName = 'Polled fixture'
+        await put(value)
+        await home.clock.fastForward(30001)
+        await expect(home).toHaveTitle('Polled fixture')
+        await home.route('**/api/dashboard', (route) =>
+          route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: '{"code":"DATABASE_ERROR"}',
+          }),
+        )
+        await home.clock.fastForward(30001)
+        await expect(home).toHaveTitle('Polled fixture')
+        assert.equal(
+          await home.getByText('共享配置暂时不可用，请稍后刷新。', { exact: true }).count(),
+          0,
+        )
+        await home.unroute('**/api/dashboard')
+        // A hidden page must not poll, but becoming visible should refresh promptly.
+        await home.evaluate(() =>
+          Object.defineProperty(document, 'visibilityState', {
+            configurable: true,
+            get: () => 'hidden',
+          }),
+        )
+        let reads = 0
+        home.on('request', (r) => {
+          if (new URL(r.url()).pathname === '/api/dashboard') reads++
+        })
+        await home.clock.fastForward(60001)
+        assert.equal(reads, 0)
+        value = await input()
+        value.config.site.siteName = 'Visible again fixture'
+        await put(value)
+        await home.evaluate(() => {
+          Object.defineProperty(document, 'visibilityState', {
+            configurable: true,
+            get: () => 'visible',
+          })
+          document.dispatchEvent(new Event('visibilitychange'))
+        })
+        await expect(home).toHaveTitle('Visible again fixture')
+        assert.equal(requests, 3, 'browser reads and appearance saves never request upstream')
+        assert.deepEqual(errors, [])
+        await context.close()
+      },
     )
-    await home.clock.fastForward(30001)
-    await expect(home).toHaveTitle('Polled fixture')
-    assert.equal(
-      await home.getByText('共享配置暂时不可用，请稍后刷新。', { exact: true }).count(),
-      0,
-    )
-    await home.unroute('**/api/dashboard')
-    // A hidden page must not poll, but becoming visible should refresh promptly.
-    await home.evaluate(() =>
-      Object.defineProperty(document, 'visibilityState', {
-        configurable: true,
-        get: () => 'hidden',
-      }),
-    )
-    let reads = 0
-    home.on('request', (r) => {
-      if (new URL(r.url()).pathname === '/api/dashboard') reads++
-    })
-    await home.clock.fastForward(60001)
-    assert.equal(reads, 0)
-    value = await input()
-    value.config.site.siteName = 'Visible again fixture'
-    await put(value)
-    await home.evaluate(() => {
-      Object.defineProperty(document, 'visibilityState', {
-        configurable: true,
-        get: () => 'visible',
-      })
-      document.dispatchEvent(new Event('visibilitychange'))
-    })
-    await expect(home).toHaveTitle('Visible again fixture')
-    assert.equal(requests, 3, 'browser reads and appearance saves never request upstream')
-    assert.deepEqual(errors, [])
-    await context.close()
   },
 )

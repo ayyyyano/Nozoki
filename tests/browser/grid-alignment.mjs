@@ -13,9 +13,7 @@ const playwrightRequire = createRequire(require.resolve('playwright/package.json
 const { PNG } = require(
   resolve(dirname(playwrightRequire.resolve('playwright-core/package.json')), 'lib/utilsBundle.js'),
 )
-const directory =
-  process.env.ALIGNMENT_EVIDENCE ??
-  'docs/implementation/evidence/phase-07-ui/alignment-background/after'
+const directory = process.env.ALIGNMENT_EVIDENCE ?? '.wrangler/test-results/alignment'
 await mkdir(directory, { recursive: true })
 const browser = await launch()
 const report = {

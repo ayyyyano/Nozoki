@@ -9,12 +9,7 @@ import { randomUUID, randomBytes } from 'node:crypto'
 import { SqliteDatabase } from '../../platform/node/sqlite.mjs'
 import { readConfig, saveConfig } from '../../server/services/config.ts'
 import { editableConfig, CONFIG_BODY_LIMIT } from '../../shared/contracts/admin.ts'
-import { chromium } from 'playwright'
-import { expect } from 'playwright/test'
-import { existsSync } from 'node:fs'
 import { formatTimestamp } from '../../shared/domain/format.ts'
-import { exerciseSectionResets, verifyResetSave } from '../browser/admin-reset.mjs'
-import { exerciseTailscale } from '../browser/tailscale.mjs'
 
 async function portNumber() {
   const server = createServer()
@@ -302,7 +297,14 @@ test(
     )
     await t.test(
       'real browser restores admin, saves a draft and logs out on Node SSR',
+      { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
       async () => {
+        const { chromium } = await import('playwright')
+        const { expect } = await import('playwright/test')
+        const { existsSync } = await import('node:fs')
+        const { exerciseSectionResets, verifyResetSave } =
+          await import('../browser/admin-reset.mjs')
+        const { exerciseTailscale } = await import('../browser/tailscale.mjs')
         const db = new SqliteDatabase(env.NOZOKI_SQLITE_PATH)
         try {
           const current = await readConfig(db),
