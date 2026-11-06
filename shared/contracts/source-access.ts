@@ -6,7 +6,7 @@ export const SourceAccessSchema = z.discriminatedUnion('mode', [
     mode: z.enum(['public', 'private']),
     approved: z.boolean(),
     approvedTarget: z.string().max(3000).nullable().default(null),
-    authentication: z.enum(['none', 'bearer']),
+    authentication: z.enum(['none', 'bearer', 'tailscale-oauth']),
   }),
 ])
 export type SourceAccess = z.infer<typeof SourceAccessSchema>

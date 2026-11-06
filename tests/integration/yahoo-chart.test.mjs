@@ -1,3 +1,4 @@
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
@@ -23,6 +24,8 @@ test('Yahoo approved route, real workerd/D1 collection, ACL, failure retention, 
     id: 'yahoo',
     baseUrl: 'https://query1.finance.yahoo.com/',
   }
+  s.access = { mode: 'public', authentication: 'none', approved: true, approvedTarget: null }
+  s.access.approvedTarget = sourceTargetKey(s, s.access)
   const script = (
     await build({
       entryPoints: ['tests/integration/yahoo-chart-worker.ts'],
@@ -42,6 +45,7 @@ test('Yahoo approved route, real workerd/D1 collection, ACL, failure retention, 
     modules: true,
     script,
     compatibilityDate: '2026-10-19',
+    compatibilityFlags: ['nodejs_compat', 'global_fetch_strictly_public'],
     d1Databases: { DB: 'yahoo-isolated' },
     bindings: {
       NOZOKI_PUBLIC_ROUTES: JSON.stringify([

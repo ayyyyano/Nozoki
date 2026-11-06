@@ -263,11 +263,11 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 ### 在后台接入自建来源
 
 1. 打开「数据源」，添加来源并选择 Provider。协议会跟随 Provider 填入。填写完整服务根 HTTPS 地址，例如 `https://alive.example.com/` 或 `https://example.com/sleepy/`。
-2. 接入方式选择「后台管理 · 公网 HTTPS」。无认证的状态接口选择「不发送凭据」；自己的服务要求 Bearer Key 时选择 Bearer，在「凭据操作 → replace」填写密钥。
+2. 来源统一使用「后台管理 · 公网 HTTPS」。无认证的状态接口选择「不发送凭据」；自己的服务要求 Bearer Key 时选择 Bearer，在「凭据操作 → replace」填写密钥。
 3. 启用来源，点击「批准此来源」，确认地址、协议和凭据用途，再点击顶栏「保存配置」。批准和撤销都在保存后生效。
 4. 点击「只读测试连接」。测试通过后，在「Dashboard 模块」为对应模块选择该来源的 `main` 引用并保存。Collector 会按刷新间隔采集。
 
-更改来源 ID、Provider、协议、服务根地址、网络范围或认证方式后，需要重新批准。更改服务根地址或 Provider 时还需要替换或清除已保存凭据。凭据加密保存在数据库中，后台读取时仅返回配置状态。每份配置最多 10 个来源。
+更改来源 ID、Provider、协议、服务根地址或认证方式后，需要重新批准。更改服务根地址或 Provider 时还需要替换或清除已保存凭据。凭据加密保存在数据库中，后台读取时仅返回配置状态。每份配置最多 10 个来源。
 
 Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cliproxy-bridge` / `cliproxy-v8-accounts`，使用 Management Key 作为 Bearer 凭据。账户身份密钥自动生成并加密保存。建议用反向代理仅开放该协议读取的 `v8/management/credentials` 端点。后台不能将任意 URL 当作自定义协议调用。
 
@@ -277,31 +277,35 @@ Worker 使用 `fetch` 读取已批准的来源，无需额外服务器、连接�
 
 根配置包含 `global_fetch_strictly_public`。它让同一 Cloudflare zone 下的请求经过域名的公开入口，遵守目标的 Workers 路由和安全规则。请保留此标志。目标若有登录页、Cloudflare Access 或交互验证，需要为只读 API 配置合适的访问规则；采集器无法完成浏览器验证。
 
-每次请求限定为批准的 HTTPS 443 服务根目录及已登记的 GET 端点。请求不携带浏览器 Cookie，Bearer 凭据按来源发送，重定向会被拒绝。响应上限为 128KB，普通来源超时 3.5 秒，行情来源超时 10 秒。域名解析后的私网地址由 Workers 网络层在连接时过滤，应用同时拒绝 IP 字面量、回环域名和本地域名。[workerd 网络规则](https://github.com/cloudflare/workerd/blob/main/src/workerd/server/workerd.capnp)和 [Cloudflare 公开路由标志](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public)说明了这些平台行为。
+请求限定为批准的 HTTPS 443 服务根目录。数据采集使用已登记的 GET 端点，Tailscale 令牌交换使用固定官方 POST 端点。请求不携带浏览器 Cookie，Bearer 凭据按来源发送，重定向会被拒绝。响应上限为 128KB，普通来源超时 3.5 秒，行情来源超时 10 秒。域名解析后的私网地址由 Workers 网络层在连接时过滤，应用同时拒绝 IP 字面量、回环域名和本地域名。[workerd 网络规则](https://github.com/cloudflare/workerd/blob/main/src/workerd/server/workerd.capnp)和 [Cloudflare 公开路由标志](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public)说明了这些平台行为。
 
 发布前由部署脚本应用数据库迁移。公网来源的日常增删、批准和凭据修改在后台保存后生效。
 
-Workers 的后台管理模式仅支持公网 HTTPS。私网 IP、仅局域网解析的地址和 Tailscale 内网地址无法通过公网 `fetch` 访问。Node.js 自部署可在内嵌连接器中设置 `NOZOKI_CONNECTOR_PRIVATE_CIDRS`，例如 `10.20.0.0/24,fd12::/64`，再选择「受限私网 HTTPS」。允许网段限于 RFC1918/ULA，回环和元数据地址始终拒绝。证书需受 Node.js 信任，内部 CA 可通过 `NODE_EXTRA_CA_CERTS` 配置。
+后台来源统一使用公网 HTTPS。私网 IP、仅局域网解析的地址和 Tailscale 内网地址需要先通过可信的公网 HTTPS 服务提供受支持的只读 API。Node.js 在连接时解析并固定公网 IP，校验 TLS 证书。
 
-### 已有来源的兼容方式
+### 已有来源迁移
 
-数据库升级后，已有来源保持「内置服务 / 兼容旧配置」。内置服务可继续使用；`NOZOKI_PUBLIC_ROUTES`、`NOZOKI_PRIVATE_ROUTES` 和旧 Relay 也继续按部署白名单工作。旧公网路由依赖部署者确认 DNS 与网络安全。自建公网来源可在后台选择「后台管理 · 公网 HTTPS」，重新批准并保存。Codex 从旧 Relay 切换时会更换匿名账户 ID；若存在按账户 ID 指定的字段权限，保存会拒绝迁移。先在 Dashboard 模块中检查这些规则，改用通配规则，再批准来源并保存。
+部署命令会应用 `0019_public_sources.sql`。旧内置 DeepSeek、腾讯、Yahoo 双镜像和 Tailscale 来源，只有 Provider、协议与官方根地址精确匹配时才会自动转成后台批准。迁移保留来源 ID、加密凭据、模块引用、行情绑定和历史数据，配置版本递增。升级前打开的后台草稿需要重新读取。
+
+其他旧来源会暂停采集，并保留配置供管理员确认。在「数据源」核对公网根地址、协议与认证方式，补齐凭据，点击「批准此来源」并保存。旧 `NOZOKI_PUBLIC_ROUTES`、`NOZOKI_PRIVATE_ROUTES` 与 Relay 路由不再授权生产采集，完成迁移后可清理这些变量及 Relay 配置。
+
+Codex 的 Management Key 填入 Bearer 凭据。若旧 Relay 存放过 Management Key，需要在后台重新填写。已有按账户 ID 配置的权限时，还需在「旧 Relay 账户身份密钥」填入原 `NOZOKI_RELAY_ID_KEY`。保存会只读获取账户并核对 ID；密钥不匹配、目标不可达或原账户已删除时，保存被拒绝，请核实密钥和账户权限。身份密钥加密保存，页面只显示是否已配置。新来源可留空，系统自动生成身份密钥。
 
 ### Tailscale 设备列表
 
 Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 Devices 与 Codex 之间。
 
 1. 在 Tailscale 的 Trust credentials 中创建 OAuth Client，仅授予 `devices:core:read`。
-2. 后台「数据源」添加来源，Provider 选择 `tailscale`。协议和官方地址会自动填入；凭据选择 `replace`，填写 Client ID 和 Client Secret，启用来源并保存。
+2. 后台「数据源」添加来源，Provider 选择 `tailscale`。协议和官方地址会自动填入；凭据选择 `replace`，填写 Client ID 和 Client Secret，启用来源，批准目标并保存。
 3. 在「Dashboard 模块」启用 Tailscale，添加 main 来源引用并选择刚才保存的来源。需要向访客展示设备时，将模块权限设为公开。
 4. IP 可以选择「显示」「不显示」「登录后显示」，默认登录后显示。无权查看时仍保留设备和 IP 行，以 `****` 代替地址；真实地址不会发送给该访问者。
 
-在线状态来自 `connectedToControl`，表示 Tailscale 控制面连接状态，不保证设备上的服务可达。接口不提供前台应用或电量；这些信息继续由 Sleepy 提供。Collector 访问官方 API，无需加入 Tailnet。每轮最多两次请求，不执行设备管理操作。
+在线状态来自 `connectedToControl`，表示 Tailscale 控制面连接状态，不保证设备上的服务可达。接口不提供前台应用或电量；这些信息继续由 Sleepy 提供。Collector 访问官方 API，无需加入 Tailnet。每轮先向固定官方 `/api/v2/oauth/token` 端点 POST 换取只读令牌，再 GET 设备列表，共两次请求。Client Secret 仅发给该官方令牌端点，重定向会被拒绝。
 
 
 ### 默认腾讯行情
 
-新数据库自动加载来源 `tencent`：Provider 为 `quotes-custom`，协议为 `tencent-us-v1`，服务根地址为 `https://web.ifzq.gtimg.cn/`。来源已启用，每 300 秒检查刷新；QQQM、VOO 和行情模块的 `main` 引用均已绑定。此地址已内置批准，无需 API Key 或 `NOZOKI_PUBLIC_ROUTES`。
+新数据库自动加载来源 `tencent`：Provider 为 `quotes-custom`，协议为 `tencent-us-v1`，服务根地址为 `https://web.ifzq.gtimg.cn/`。来源已启用，每 300 秒检查刷新；QQQM、VOO 和行情模块的 `main` 引用均已绑定。默认来源已保存等价的后台批准，无需 API Key 或额外 Worker 变量。
 
 1. 使用本文部署命令应用数据库迁移，默认配置会加载腾讯来源。
 2. 已有站点缺少 `tencent` 时，迁移会自动加载腾讯默认来源，将 QQQM/VOO 的默认 Yahoo 绑定和行情模块的默认 Yahoo 引用切换到腾讯。Yahoo 若已无其他启用引用，会被关闭；其凭据、快照和退避记录仍保留。已有同名来源、其他自定义绑定或达到 10 个来源上限的配置保持原状。配置变更会递增版本并记录系统审计，升级前打开的后台草稿需要重新读取。
@@ -311,7 +315,7 @@ Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 
 
 日涨跌按响应中的昨收计算，金额保存为十进制字符串。美股报价时间按 `America/New_York` 转为 UTC，页面再按站点时区显示。五日走势使用前复权收盘价，历史日期以纽约当地零点记录日期位置，报价观测时间使用独立的上游时间。延迟分钟数未知时显示“延迟未知”。休市旧数据会标记过期，失败时保留最后合法快照。
 
-这是腾讯自选股页面使用的未版本化端点，公开展示权利尚未确认。Yahoo 的 `yahoo-chart-v8` 协议与两个镜像保留为手动选择，不自动回退。旧的 `NOZOKI_PUBLIC_ROUTES` 如覆盖同名来源，需要与新来源设置一致或移除该覆盖。
+这是腾讯自选股页面使用的未版本化端点，公开展示权利尚未确认。Yahoo 的 `yahoo-chart-v8` 协议与两个镜像保留为手动选择，不自动回退。来源授权由后台保存的目标批准决定。
 
 ### 后续更新与常见问题
 
@@ -392,7 +396,7 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 ```
 
-### 采集与私有来源
+### 采集与公网来源
 
 单次采集运行：
 
@@ -400,7 +404,7 @@ WantedBy=multi-user.target
 pnpm collector:node
 ```
 
-网页进程和采集进程使用相同的 `NOZOKI_SQLITE_PATH`、集成解密密钥及连接器配置。`COLLECTOR_EPOCH` 为正整数；更改部署中的集成加密密钥、连接器或旧 Relay 路由时递增。后台保存的来源凭据变更通过来源修订生效。每次命令按五分钟窗口检查到期来源，D1 版本的租约、修订检查、退避及提交守卫同样用于 SQLite。
+网页进程和采集进程使用相同的 `NOZOKI_SQLITE_PATH`、集成解密密钥及连接器配置。`COLLECTOR_EPOCH` 为正整数；更改部署中的集成加密密钥或连接器时递增。后台保存的来源凭据变更通过来源修订生效。每次命令按五分钟窗口检查到期来源，D1 版本的租约、修订检查、退避及提交守卫同样用于 SQLite。
 
 需要自动采集时，由运行账号添加系统 Cron，环境文件及路径按实际情况填写：
 
@@ -408,11 +412,7 @@ pnpm collector:node
 */5 * * * * /usr/bin/node --env-file=/etc/nozoki/nozoki.env /opt/nozoki/.output-node/collector.mjs
 ```
 
-采集命令同时执行有界的小时级清理。定时任务由服务器管理员配置。自建来源在后台批准后使用内嵌连接器。私网网段通过 `NOZOKI_CONNECTOR_PRIVATE_CIDRS` 设置；升级启用内嵌连接器或更改网段时递增 `COLLECTOR_EPOCH`。
-
-旧配置继续使用内嵌 Relay 时，使用 `NOZOKI_RELAY_CONFIG_FILE` 指向受限权限的 JSON 文件，格式为 `{"sources":[{"source":{...},"credential":"..."}]}`。`source` 包含 `id`、`provider`、`protocolVersion`、规范化 HTTPS `baseUrl`、`enabled`、`refreshInterval`、`fieldMappings`、`capabilities` 和 `credentialState`，采用已有 IntegrationSettings 校验。上游管理密钥放在 `credential`，它只供 Relay 使用。`NOZOKI_PRIVATE_ROUTES` 中登记同一来源的 `id`、`provider`、`protocolVersion`、`baseUrl`、`refreshInterval`、`fieldMappings`。路由必须与 D1/SQLite 中已保存的配置一致。还需配置独立的 `NOZOKI_PRIVATE_RELAY_TOKEN` 和 `COLLECTOR_BINDING_REVISION`。Codex 账户协议另外需要稳定的 `NOZOKI_RELAY_ID_KEY`，其 SHA-256 十六进制摘要填入对应路由的 `identityVersion`。
-
-内嵌 Relay 在进程内处理固定请求，不监听额外 HTTP 端口。它使用正常的 TLS 证书校验，来源限于已注册的只读路径。来源没有匹配的公网批准或 Relay 配置时，返回 `TARGET_NOT_APPROVED`。
+采集命令同时执行有界的小时级清理。定时任务由服务器管理员配置。后台批准的公网来源使用进程内受限出站，Tailscale OAuth 使用固定官方端点。网页和采集进程需要使用相同的集成加密密钥。旧来源迁移方法见上文。
 
 ### 数据备份与升级
 

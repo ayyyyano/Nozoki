@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { readFile, readdir, mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { build } from 'esbuild'
-import { randomToken } from '../../server/services/auth-crypto.ts'
+import { hmacKey, mac, hex, randomToken } from '../../server/services/auth-crypto.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
 import { source, sleepMeta, sleepStatus } from '../fixtures/adapters.ts'
@@ -202,24 +202,34 @@ test(
     assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
     assert.equal((await (await save(value, key)).json()).replayed, true)
     assert.equal((await save(value)).status, 409)
-    assert.equal(await db.prepare('SELECT epoch FROM collector_environment').first(), null)
+    await expect
+      .poll(
+        async () =>
+          (
+            await db
+              .prepare("SELECT count(*) n FROM collection_runs WHERE status!='running'")
+              .first()
+          ).n,
+      )
+      .toBe(2)
+    assert.equal((await db.prepare('SELECT epoch FROM collector_environment').first()).epoch, 1)
     const probe = await request('/api/admin/integrations/fixture/test', 'POST', {})
     const probed = await probe.json()
     assert.equal(probed.protocolMatched, true, JSON.stringify(probed))
-    assert.equal(upstream.length, 1)
+    assert.equal(upstream.length, 2)
     assert.equal(upstream[0].authorization, null)
-    assert.equal((await db.prepare('SELECT COUNT(*) n FROM integration_snapshots').first()).n, 0)
+    assert.equal((await db.prepare('SELECT COUNT(*) n FROM integration_snapshots').first()).n, 1)
     const collected = await (await collector.fetch(origin + '/collect')).json()
     assert.equal(collected.fatal, null)
     assert.equal(
       collected.success,
-      1,
+      0,
       JSON.stringify({
         collected,
         runs: (await db.prepare('SELECT source_id,error_code FROM collection_runs').all()).results,
       }),
     )
-    assert.equal(collected.failure, 1, JSON.stringify(collected))
+    assert.equal(collected.failure, 0, JSON.stringify(collected))
     assert.equal(
       (
         await db
@@ -270,8 +280,9 @@ test(
     first.access.approvedTarget = sourceTargetKey(first, first.access)
     first.credential = { operation: 'replace', value: 'Synthetic-source-key' }
     assert.equal((await save(value)).status, 200)
+    await expect.poll(() => upstream.at(-1)?.authorization).toBe('Bearer Synthetic-source-key')
     const bearerResult = await (await collector.fetch(origin + '/collect')).json()
-    assert.equal(bearerResult.success, 1, JSON.stringify(bearerResult))
+    assert.equal(bearerResult.fatal, null)
     assert.equal(upstream.at(-1).authorization, 'Bearer Synthetic-source-key')
     const adminText = await (await request('/api/admin/config')).text()
     assert.ok(!adminText.includes('Synthetic-source-key'))
@@ -289,12 +300,20 @@ test(
     codexModule.enabled = true
     codexModule.visibility = 'admin'
     codexModule.sources.main = { sourceId: codex.id, subject: 'default' }
+    const importedIdentity = randomToken()
+    const expectedAccountId = hex(
+      await mac(await hmacKey(importedIdentity), [
+        'nozoki-codex-account-v1',
+        codex.id,
+        'fixture-account-id',
+      ]),
+    )
     const legacyCodex = structuredClone(value),
       legacySource = legacyCodex.config.integrations.find((s) => s.id === codex.id)
     legacySource.access = { mode: 'legacy' }
     legacySource.enabled = false
     legacyCodex.config.modules.find((m) => m.id === 'codex').fields = {
-      '/accounts/@private-account/state': { enabled: false, visibility: 'admin' },
+      ['/accounts/@' + expectedAccountId + '/state']: { enabled: false, visibility: 'admin' },
     }
     assert.equal((await save(legacyCodex)).status, 200)
     value = await input()
@@ -308,7 +327,7 @@ test(
       ).identity_envelope_json,
       null,
     )
-    value.config.modules.find((m) => m.id === 'codex').fields = {}
+    codex.identityCredential = { operation: 'import', value: importedIdentity }
     assert.equal((await save(value)).status, 200)
     const identity = (
       await db
@@ -316,7 +335,18 @@ test(
         .first()
     ).identity_envelope_json
     assert.ok(identity)
-    assert.equal((await (await collector.fetch(origin + '/collect')).json()).success, 1)
+    await expect
+      .poll(
+        async () =>
+          (
+            await db
+              .prepare(
+                "SELECT count(*) n FROM integration_snapshot_views WHERE source_id='codex-fixture'",
+              )
+              .first()
+          ).n,
+      )
+      .toBe(1)
     const codexSnapshot = () =>
       db
         .prepare(
@@ -340,7 +370,7 @@ test(
       ).identity_envelope_json,
       identity,
     )
-    assert.equal((await (await collector.fetch(origin + '/collect')).json()).success, 1)
+    await expect.poll(() => upstream.at(-1)?.authorization).toBe('Bearer Synthetic-replacement-key')
     assert.equal(JSON.parse((await codexSnapshot()).snapshot_json).data.accounts[0].id, accountId)
     const guest = await dash.fetch(origin + '/api/dashboard')
     assert.equal((await guest.json()).modules.find((m) => m.id === 'codex').kind, 'login_required')
@@ -361,6 +391,7 @@ test(
       .getByRole('dialog', { name: '选择管理分区' })
       .getByRole('button', { name: '数据源', exact: true })
       .click()
+    await expect(page.getByLabel('接入方式', { exact: true })).toHaveCount(0)
     const scope = page
       .locator('.admin-editor-item')
       .filter({ has: page.getByRole('button', { name: /^fixture/ }) })
@@ -403,7 +434,7 @@ test(
     )
     await page.getByRole('button', { name: '保存配置', exact: true }).click()
     assert.equal((await browserSaved).status(), 200)
-    await expect(page.getByText('已保存并确认持久化', { exact: true })).toBeVisible()
+    await expect(page.getByText(/^(?:已保存并确认持久化|配置已保存，)/)).toBeVisible()
     await expect(scope.getByRole('button', { name: '撤销批准', exact: true })).toBeVisible()
     await expect(scope.getByLabel('服务根 HTTPS 地址', { exact: true })).toHaveValue(
       'https://source.example.com/service/',

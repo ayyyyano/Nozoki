@@ -63,7 +63,7 @@ async function workers(path, requests) {
 test('SQLite uses all unchanged migrations, defaults, FK and persistent storage', async () => {
   const { db, directory, path } = await fresh()
   const defaults = createDefaultConfig()
-  defaults.site.configVersion = 2 // 0016 adds the independent module through CAS.
+  defaults.site.configVersion = 3 // 0016 adds Tailscale; 0019 migrates equivalent source grants through CAS.
   assert.deepEqual(await readConfig(db), defaults)
   assert.equal((await db.prepare('PRAGMA foreign_keys').first()).foreign_keys, 1)
   assert.equal((await db.prepare('PRAGMA journal_mode').first()).journal_mode, 'wal')

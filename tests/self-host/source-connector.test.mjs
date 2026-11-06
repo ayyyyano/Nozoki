@@ -7,7 +7,11 @@ import {
   privateCidrs,
   resolveDestination,
 } from '../../platform/node/egress-policy.mjs'
-import { createSourceConnector, pinnedHttpsRead } from '../../platform/node/source-connector.mjs'
+import {
+  createSourceConnector,
+  pinnedHttpsRead,
+  tailscalePublicFetch,
+} from '../../platform/node/source-connector.mjs'
 import { connectorTransport } from '../../server/adapters/source-connector.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { source } from '../fixtures/adapters.ts'
@@ -35,6 +39,61 @@ function requestFixture(body = {}, check = () => {}, status = 200) {
     return req
   }
 }
+test('Tailscale OAuth pins public DNS and TLS, limits POST to fixed token scope and rejects redirects/foreign endpoints', async () => {
+  let requests = 0
+  const wire = tailscalePublicFetch({
+    lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    request: requestFixture({ ok: true }, (url, options) => {
+      requests++
+      assert.equal(url.origin, 'https://api.tailscale.com')
+      assert.equal(options.servername, 'api.tailscale.com')
+      assert.equal(options.rejectUnauthorized, true)
+      options.lookup(url.hostname, {}, (error, address) => {
+        assert.equal(error, null)
+        assert.equal(address, '93.184.216.34')
+      })
+    }),
+  })
+  const init = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      scope: 'devices:core:read',
+      client_id: 'synthetic',
+      client_secret: 'synthetic',
+    }).toString(),
+  }
+  await wire('https://api.tailscale.com/api/v2/oauth/token', init)
+  await wire('https://api.tailscale.com/api/v2/tailnet/-/devices', {
+    method: 'GET',
+    headers: { Authorization: 'Bearer synthetic' },
+  })
+  assert.equal(requests, 2)
+  for (const [url, value] of [
+    ['https://other.example.com/api/v2/oauth/token', init],
+    ['https://api.tailscale.com/api/v2/oauth/token?x=1', init],
+    ['https://api.tailscale.com/api/v2/tailnet/-/devices', init],
+    [
+      'https://api.tailscale.com/api/v2/oauth/token',
+      { ...init, body: init.body.replace('devices%3Acore%3Aread', 'all') },
+    ],
+    [
+      'https://api.tailscale.com/api/v2/oauth/token',
+      { ...init, headers: { ...init.headers, Cookie: 'private' } },
+    ],
+  ])
+    await assert.rejects(wire(url, value), /DESTINATION_BLOCKED/)
+  const blocked = tailscalePublicFetch({
+    lookup: async () => [{ address: '127.0.0.1', family: 4 }],
+    request: requestFixture(),
+  })
+  await assert.rejects(
+    blocked('https://api.tailscale.com/api/v2/oauth/token', init),
+    /DESTINATION_BLOCKED/,
+  )
+  assert.equal(requests, 2)
+})
 test('public address policy blocks IPv4, IPv6 and mapped/private/metadata/special destinations', async () => {
   for (const address of [
     '127.0.0.1',

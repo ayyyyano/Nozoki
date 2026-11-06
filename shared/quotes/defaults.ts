@@ -1,4 +1,16 @@
 import type { IntegrationSettings } from '../contracts/config.ts'
+import { sourceTargetKey } from '../contracts/source-access.ts'
+
+function approved(source: IntegrationSettings): IntegrationSettings {
+  const access = {
+    mode: 'public' as const,
+    authentication: 'none' as const,
+    approved: true,
+    approvedTarget: null as string | null,
+  }
+  access.approvedTarget = sourceTargetKey(source, access)
+  return { ...source, access }
+}
 
 export const TENCENT_SERVICE = {
   provider: 'quotes-custom',
@@ -8,11 +20,11 @@ export const TENCENT_SERVICE = {
 } as const
 
 export function createTencentSource(id = 'tencent'): IntegrationSettings {
-  return {
+  return approved({
     ...createYahooSource(id),
     protocolVersion: TENCENT_SERVICE.protocolVersion,
     baseUrl: TENCENT_SERVICE.baseUrl,
-  }
+  })
 }
 
 export const YAHOO_SERVICE = {
@@ -29,7 +41,7 @@ export const YAHOO_SERVICE_MIRROR = {
 } as const
 
 export function createYahooSource(id = 'yahoo'): IntegrationSettings {
-  return {
+  return approved({
     id,
     provider: YAHOO_SERVICE.provider,
     protocolVersion: YAHOO_SERVICE.protocolVersion,
@@ -38,7 +50,6 @@ export function createYahooSource(id = 'yahoo'): IntegrationSettings {
     refreshInterval: 300,
     fieldMappings: {},
     capabilities: { quote: { supported: true, verified: false } },
-    access: { mode: 'legacy' },
     credentialState: { configured: false, keyVersion: null, lastUpdatedAt: null },
-  }
+  })
 }

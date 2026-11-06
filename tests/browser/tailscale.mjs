@@ -42,7 +42,12 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
     .getByRole('textbox', { name: 'OAuth Client ID', exact: true })
     .fill('synthetic-client')
   await source.locator('input[aria-label="OAuth Client Secret"]').fill('synthetic-secret')
-  await source.getByLabel('启用来源', { exact: true }).click()
+  await source.getByRole('button', { name: '批准此来源', exact: true }).click()
+  await page
+    .getByRole('alertdialog', { name: '批准来源访问？' })
+    .getByRole('button', { name: '确认批准', exact: true })
+    .click()
+  // Keep the synthetic credential source disabled until offline snapshots are seeded.
   await save()
   const savedSourceConfig = await (await context.request.get(origin + '/api/admin/config')).json()
   assert.ok(!JSON.stringify(savedSourceConfig).includes('synthetic-secret'))
@@ -71,6 +76,8 @@ export async function exerciseTailscale(page, context, origin, databasePath) {
   try {
     const config = await readConfig(db),
       tailnet = config.integrations.find((i) => i.id === 'tailscale-ui')
+    await db.prepare("UPDATE integrations SET enabled=1 WHERE id='tailscale-ui'").run()
+    tailnet.enabled = true
     const now = new Date()
     const read = await runAdapter({
       source: tailnet,

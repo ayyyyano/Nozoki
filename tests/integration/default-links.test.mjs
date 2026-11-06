@@ -66,7 +66,7 @@ test('0011 default links on isolated native workerd D1', async (t) => {
         // The ordered history applies 0011 after 0010 (empty-integrations guard holds)
         // and 0013 afterwards (default yahoo source): the baseline matches code defaults.
         const defaults = createDefaultConfig()
-        defaults.site.configVersion = 2
+        defaults.site.configVersion = 3
         assert.deepEqual(await readConfig(db), defaults)
         assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, [])
       },

@@ -197,8 +197,10 @@ useHead({ title: '站点管理 · Nozoki' })
 let pending: { key: string; signature: string } | null = null
 function clearSecrets() {
   if (draft.value)
-    for (const i of draft.value.integrations)
+    for (const i of draft.value.integrations) {
       if (i.credential.operation === 'replace') i.credential.value = ''
+      delete i.identityCredential
+    }
 }
 function accept(config: Config) {
   clearSecrets()
@@ -308,9 +310,11 @@ async function save() {
           ? '数据库等待迁移，已暂停保存。草稿已保留，完成迁移后请读取最新配置。'
           : data?.reason === 'CREDENTIAL_KEY_UNAVAILABLE'
             ? '未配置服务端集成加密密钥；请配置本地密钥后重试，凭据不会明文保存。'
-            : data?.code === 'VALIDATION_ERROR'
-              ? '配置校验未通过。请检查字段、来源引用和地址变化后的凭据操作。'
-              : '未能确认保存结果。草稿已保留；原样重试会复用请求标识。'
+            : data?.reason === 'IDENTITY_IMPORT_UNVERIFIED'
+              ? '旧账户身份密钥未通过核对。请检查原 Relay 密钥、Management Key 和来源地址；现有权限与配置未更改。'
+              : data?.code === 'VALIDATION_ERROR'
+                ? '配置校验未通过。请检查字段、来源引用和地址变化后的凭据操作。'
+                : '未能确认保存结果。草稿已保留；原样重试会复用请求标识。'
   } finally {
     busy.value = false
   }

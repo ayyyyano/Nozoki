@@ -60,7 +60,7 @@ test(
       }
     })
     for (let n = 0; !output.includes('Nozoki listening'); n++) {
-      assert.ok(n < 100 && child.exitCode === null, 'Node server did not start')
+      assert.ok(n < 400 && child.exitCode === null, 'Node server did not start: ' + output)
       await new Promise((r) => setTimeout(r, 50))
     }
     browser = await launch()

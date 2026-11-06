@@ -102,7 +102,7 @@ test('phase 02 uses real local workerd D1, not an SQLite mock', async (t) => {
         ),
       )
     const defaults = createDefaultConfig()
-    defaults.site.configVersion = 2
+    defaults.site.configVersion = 3
     assert.deepEqual(await readConfig(db), defaults)
     assert.equal(await rowCount('dashboard_modules'), 8)
     assert.equal(await rowCount('quote_symbols'), 2)

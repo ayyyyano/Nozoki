@@ -2,13 +2,9 @@ import { ProbeResultSchema, type ProbeResult } from '../../shared/contracts/adap
 import { IdSchema } from '../../shared/contracts/config.ts'
 import { readIntegration } from '../repositories/integrations.ts'
 import type { Database } from '../types/database.ts'
-import { credentialState, decryptCredential } from './credentials.ts'
-import { credentialKeys } from './credential-keys.ts'
-import { selectedAdapter, runAdapter } from '../adapters/registry.ts'
-import { productionTransport, assertProductionTarget } from '../adapters/transport.ts'
+import { credentialState } from './credentials.ts'
+import { selectedAdapter } from '../adapters/registry.ts'
 import { AdapterError, type AdapterRead } from '../adapters/types.ts'
-import { readPrivateSource } from '../adapters/private-relay.ts'
-import { publicTarget } from '../adapters/public-targets.ts'
 import { readConfig } from './config.ts'
 import { declaredCapabilities } from '../adapters/capabilities.ts'
 import {
@@ -60,12 +56,10 @@ export async function testIntegration(
             .slice(0, 1)
         : undefined
     let result: AdapterRead
-    const target =
-      source.access?.mode && source.access.mode !== 'legacy' ? undefined : publicTarget(source, env)
     if (source.access && source.access.mode !== 'legacy') {
       if ((await collectionEnvironmentMatches(db, env)) === false)
         throw new AdapterError('CONNECTOR_UNAVAILABLE')
-      requiresAuthentication = source.access.authentication === 'bearer'
+      requiresAuthentication = source.access.authentication !== 'none'
       result = await readManagedSource(
         source,
         record.envelope,
@@ -75,30 +69,8 @@ export async function testIntegration(
         'probe',
         { quoteSymbols },
       )
-    } else if (!target) {
-      result = await readPrivateSource(source, env, 'probe', now)
     } else {
-      assertProductionTarget(source, env)
-      requiresAuthentication = target.authentication !== 'none'
-      let credential: string | undefined
-      if (requiresAuthentication && record.envelope) {
-        let ring
-        try {
-          ring = await credentialKeys(env)
-        } catch {
-          throw new AdapterError('CREDENTIAL_UNAVAILABLE')
-        }
-        if (!Object.hasOwn(ring.keys, record.envelope.keyVersion))
-          throw new AdapterError('CREDENTIAL_UNAVAILABLE')
-        try {
-          credential = await decryptCredential(id, source.provider, record.envelope, ring)
-        } catch {
-          throw new AdapterError('CREDENTIAL_INVALID')
-        }
-      }
-      const transport = productionTransport(source, credential, { environment: env, quoteSymbols })
-      result = await runAdapter({ source, now, transport, quoteSymbols }, 'probe')
-      credential = undefined
+      throw new AdapterError('ACCESS_NOT_APPROVED')
     }
     response.status = result.status
     response.capabilities = result.capabilities

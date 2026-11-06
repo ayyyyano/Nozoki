@@ -19,6 +19,27 @@ import { normalizeServiceTarget } from './service-target.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { randomToken } from './auth-crypto.ts'
 import { parseFieldPath } from '../../shared/contracts/field-paths.ts'
+import { TailscaleCredentialsSchema } from '../adapters/tailscale-transport.ts'
+export function accountPolicyIds(config: Pick<Config, 'modules'>, sourceId: string) {
+  return [
+    ...new Set(
+      config.modules.flatMap((m) =>
+        m.id === 'codex' && m.sources.main?.sourceId === sourceId
+          ? Object.keys(m.fields).flatMap((path) => {
+              const parts = parseFieldPath('codex', path)
+              return (
+                parts?.flatMap((part, index) =>
+                  part === 'accounts' && parts[index + 1]?.startsWith('@')
+                    ? [parts[index + 1]!.slice(1)]
+                    : [],
+                ) ?? []
+              )
+            })
+          : [],
+      ),
+    ),
+  ]
+}
 export type SaveResult =
   | { success: true; configVersion: number; changed?: boolean; replayed?: boolean }
   | {
@@ -30,7 +51,7 @@ export type SaveResult =
         | 'DATABASE_ERROR'
         | 'MIGRATIONS_REQUIRED'
       fieldErrors?: string[]
-      reason?: 'CONFIG_NOT_INITIALIZED' | 'CONFIG_BASELINE_INVALID'
+      reason?: 'CONFIG_NOT_INITIALIZED' | 'CONFIG_BASELINE_INVALID' | 'IDENTITY_IMPORT_UNVERIFIED'
     }
 export async function readConfig(db: Database): Promise<Config> {
   return (await readStoredState(db)).config
@@ -39,7 +60,13 @@ export async function readConfig(db: Database): Promise<Config> {
 export async function saveConfig(
   db: Database,
   value: unknown,
-  options: { actor: AuditActor; keys?: CredentialKeyRing; now?: Date; request?: ConfigRequest },
+  options: {
+    actor: AuditActor
+    keys?: CredentialKeyRing
+    now?: Date
+    request?: ConfigRequest
+    verifiedIdentityImports?: readonly string[]
+  },
 ): Promise<SaveResult> {
   let parsed: ReturnType<typeof SaveConfigSchema.safeParse>
   try {
@@ -90,9 +117,31 @@ export async function saveConfig(
     const stored: StoredIntegration[] = []
     for (const i of config.integrations) {
       const old = current.integrations.find((s) => s.settings.id === i.id)
-      const { credential, ...settings } = i
+      const { credential, identityCredential, ...settings } = i
       settings.baseUrl = normalizeServiceTarget(settings.baseUrl)
       settings.access ??= { mode: 'legacy' }
+      if (settings.access.mode !== 'legacy') {
+        const oauth = settings.access.authentication === 'tailscale-oauth'
+        if (
+          (settings.provider === 'tailscale') !== oauth ||
+          (oauth &&
+            (settings.access.mode !== 'public' ||
+              settings.baseUrl !== 'https://api.tailscale.com/' ||
+              settings.protocolVersion !== 'tailscale-devices-v2'))
+        )
+          return { success: false, code: 'VALIDATION_ERROR', fieldErrors: ['integrations.access'] }
+        if (oauth && credential.operation === 'replace') {
+          try {
+            TailscaleCredentialsSchema.parse(JSON.parse(credential.value))
+          } catch {
+            return {
+              success: false,
+              code: 'VALIDATION_ERROR',
+              fieldErrors: ['integrations.credentials'],
+            }
+          }
+        }
+      }
       if (
         settings.access.mode !== 'legacy' &&
         settings.access.authentication === 'bearer' &&
@@ -149,30 +198,55 @@ export async function saveConfig(
             ? null
             : (old?.envelope ?? null)
       let identityEnvelope = old?.identityEnvelope ?? null
+      const policyIds = new Set([
+        ...accountPolicyIds(current.config, settings.id),
+        ...accountPolicyIds(config, settings.id),
+      ])
+      if (identityCredential) {
+        if (
+          identityEnvelope ||
+          settings.access.mode !== 'public' ||
+          settings.provider !== 'cliproxy-bridge' ||
+          settings.protocolVersion !== 'cliproxy-v8-accounts'
+        )
+          return {
+            success: false,
+            code: 'VALIDATION_ERROR',
+            fieldErrors: ['integrations.identityCredential'],
+          }
+        if (policyIds.size && !options.verifiedIdentityImports?.includes(settings.id))
+          return {
+            success: false,
+            code: 'VALIDATION_ERROR',
+            reason: 'IDENTITY_IMPORT_UNVERIFIED',
+            fieldErrors: ['modules.codex.fields'],
+          }
+        identityEnvelope = await encryptCredential(
+          i.id,
+          settings.provider + ':identity',
+          identityCredential.value,
+          options.keys,
+          now,
+        )
+      }
       if (
-        old &&
         !identityEnvelope &&
         settings.access.mode !== 'legacy' &&
         settings.provider === 'cliproxy-bridge' &&
         settings.protocolVersion === 'cliproxy-v8-accounts' &&
-        config.modules.some(
-          (m) =>
-            m.id === 'codex' &&
-            m.sources.main?.sourceId === settings.id &&
-            Object.keys(m.fields).some((path) => {
-              const parts = parseFieldPath('codex', path)
-              return parts?.some(
-                (part, index) => part === 'accounts' && parts[index + 1]?.startsWith('@'),
-              )
-            }),
-        )
+        policyIds.size > 0
       )
-        return { success: false, code: 'VALIDATION_ERROR', fieldErrors: ['modules.codex.fields'] }
+        return {
+          success: false,
+          code: 'VALIDATION_ERROR',
+          reason: 'IDENTITY_IMPORT_UNVERIFIED',
+          fieldErrors: ['integrations.identityCredential'],
+        }
       if (
         settings.access.mode !== 'legacy' &&
         settings.provider === 'cliproxy-bridge' &&
         settings.protocolVersion === 'cliproxy-v8-accounts' &&
-        (!identityEnvelope || old?.settings.provider !== settings.provider)
+        !identityEnvelope
       )
         identityEnvelope = await encryptCredential(
           i.id,

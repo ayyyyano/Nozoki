@@ -21,10 +21,12 @@ export function canonical(value: unknown): string {
 export function editableConfig(config: Config): ConfigWrite {
   return {
     ...(JSON.parse(JSON.stringify(config)) as Config),
-    integrations: config.integrations.map(({ credentialState: _state, ...i }) => ({
-      ...JSON.parse(JSON.stringify(i)),
-      credential: { operation: 'keep' as const },
-    })),
+    integrations: config.integrations.map(
+      ({ credentialState: _state, identityConfigured: _identity, ...i }) => ({
+        ...JSON.parse(JSON.stringify(i)),
+        credential: { operation: 'keep' as const },
+      }),
+    ),
   }
 }
 export function orderedConfig<T extends ConfigWrite>(config: T): T {

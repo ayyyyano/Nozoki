@@ -1,3 +1,4 @@
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
@@ -21,6 +22,7 @@ test('native D1 migration preserves old views, rolls back DDL on failure, and fe
     modules: true,
     script: 'export default {fetch(){return new Response("test")}}',
     compatibilityDate: '2026-10-19',
+    compatibilityFlags: ['nodejs_compat', 'global_fetch_strictly_public'],
     d1Databases: { DB: 'tailnet-upgrade', FAIL: 'tailnet-rollback' },
   })
   options.resourcePersistencePath = await mkdtemp(resolve('.wrangler/tailscale-upgrade-'))
@@ -115,6 +117,7 @@ test('workerd collects two bounded OAuth requests, persists independent Tailscal
     modules: true,
     script,
     compatibilityDate: '2026-10-19',
+    compatibilityFlags: ['nodejs_compat', 'global_fetch_strictly_public'],
     d1Databases: { DB: 'tailnet-collector' },
     bindings: {
       COLLECTOR_EPOCH: '1',
@@ -162,6 +165,14 @@ test('workerd collects two bounded OAuth requests, persists independent Tailscal
       capabilities: {},
       credential: { operation: 'replace', value: tailscaleCredentials },
     })
+    const source = draft.integrations.at(-1)
+    source.access = {
+      mode: 'public',
+      authentication: 'tailscale-oauth',
+      approved: true,
+      approvedTarget: null,
+    }
+    source.access.approvedTarget = sourceTargetKey(source, source.access)
     const module = draft.modules.find((m) => m.id === 'tailscale')
     module.enabled = true
     module.visibility = 'public'
