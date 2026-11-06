@@ -3,6 +3,7 @@ import { managedServiceRoot } from '../../shared/contracts/source-access.ts'
 import { assertManagedSource, connectorReady, connectorTransport } from './source-connector.ts'
 import { responseTransport, serviceEndpoint, type TransportOptions } from './transport.ts'
 import { AdapterError } from './types.ts'
+import { tailscaleTransport } from './tailscale-transport.ts'
 
 // Runtime detection is independent of source configuration and deployment variables.
 export function workerPublicEgress(): boolean {
@@ -25,6 +26,13 @@ export function managedTransport(
   options: TransportOptions = {},
 ) {
   const access = assertManagedSource(source)
+  if (access.authentication === 'tailscale-oauth') {
+    const wire =
+      options.fetch ??
+      (workerPublicEgress() ? fetch : (env.NOZOKI_TAILSCALE_FETCH as typeof fetch | undefined))
+    if (typeof wire !== 'function') throw new AdapterError('CONNECTOR_UNAVAILABLE')
+    return tailscaleTransport(source, credential, { ...options, fetch: wire })
+  }
   if (!workerPublicEgress()) return connectorTransport(source, credential, env, options)
   // Workers' public fetch network filters resolved addresses at connection time.
   // Never route private-mode sources or use a connector binding through this path.

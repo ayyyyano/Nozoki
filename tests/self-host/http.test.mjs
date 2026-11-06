@@ -379,7 +379,9 @@ test(
           formatTimestamp(probe.collectedAt, 'Asia/Shanghai'),
         )
         await expect(accounts.locator('time')).toHaveAttribute('datetime', probe.collectedAt)
-        await expect(accounts.getByRole('status')).toContainText('（Asia/Shanghai）')
+        await expect(accounts.getByRole('status').filter({ hasText: '测试时间' })).toContainText(
+          '（Asia/Shanghai）',
+        )
         await legacy.locator('.admin-item-toggle').click()
         assert.equal(
           await legacy
@@ -506,7 +508,9 @@ test(
           await source.getByRole('button', { name: '只读测试连接', exact: true }).click()
           await expect(source.locator('time')).toHaveText(expected)
           await expect(source.locator('time')).toHaveAttribute('datetime', collectedAt)
-          await expect(source.getByRole('status')).toContainText(`（${timezone}）`)
+          await expect(source.getByRole('status').filter({ hasText: '测试时间' })).toContainText(
+            `（${timezone}）`,
+          )
         }
         await verifyProbeTime('2026-11-02 13:02', 'Asia/Shanghai')
         const current = await (await context.request.get(origin + '/api/admin/config')).json()

@@ -47,7 +47,7 @@ test('Node origin ignores forwarded headers and refuses hostile Host/absolute ta
     'http://127.0.0.1/',
   )
 })
-test('embedded fixed relay feeds the same SQLite collector and enforces routes and ACL', async () => {
+test('legacy relay reader remains compatible but cannot authorize production collection', async () => {
   const directory = await mkdtemp(resolve('.wrangler/self-host-relay-'))
   const file = resolve(directory, 'private-relay.local.json'),
     s = source('sleepy'),
@@ -112,20 +112,17 @@ test('embedded fixed relay feeds the same SQLite collector and enforces routes a
       ).success,
       true,
     )
-    const result = await runCollection(db, env, Date.now())
-    assert.equal(result.success, 1)
-    assert.equal(result.requests, 1)
-    const view = JSON.parse(
-      (await db.prepare('SELECT snapshot_json FROM integration_snapshot_views').first())
-        .snapshot_json,
-    )
-    const item = view.data.devices.find((d) => d.id === 'phone.a/~')
-    assert.equal(item.batteryPercent, 66)
-    assert.equal(item.online, false)
-    assert.equal(item.stateText, 'PRIVATE-APPLICATION')
     const requests = calls
-    assert.ok(!JSON.stringify(await readGuestDashboard(db)).includes('PRIVATE-APPLICATION'))
+    const result = await runCollection(db, env, Date.now())
+    assert.equal(result.success, 0)
+    assert.equal(result.failure, 1)
+    assert.equal(result.requests, 0)
     assert.equal(calls, requests)
+    assert.equal(
+      (await db.prepare('SELECT count(*) n FROM integration_snapshot_views').first()).n,
+      0,
+    )
+    assert.ok(!JSON.stringify(await readGuestDashboard(db)).includes('PRIVATE-APPLICATION'))
   } finally {
     db.close()
   }

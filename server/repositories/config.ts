@@ -142,6 +142,7 @@ export async function readStoredState(
       integrations: integrations.map((i) => ({
         ...i.settings,
         credentialState: credentialState(i.envelope),
+        ...(i.identityEnvelope ? { identityConfigured: true } : {}),
       })),
     })
     return { config, integrations, snapshots: results[4]!.results, storageMode: mode }

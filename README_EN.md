@@ -263,11 +263,11 @@ The collection environment follows the [Cloudflare deployment version](https://d
 ### Adding custom sources in the admin page
 
 1. Add a source under Data sources and choose its provider. The protocol follows the provider. Enter the full HTTPS service root, such as `https://alive.example.com/` or `https://example.com/sleepy/`.
-2. Choose managed public HTTPS access. Select no credentials for a public status endpoint. For a service that requires a Bearer Key, select Bearer and enter the key with credential operation `replace`.
+2. All sources use managed public HTTPS access. Select no credentials for a public status endpoint. For a service that requires a Bearer Key, select Bearer and enter the key with credential operation `replace`.
 3. Enable the source, approve its target, review the address and credential use, then save the configuration. Approval and revocation take effect after saving.
 4. Run the read-only connection test. Bind the source to the corresponding Dashboard module's `main` reference and save. The Collector reads it at the configured interval.
 
-Changes to the source ID, provider, protocol, root, network scope or authentication require approval again. Changing the root or provider also requires replacing or clearing a saved credential. Credentials are encrypted in the database; admin reads return their configuration status. Each configuration supports up to 10 sources.
+Changes to the source ID, provider, protocol, root or authentication require approval again. Changing the root or provider also requires replacing or clearing a saved credential. Credentials are encrypted in the database; admin reads return their configuration status. Each configuration supports up to 10 sources.
 
 Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI uses `cliproxy-bridge` / `cliproxy-v8-accounts`, with its Management Key as the Bearer credential. A stable account identity key is generated and stored encrypted. Use a reverse proxy to expose only the protocol's `v8/management/credentials` endpoint. The admin page accepts registered protocols rather than arbitrary endpoint URLs.
 
@@ -277,31 +277,35 @@ The Worker uses `fetch` to read approved sources. Custom public services such as
 
 The root configuration includes `global_fetch_strictly_public`. Keep this flag so requests to domains in the same Cloudflare zone use their public entry points and respect the destination's Worker routes and security rules. If the service requires Cloudflare Access, a login page or an interactive challenge, configure suitable access rules for its read-only API. The Collector cannot complete browser challenges.
 
-Requests use HTTPS 443, the approved service directory and registered GET endpoints. They omit browser cookies and send Bearer credentials only to the approved source. Redirects are rejected. Responses are capped at 128KB; timeouts are 3.5 seconds for ordinary sources and 10 seconds for quotes. Workers' network layer filters private DNS destinations when connecting. The application also rejects IP literals, loopback names and local domain suffixes. See [workerd network rules](https://github.com/cloudflare/workerd/blob/main/src/workerd/server/workerd.capnp) and the [Cloudflare public routing flag](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public).
+Requests use HTTPS 443 and the approved service directory. Collection uses registered GET endpoints; Tailscale token exchange uses a fixed official POST endpoint. They omit browser cookies and send Bearer credentials only to the approved source. Redirects are rejected. Responses are capped at 128KB; timeouts are 3.5 seconds for ordinary sources and 10 seconds for quotes. Workers' network layer filters private DNS destinations when connecting. The application also rejects IP literals, loopback names and local domain suffixes. See [workerd network rules](https://github.com/cloudflare/workerd/blob/main/src/workerd/server/workerd.capnp) and the [Cloudflare public routing flag](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public).
 
 The deployment script applies database migrations before publication. Routine public source additions, approvals and credential changes take effect when saved in the admin page.
 
-Managed sources on Workers support public HTTPS only. Private IPs, LAN-only names and Tailscale network addresses cannot be reached through public `fetch`. Node.js deployments can set `NOZOKI_CONNECTOR_PRIVATE_CIDRS`, for example `10.20.0.0/24,fd12::/64`, and select managed private HTTPS. Ranges must be within RFC1918/ULA space; loopback and metadata addresses remain blocked. Node.js must trust the server certificate. Use `NODE_EXTRA_CA_CERTS` for an internal CA.
+Admin sources use public HTTPS. Private IPs, LAN-only names and Tailscale network addresses need a trusted public HTTPS service that exposes a supported read-only API. Node.js resolves and pins a public IP for each connection and verifies the TLS certificate.
 
-### Compatibility for existing sources
+### Migrating existing sources
 
-Upgraded sources retain built-in / legacy access mode. Built-in services continue to work. Existing `NOZOKI_PUBLIC_ROUTES`, `NOZOKI_PRIVATE_ROUTES` and relays retain their deployment allowlists. Legacy public routes rely on the operator's DNS and network checks. To migrate a custom public source, select managed public HTTPS in the admin page, approve the target and save. Moving Codex from a legacy relay changes its anonymous account IDs. If the module has field permissions for specific account IDs, saving refuses this transition. Review those permissions in Dashboard modules and use wildcard rules before approving and saving the source.
+The deployment command applies `0019_public_sources.sql`. Legacy DeepSeek, Tencent, both Yahoo mirrors and Tailscale sources receive equivalent admin approval only when their provider, protocol and official root match exactly. Source IDs, encrypted credentials, module references, quote bindings and history remain stored. The configuration version increases; reload admin drafts opened before the upgrade.
+
+Other legacy sources pause collection and retain their settings for review. Check the public root, protocol and authentication under Data sources, supply credentials, approve the target and save. `NOZOKI_PUBLIC_ROUTES`, `NOZOKI_PRIVATE_ROUTES` and relay routes no longer authorize production collection. Remove those variables and relay settings after migration.
+
+Enter the Codex Management Key as a Bearer credential. A key previously held only by a relay must be entered in the admin page. If account-specific field permissions exist, also import the original `NOZOKI_RELAY_ID_KEY` in the legacy account identity key field. Saving reads accounts and checks their IDs. A mismatched key, unreachable target or deleted account blocks the save; check the key and account policies. The identity key is encrypted, and admin reads return its configured status. New sources can leave it blank to generate a key automatically.
 
 ### Tailscale devices
 
 Tailscale and Sleepy are independent modules. Tailscale is disabled by default and ordered between Devices and Codex.
 
 1. Create an OAuth Client in Tailscale Trust credentials with only `devices:core:read`.
-2. Add an integration in the admin panel and select `tailscale`. The protocol and official URL are filled automatically. Choose `replace`, enter the Client ID and Client Secret, enable the source, and save.
+2. Add an integration in the admin panel and select `tailscale`. The protocol and official URL are filled automatically. Choose `replace`, enter the Client ID and Client Secret, enable the source, approve its target, and save.
 3. Enable the Tailscale Dashboard module and bind its main source to that integration. Set the module to public if guests should see the devices.
 4. Choose whether IP addresses are visible, hidden, or visible after login. The default is after login. Hidden addresses appear as `****`; the server does not send their real values to unauthorized viewers.
 
-Connection status uses `connectedToControl`. It describes the control-plane connection and does not prove service reachability. This API does not supply foreground apps or battery data; Sleepy continues to handle those. The Collector calls the official API without joining the tailnet, using at most two requests per run and no device management operations.
+Connection status uses `connectedToControl`. It describes the control-plane connection and does not prove service reachability. This API does not supply foreground apps or battery data; Sleepy continues to handle those. The Collector calls the official API without joining the tailnet. Each run POSTs to the fixed official `/api/v2/oauth/token` endpoint for a read-only token, then GETs the device list. The Client Secret goes to that token endpoint, and redirects are rejected.
 
 
 ### Default Tencent quotes
 
-Fresh databases automatically load the enabled source `tencent`, with provider `quotes-custom`, protocol `tencent-us-v1`, root `https://web.ifzq.gtimg.cn/` and a 300-second refresh interval. QQQM, VOO and the Quotes module's `main` reference are bound to it. The exact root has built-in approval and requires no API key or `NOZOKI_PUBLIC_ROUTES` entry.
+Fresh databases automatically load the enabled source `tencent`, with provider `quotes-custom`, protocol `tencent-us-v1`, root `https://web.ifzq.gtimg.cn/` and a 300-second refresh interval. QQQM, VOO and the Quotes module's `main` reference are bound to it. The default source has a saved admin approval and needs no API key or extra Worker variable.
 
 1. Use the deployment command in this README to apply migrations and load the default Tencent source.
 2. On existing sites without a source named `tencent`, the migration loads the default source and switches QQQM/VOO's default Yahoo bindings and the Quotes module's default Yahoo reference to Tencent. Yahoo is disabled when no other enabled references remain; its credentials, snapshots and cooldown records remain stored. An existing `tencent` source, custom bindings and configurations already at the ten-source limit remain unchanged. Changes increment the config version and create a system audit record; reload admin drafts opened before the upgrade.
@@ -311,7 +315,7 @@ This Tencent protocol supports US symbols. `US / QQQM` and `US / VOO` map to the
 
 Daily changes use the response's previous close. Prices remain decimal strings. US quote timestamps use `America/New_York` and are stored as UTC; pages format them in the site timezone. History contains forward-adjusted daily closes, with local midnight anchoring each trading date. The quote's observation time comes from its separate upstream timestamp. Unknown delay durations remain unknown. Old quotes become stale and failed reads retain the last valid snapshot.
 
-The endpoint is an unversioned Tencent stock-page service with unconfirmed public display rights. Yahoo's `yahoo-chart-v8` protocol and both mirrors remain available for manual selection, with no automatic fallback. Remove or update any `NOZOKI_PUBLIC_ROUTES` override that conflicts with the new source.
+The endpoint is an unversioned Tencent stock-page service with unconfirmed public display rights. Yahoo's `yahoo-chart-v8` protocol and both mirrors remain available for manual selection, with no automatic fallback. The saved admin target approval controls access.
 
 ### Updates and troubleshooting
 
@@ -392,7 +396,7 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 ```
 
-### Collection and private sources
+### Collection and public sources
 
 Run one collection pass:
 
@@ -400,7 +404,7 @@ Run one collection pass:
 pnpm collector:node
 ```
 
-The web and collection processes must share `NOZOKI_SQLITE_PATH`, decryption keys and connector settings. Set `COLLECTOR_EPOCH` to a positive integer and increment it when changing deployment encryption keys, the connector or legacy relay routes. Credential edits in the admin page take effect through source revisions. Each invocation checks due sources within a five-minute scheduling window, using the same leases, revision checks, backoff and commit guards as the D1 implementation.
+The web and collection processes must share `NOZOKI_SQLITE_PATH`, decryption keys and connector settings. Set `COLLECTOR_EPOCH` to a positive integer and increment it when changing deployment encryption keys or the connector. Credential edits in the admin page take effect through source revisions. Each invocation checks due sources within a five-minute scheduling window, using the same leases, revision checks, backoff and commit guards as the D1 implementation.
 
 To automate collection, the runtime account can add a system Cron entry with the actual environment and installation paths:
 
@@ -408,11 +412,7 @@ To automate collection, the runtime account can add a system Cron entry with the
 */5 * * * * /usr/bin/node --env-file=/etc/nozoki/nozoki.env /opt/nozoki/.output-node/collector.mjs
 ```
 
-Collection also performs bounded hourly retention cleanup. Configure scheduled tasks on the server. Approved custom sources use the embedded connector. Set private ranges with `NOZOKI_CONNECTOR_PRIVATE_CIDRS`. Increment `COLLECTOR_EPOCH` when enabling the embedded connector during an upgrade or changing its network policy.
-
-For legacy sources using the embedded relay, point `NOZOKI_RELAY_CONFIG_FILE` to a protected JSON file shaped as `{"sources":[{"source":{...},"credential":"..."}]}`. Each `source` follows IntegrationSettings validation: `id`, `provider`, `protocolVersion`, normalized HTTPS `baseUrl`, `enabled`, `refreshInterval`, `fieldMappings`, `capabilities` and `credentialState`. Upstream management secrets belong in the relay's `credential` field. Register the same source in `NOZOKI_PRIVATE_ROUTES` with `id`, `provider`, `protocolVersion`, `baseUrl`, `refreshInterval` and `fieldMappings`. These values must match the saved D1/SQLite configuration. Set an independent `NOZOKI_PRIVATE_RELAY_TOKEN` and a `COLLECTOR_BINDING_REVISION`. Codex account protocols also require a stable `NOZOKI_RELAY_ID_KEY`; put its SHA-256 hex digest in the route's `identityVersion`.
-
-The embedded relay handles fixed requests inside the process, with no extra HTTP listener. TLS certificate verification remains enabled, and upstream requests use registered read-only paths. Sources without matching public approval or relay configuration return `TARGET_NOT_APPROVED`.
+Collection also performs bounded hourly retention cleanup. Configure scheduled tasks on the server. Approved public sources use restricted outbound requests inside the process. Tailscale OAuth uses fixed official endpoints. The web and collection processes must share integration encryption keys. See the migration instructions above for legacy sources.
 
 ### Backups and upgrades
 

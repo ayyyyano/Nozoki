@@ -8,7 +8,7 @@ import { canonical } from '../../../shared/contracts/admin'
 import type { CsrfDto } from '../../../shared/contracts/auth'
 import type { ConfigWrite, IntegrationSettings } from '../../../shared/contracts/config'
 import { formatTimestamp } from '../../../shared/domain/format'
-import { sourceTargetKey } from '../../../shared/contracts/source-access'
+import { managedServiceRoot, sourceTargetKey } from '../../../shared/contracts/source-access'
 type Integration = ConfigWrite['integrations'][number]
 const model = defineModel<Integration>({ required: true })
 const approvalId = useId()
@@ -26,28 +26,45 @@ onMounted(async () => {
     connector.value = null
   }
 })
-const accessMode = computed({
-  get: () => model.value.access?.mode ?? 'legacy',
-  set: (mode: 'legacy' | 'public' | 'private') => {
-    model.value.access =
-      mode === 'legacy'
-        ? { mode }
-        : {
-            mode,
-            authentication: model.value.provider === 'cliproxy-bridge' ? 'bearer' : 'none',
-            approved: false,
-            approvedTarget: null,
-          }
-  },
-})
+const accessMode = computed(() => model.value.access?.mode ?? 'legacy')
+function preparePublicAccess() {
+  if (!model.value.baseUrl) throw new Error()
+  managedServiceRoot(model.value.baseUrl, 'public')
+  if (model.value.access?.mode !== 'public')
+    model.value.access = {
+      mode: 'public',
+      authentication: defaultAuthentication(model.value.provider),
+      approved: false,
+      approvedTarget: null,
+    }
+}
+function defaultAuthentication(provider: Integration['provider']) {
+  return provider === 'tailscale'
+    ? ('tailscale-oauth' as const)
+    : provider === 'cliproxy-bridge' || provider === 'deepseek'
+      ? ('bearer' as const)
+      : ('none' as const)
+}
 const authentication = computed({
   get: () =>
-    model.value.access?.mode !== 'legacy' && model.value.access
+    model.value.access && model.value.access.mode !== 'legacy'
       ? model.value.access.authentication
-      : 'none',
-  set: (value: 'none' | 'bearer') => {
-    if (model.value.access && model.value.access.mode !== 'legacy')
+      : defaultAuthentication(model.value.provider),
+  set: (value: 'none' | 'bearer' | 'tailscale-oauth') => {
+    try {
+      preparePublicAccess()
+    } catch {
+      return
+    }
+    if (model.value.access && model.value.access.mode === 'public')
       model.value.access.authentication = value
+  },
+})
+const identityImport = computed({
+  get: () => model.value.identityCredential?.value ?? '',
+  set: (value: string) => {
+    if (value) model.value.identityCredential = { operation: 'import', value }
+    else delete model.value.identityCredential
   },
 })
 function targetIdentity() {
@@ -83,7 +100,8 @@ const approvalMessage = ref('')
 let pendingTarget = ''
 function approveSource() {
   try {
-    if (!model.value.baseUrl || !model.value.access || model.value.access.mode === 'legacy')
+    preparePublicAccess()
+    if (!model.value.baseUrl || !model.value.access || model.value.access.mode !== 'public')
       throw new Error()
     pendingTarget = sourceTargetKey(model.value, model.value.access)
     approvalMessage.value = ''
@@ -121,11 +139,13 @@ const provider = computed({
     if (value === model.value.provider) return
     model.value.provider = value
     model.value.protocolVersion = defaultProtocol(value)
-    if (value === 'cliproxy-bridge' && model.value.access && model.value.access.mode !== 'legacy')
-      model.value.access.authentication = 'bearer'
-    if (value === 'tailscale') {
-      model.value.baseUrl = 'https://api.tailscale.com/'
-      model.value.access = { mode: 'legacy' }
+    delete model.value.identityCredential
+    if (value === 'tailscale') model.value.baseUrl = 'https://api.tailscale.com/'
+    model.value.access = {
+      mode: 'public',
+      authentication: defaultAuthentication(value),
+      approved: false,
+      approvedTarget: null,
     }
   },
 })
@@ -133,8 +153,9 @@ const testing = ref(false),
   testResult = ref<ProbeResult | null>(null),
   testMessage = ref('')
 const savedMatches = computed(() => {
-  if (!props.saved || model.value.credential.operation !== 'keep') return false
-  const { credentialState: _state, ...saved } = props.saved
+  if (!props.saved || model.value.credential.operation !== 'keep' || model.value.identityCredential)
+    return false
+  const { credentialState: _state, identityConfigured: _identity, ...saved } = props.saved
   const { credential: _credential, ...draft } = model.value
   return canonical(saved) === canonical(draft)
 })
@@ -290,31 +311,29 @@ function operation(value: unknown) {
     {{ state?.configured ? '凭据已配置' : '凭据未配置' }} · 未验证连接。更改 Provider
     或服务根地址时，须替换或清除原凭据。
   </p>
-  <div class="admin-fields">
-    <VarSelect v-model="accessMode" aria-label="接入方式" placeholder="接入方式" variant="outlined">
-      <VarOption label="内置服务 / 兼容旧配置" value="legacy" />
-      <VarOption label="后台管理 · 公网 HTTPS" value="public" />
-      <VarOption
-        v-if="connector?.publicMode !== 'worker' || accessMode === 'private'"
-        label="后台管理 · 受限私网 HTTPS"
-        value="private"
-      />
-    </VarSelect>
-    <VarSelect
-      v-if="accessMode !== 'legacy'"
-      v-model="authentication"
-      aria-label="上游认证方式"
-      placeholder="上游认证方式"
-      variant="outlined"
-    >
+  <p class="admin-note">后台管理 · 公网 HTTPS</p>
+  <p v-if="accessMode !== 'public'" role="status" class="admin-note">
+    旧接入方式已暂停。请核对公网地址和认证方式，批准并保存后迁移；原来源
+    ID、凭据与权限保留。私网地址须先改为可公开访问的 HTTPS 服务。
+  </p>
+  <VarSelect
+    v-model="authentication"
+    aria-label="上游认证方式"
+    placeholder="上游认证方式"
+    variant="outlined"
+  >
+    <template v-if="model.provider !== 'tailscale'">
       <VarOption label="不发送凭据" value="none" />
       <VarOption label="Bearer · 使用后台保存的凭据" value="bearer" />
-    </VarSelect>
-  </div>
-  <template v-if="model.access && model.access.mode !== 'legacy'">
+    </template>
+    <VarOption v-else label="Tailscale OAuth Client" value="tailscale-oauth" />
+  </VarSelect>
+  <div>
     <p class="admin-note" role="status">
       {{
-        model.access.approved ? '此目标已在草稿中批准' : '此目标尚未批准'
+        model.access && model.access.mode === 'public' && model.access.approved
+          ? '此目标已在草稿中批准'
+          : '此目标尚未批准'
       }}；批准或撤销均在保存配置后生效。
     </p>
     <p class="admin-note">
@@ -324,7 +343,7 @@ function operation(value: unknown) {
             ? 'Workers 公网出站不支持私网来源；请使用可公开访问的 HTTPS 服务地址。'
             : '使用 Workers 原生公网 HTTPS 出站，在此批准并保存即可接入。'
           : connector?.configured
-            ? '使用服务器内嵌或已配置的受限连接器。'
+            ? '使用服务器内嵌的受限公网出站。'
             : '服务器出站尚未就绪，请检查运行环境。'
       }}{{
         connector?.environmentMatches === false
@@ -333,12 +352,21 @@ function operation(value: unknown) {
       }}
     </p>
     <div class="admin-actions">
-      <VarButton @click="model.access.approved ? revokeApproval() : approveSource()">{{
-        model.access.approved ? '撤销批准' : '批准此来源'
-      }}</VarButton>
+      <VarButton
+        @click="
+          model.access && model.access.mode === 'public' && model.access.approved
+            ? revokeApproval()
+            : approveSource()
+        "
+        >{{
+          model.access && model.access.mode === 'public' && model.access.approved
+            ? '撤销批准'
+            : '批准此来源'
+        }}</VarButton
+      >
     </div>
     <p v-if="approvalMessage" role="alert" class="admin-note">{{ approvalMessage }}</p>
-  </template>
+  </div>
   <VarSelect
     :model-value="model.credential.operation"
     aria-label="凭据操作"
@@ -373,19 +401,14 @@ function operation(value: unknown) {
     }}</span>
   </div>
   <p class="admin-note">
-    {{
-      accessMode === 'legacy'
-        ? '固定官方服务可直接使用；旧自建来源继续采用原部署授权，切换到后台管理后可在此批准目标。'
-        : '仅使用已登记协议的只读端点；目标地址或认证方式变化后需要重新批准。公网禁止私网、回环及元数据地址，私网还受部署网段限制。'
-    }}
+    仅使用已登记协议的只读端点；目标地址、协议或认证方式变化后需要重新批准。公网禁止私网、回环及元数据地址。
   </p>
   <p
     v-if="model.provider === 'quotes-custom' && model.protocolVersion === 'yahoo-chart-v8'"
     class="admin-note"
   >
-    Yahoo 默认地址 https://query1.finance.yahoo.com/ 已内置批准，无需密钥。 默认配置已启用并绑定
-    QQQM、VOO。新增标的时选择此来源；关闭来源可停止采集。 非官方接口的公开展示许可尚未确认。Worker
-    部署后由定时任务采集。
+    Yahoo
+    是可选的非官方行情来源，无需密钥；可能限制数据中心出口。默认行情使用腾讯。修改地址后请重新批准并保存。
   </p>
   <div v-if="testResult" role="status" class="admin-note">
     <p>
@@ -393,14 +416,14 @@ function operation(value: unknown) {
       {{ testResult.protocolMatched ? '协议匹配' : '协议未确认' }}
     </p>
     <p v-if="testResult.code === 'TARGET_NOT_APPROVED'">
-      目标未批准：请核对部署侧公网路由，或私有来源的 Relay 路由与绑定。
+      请核对服务根地址、协议与认证方式，并重新批准和保存。
     </p>
     <p v-if="testResult.code === 'ACCESS_NOT_APPROVED'">请批准当前目标并保存配置后再测试。</p>
     <p v-if="testResult.code === 'CONNECTOR_UNAVAILABLE'">
       执行环境尚未就绪。请检查部署状态与加密配置；Workers 的网页和采集共用同一份配置。
     </p>
     <p v-if="testResult.code === 'DESTINATION_BLOCKED'">
-      目标不在允许的网络范围内。Workers 仅支持公网 HTTPS；服务器私网来源还需要配置允许网段。
+      目标不在允许的公网范围内。请使用可公开访问的 HTTPS 服务地址。
     </p>
     <p>
       已验证能力：{{
@@ -419,27 +442,25 @@ function operation(value: unknown) {
     </p>
   </div>
   <p v-if="testMessage" role="alert">{{ testMessage }}</p>
-  <p
+  <template
     v-if="model.provider === 'cliproxy-bridge' && model.protocolVersion === 'cliproxy-v8-accounts'"
-    class="admin-note"
   >
-    {{
-      accessMode === 'legacy'
-        ? '账户状态与被动配额经旧 Relay 读取，Management Key 留在 Relay。'
-        : 'Management Key 使用后台凭据，发送至已批准的只读账户端点；稳定账户身份密钥自动生成并加密保存。'
-    }}
-  </p>
-  <p
-    v-if="
-      model.provider === 'cliproxy-bridge' &&
-      accessMode !== 'legacy' &&
-      (!saved?.access || saved.access.mode === 'legacy')
-    "
-    class="admin-note"
-  >
-    切换旧 Relay 会更换匿名账户 ID。请先检查 Dashboard 模块中按账户 ID
-    设置的权限，改用通配规则后再保存。
-  </p>
+    <p class="admin-note">
+      Management Key 使用上方 Bearer 凭据。账户身份密钥独立加密保存，不作为上游认证凭据发送。
+    </p>
+    <template v-if="!saved?.identityConfigured">
+      <AdminText
+        v-model="identityImport"
+        label="旧 Relay 账户身份密钥（迁移时选填）"
+        secret
+        :max="43"
+      />
+      <p class="admin-note">
+        迁移旧账户权限时，填入原 Relay 的 43 位身份密钥，并补齐 Management Key。保存前会只读核对账户
+        ID；不匹配时拒绝迁移。新来源留空即可自动生成。
+      </p>
+    </template>
+  </template>
   <details class="admin-details">
     <summary>字段映射与能力元数据</summary>
     <div v-for="(_, key) in model.fieldMappings" :key="key" class="admin-rule">
@@ -488,11 +509,15 @@ function operation(value: unknown) {
       <p class="admin-note" style="overflow-wrap: anywhere">{{ model.baseUrl }}</p>
       <p>
         {{ model.provider }} · {{ model.protocolVersion }} ·
-        {{ authentication === 'bearer' ? '发送该来源的 Bearer 凭据' : '不发送凭据' }}
+        {{
+          authentication === 'tailscale-oauth'
+            ? '仅向 Tailscale 官方端点交换只读令牌'
+            : authentication === 'bearer'
+              ? '发送该来源的 Bearer 凭据'
+              : '不发送凭据'
+        }}
       </p>
-      <p>
-        请确认服务由可信运营者控制。批准只允许已登记的只读端点；私网访问仍受部署网段限制。保存后生效。
-      </p>
+      <p>请确认服务由可信运营者控制。批准只允许已登记的只读端点和公网地址。保存后生效。</p>
       <div class="admin-actions">
         <VarButton text @click="showApproval = false">取消</VarButton
         ><VarButton type="primary" @click="confirmApproval">确认批准</VarButton>

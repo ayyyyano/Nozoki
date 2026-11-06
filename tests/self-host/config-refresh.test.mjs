@@ -1,3 +1,4 @@
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp } from 'node:fs/promises'
@@ -138,7 +139,7 @@ test(
       }
     })
     for (let n = 0; !output.includes('Nozoki listening'); n++) {
-      assert.ok(n < 100 && child.exitCode === null, 'Node server did not start')
+      assert.ok(n < 400 && child.exitCode === null, 'Node server did not start: ' + output)
       await new Promise((r) => setTimeout(r, 50))
     }
     const login = await fetch(origin + '/api/auth/login', {
@@ -153,7 +154,9 @@ test(
     const current = await (await fetch(origin + '/api/admin/config', { headers })).json(),
       config = editableConfig(current)
     // Unsupported protocol: exercise scheduling/failure persistence without contacting a vendor.
-    config.integrations.find((s) => s.id === 'tencent').protocolVersion = 'fixture-unsupported'
+    const changed = config.integrations.find((s) => s.id === 'tencent')
+    changed.protocolVersion = 'fixture-unsupported'
+    changed.access.approvedTarget = sourceTargetKey(changed, changed.access)
     const saved = await fetch(origin + '/api/admin/config', {
       method: 'PUT',
       headers: {

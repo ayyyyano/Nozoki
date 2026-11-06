@@ -34,7 +34,14 @@ export function assertManagedSource(source: IntegrationSettings) {
     access.approvedTarget !== sourceTargetKey(source, access)
   )
     throw new AdapterError('ACCESS_NOT_APPROVED')
-  if (source.provider === 'tailscale') throw new AdapterError('UNSUPPORTED_PROTOCOL')
+  if (
+    (source.provider === 'tailscale') !== (access.authentication === 'tailscale-oauth') ||
+    (access.authentication === 'tailscale-oauth' &&
+      (access.mode !== 'public' ||
+        source.baseUrl !== 'https://api.tailscale.com/' ||
+        source.protocolVersion !== 'tailscale-devices-v2'))
+  )
+    throw new AdapterError('UNSUPPORTED_PROTOCOL')
   selectedAdapter(source)
   return access
 }
@@ -53,6 +60,7 @@ export function connectorTransport(
   options: TransportOptions = {},
 ) {
   const access = assertManagedSource(source)
+  if (access.authentication === 'tailscale-oauth') throw new AdapterError('UNSUPPORTED_PROTOCOL')
   if (!connectorReady(env)) throw new AdapterError('CONNECTOR_UNAVAILABLE')
   if (access.authentication === 'bearer' && !credential) throw new AdapterError('AUTH_REQUIRED')
   const binding = env.NOZOKI_SOURCE_CONNECTOR as
@@ -119,6 +127,7 @@ export function connectorTransport(
 export function validateConnectorMessage(value: unknown) {
   const message = ConnectorMessageSchema.parse(value)
   const access = assertManagedSource(message.source)
+  if (access.authentication === 'tailscale-oauth') throw new AdapterError('UNSUPPORTED_PROTOCOL')
   if (!endpointCatalog(message.source, message.symbols).includes(message.endpoint))
     throw new AdapterError('TARGET_NOT_APPROVED')
   if (access.authentication === 'none' && message.credential !== undefined)

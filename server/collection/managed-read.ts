@@ -18,9 +18,10 @@ export async function readManagedSource(
   options: TransportOptions = {},
 ) {
   const access = assertManagedSource(source)
+  if (access.mode !== 'public') throw new AdapterError('DESTINATION_BLOCKED')
   let credential: string | undefined, identityKey: CryptoKey | undefined
   try {
-    if (access.authentication === 'bearer' || source.provider === 'cliproxy-bridge') {
+    if (access.authentication !== 'none' || source.provider === 'cliproxy-bridge') {
       if (!envelope) throw new AdapterError('AUTH_REQUIRED')
       try {
         const ring = await credentialKeys(env)

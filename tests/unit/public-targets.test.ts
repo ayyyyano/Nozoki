@@ -147,11 +147,9 @@ test('public bearer policy requires credential, cannot follow redirect, and keep
   assert.equal(calls, 2)
 })
 
-test('collector uses approved public target without encryption keys and denied targets make no request', async () => {
+test('retired deployment routes cannot authorize an unapproved legacy collector source', async () => {
   const s = sleepy(),
-    env = environment(s),
-    fixtures = replies('sleepy'),
-    original = globalThis.fetch
+    metrics = { requests: 0, responseBytes: 0 }
   const p: CollectionPlan = {
     source: s,
     revision: 'fixture',
@@ -159,32 +157,9 @@ test('collector uses approved public target without encryption keys and denied t
     configVersion: 1,
     references: [{ moduleId: 'devices', subject: 'default' }],
   }
-  let calls = 0
-  globalThis.fetch = async (url) => {
-    calls++
-    return Response.json(fixtures[String(url).replace(s.baseUrl, '')])
-  }
-  try {
-    const metrics = { requests: 0, responseBytes: 0 }
-    const result = await collectSource(p, env, new AbortController().signal, now, metrics)
-    assert.ok(result.views.devices)
-    assert.equal(metrics.requests, 1)
-    assert.ok(metrics.responseBytes > 0)
-    await assert.rejects(
-      collectSource(
-        { ...p, source: { ...s, baseUrl: 'https://other.example.com/' } },
-        env,
-        new AbortController().signal,
-        now,
-        metrics,
-      ),
-      { code: 'TARGET_NOT_APPROVED' },
-    )
-    await assert.rejects(collectSource(p, {}, new AbortController().signal, now, metrics), {
-      code: 'TARGET_NOT_APPROVED',
+  for (const env of [environment(s), {}])
+    await assert.rejects(collectSource(p, env, new AbortController().signal, now, metrics), {
+      code: 'ACCESS_NOT_APPROVED',
     })
-    assert.equal(calls, 1)
-  } finally {
-    globalThis.fetch = original
-  }
+  assert.deepEqual(metrics, { requests: 0, responseBytes: 0 })
 })

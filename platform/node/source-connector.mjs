@@ -16,6 +16,67 @@ export async function pinnedHttpsRead(message, signal, options = {}) {
   const target = new URL(
     serviceEndpoint(managedServiceRoot(message.source.baseUrl, scope), message.endpoint),
   )
+  return pinnedRequest(
+    target,
+    signal,
+    {
+      Accept: 'application/json',
+      ...(message.source.access.authentication === 'bearer'
+        ? { Authorization: 'Bearer ' + message.credential }
+        : {}),
+    },
+    'GET',
+    undefined,
+    scope,
+    options,
+  )
+}
+
+// Fixed-host OAuth is separate from the GET-only connector protocol.
+export function tailscalePublicFetch(options = {}) {
+  return async (input, init = {}) => {
+    const target = new URL(input)
+    const token = target.href === 'https://api.tailscale.com/api/v2/oauth/token'
+    const devices = target.href === 'https://api.tailscale.com/api/v2/tailnet/-/devices'
+    const headers = new Headers(init.headers)
+    if (
+      (!token && !devices) ||
+      (token ? init.method !== 'POST' : init.method !== 'GET') ||
+      [...headers.keys()].some((h) => !['accept', 'authorization', 'content-type'].includes(h)) ||
+      (token &&
+        (headers.has('authorization') ||
+          headers.get('content-type') !== 'application/x-www-form-urlencoded' ||
+          typeof init.body !== 'string' ||
+          Buffer.byteLength(init.body) > 32768)) ||
+      (devices &&
+        (init.body !== undefined ||
+          !/^Bearer [^\s\u0000-\u001f\u007f]+$/.test(headers.get('authorization') ?? '')))
+    )
+      throw new Error('DESTINATION_BLOCKED')
+    if (token) {
+      const form = new URLSearchParams(init.body)
+      if (
+        form.get('grant_type') !== 'client_credentials' ||
+        form.get('scope') !== 'devices:core:read' ||
+        [...form.keys()].some(
+          (k) => !['grant_type', 'scope', 'client_id', 'client_secret'].includes(k),
+        ) ||
+        [...form.keys()].length !== 4
+      )
+        throw new Error('DESTINATION_BLOCKED')
+    }
+    return pinnedRequest(
+      target,
+      init.signal ?? new AbortController().signal,
+      Object.fromEntries(headers),
+      init.method,
+      init.body,
+      'public',
+      options,
+    )
+  }
+}
+async function pinnedRequest(target, signal, headers, method, body, scope, options) {
   const pinned = await resolveDestination(
     target.hostname,
     scope,
@@ -27,7 +88,7 @@ export async function pinnedHttpsRead(message, signal, options = {}) {
     const req = (options.request ?? httpsRequest)(
       target,
       {
-        method: 'GET',
+        method,
         agent: false,
         autoSelectFamily: false,
         family: pinned.family,
@@ -37,11 +98,8 @@ export async function pinnedHttpsRead(message, signal, options = {}) {
         signal,
         maxHeaderSize: 16384,
         headers: {
-          Accept: 'application/json',
           'Accept-Encoding': 'identity',
-          ...(message.source.access.authentication === 'bearer'
-            ? { Authorization: 'Bearer ' + message.credential }
-            : {}),
+          ...headers,
         },
       },
       (res) => {
@@ -58,7 +116,7 @@ export async function pinnedHttpsRead(message, signal, options = {}) {
       },
     )
     req.on('error', () => reject(new Error('UPSTREAM_UNAVAILABLE')))
-    req.end()
+    req.end(body)
   })
 }
 export function createSourceConnector(token, options = {}) {

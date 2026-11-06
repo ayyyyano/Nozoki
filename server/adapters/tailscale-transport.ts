@@ -8,7 +8,10 @@ const secretText = z
   .min(1)
   .max(4096)
   .regex(/^[^\s\u0000-\u001f\u007f]+$/)
-const credentials = z.strictObject({ clientId: secretText, clientSecret: secretText })
+export const TailscaleCredentialsSchema = z.strictObject({
+  clientId: secretText,
+  clientSecret: secretText,
+})
 const tokenResponse = z.object({
   access_token: secretText,
   token_type: z.literal('Bearer'),
@@ -29,9 +32,9 @@ export function tailscaleTransport(
   )
     throw new AdapterError('TARGET_NOT_APPROVED')
   if (!secret) throw new AdapterError('AUTH_REQUIRED')
-  let client: z.infer<typeof credentials>
+  let client: z.infer<typeof TailscaleCredentialsSchema>
   try {
-    client = credentials.parse(JSON.parse(secret))
+    client = TailscaleCredentialsSchema.parse(JSON.parse(secret))
   } catch {
     throw new AdapterError('CREDENTIAL_INVALID')
   }

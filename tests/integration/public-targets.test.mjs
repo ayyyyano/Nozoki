@@ -7,6 +7,7 @@ import { build } from 'esbuild'
 import { source, sleepMeta, sleepStatus } from '../fixtures/adapters.ts'
 import { readConfig, saveConfig } from '../../server/services/config.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { randomToken } from '../../server/services/auth-crypto.ts'
 const require = createRequire(import.meta.url),
   wrangler = createRequire(require.resolve('wrangler/package.json'))
@@ -17,6 +18,8 @@ test('native workerd/D1 public probe and collection, persistence and deployment 
   await mkdir('.wrangler/public-route-tests', { recursive: true })
   const persist = await mkdtemp(resolve('.wrangler/public-route-tests/run-'))
   const s = { ...source('sleepy'), baseUrl: 'https://sleepy.example.com/service/' }
+  s.access = { mode: 'public', authentication: 'none', approved: true, approvedTarget: null }
+  s.access.approvedTarget = sourceTargetKey(s, s.access)
   const routes = JSON.stringify([
     {
       id: s.id,
@@ -41,6 +44,7 @@ test('native workerd/D1 public probe and collection, persistence and deployment 
     modules: true,
     script,
     compatibilityDate: '2026-10-19',
+    compatibilityFlags: ['nodejs_compat', 'global_fetch_strictly_public'],
     d1Databases: { DB: 'public-isolated' },
     bindings: {
       NOZOKI_PUBLIC_ROUTES: routes,

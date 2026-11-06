@@ -68,7 +68,7 @@ test('fresh D1 collects bound default quotes without a public route or secret; d
         ),
       )
     const defaults = createDefaultConfig()
-    defaults.site.configVersion = 2
+    defaults.site.configVersion = 3
     assert.deepEqual(await readConfig(db), defaults)
     // Like 0011, the backfill migration leaves no audit row on an untouched baseline.
     assert.equal(

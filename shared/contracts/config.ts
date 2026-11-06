@@ -209,6 +209,7 @@ const IntegrationSettingsBaseSchema = z.strictObject({
   ),
   capabilities: z.record(IdSchema, CapabilitySchema),
   credentialState: CredentialStateSchema,
+  identityConfigured: z.boolean().optional(),
 })
 const validAccess = (i: {
   baseUrl: string | null
@@ -228,8 +229,19 @@ export const IntegrationSettingsSchema = IntegrationSettingsBaseSchema.refine(
   validAccess,
   'Invalid source target',
 ).refine((i) => !i.enabled || i.baseUrl !== null, 'Enabled integration needs a base URL')
-export const IntegrationWriteSchema = IntegrationSettingsBaseSchema.omit({ credentialState: true })
-  .extend({ credential: CredentialOperationSchema })
+export const IntegrationWriteSchema = IntegrationSettingsBaseSchema.omit({
+  credentialState: true,
+  identityConfigured: true,
+})
+  .extend({
+    credential: CredentialOperationSchema,
+    identityCredential: z
+      .strictObject({
+        operation: z.literal('import'),
+        value: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+      })
+      .optional(),
+  })
   .refine(validAccess, 'Invalid source target')
   .refine((i) => !i.enabled || i.baseUrl !== null, 'Enabled integration needs a base URL')
 export const LinkSettingsSchema = z.strictObject({

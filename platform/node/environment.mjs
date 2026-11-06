@@ -1,7 +1,7 @@
 import { stat, readFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { createPrivateRelay } from '../../server/adapters/private-relay.ts'
-import { createSourceConnector } from './source-connector.mjs'
+import { createSourceConnector, tailscalePublicFetch } from './source-connector.mjs'
 import { createHash } from 'node:crypto'
 
 export function databasePath(env = process.env) {
@@ -37,6 +37,7 @@ export async function nodeEnvironment(values = process.env, wire = fetch) {
   )
   // A Node deployment never has Cloudflare's authenticated request.cf metadata.
   env.AUTH_TRUST_CF_IP = '0'
+  env.NOZOKI_TAILSCALE_FETCH = tailscalePublicFetch()
   if (!env.NOZOKI_CONNECTOR_URL && typeof values.AUTH_RATE_LIMIT_SECRET === 'string') {
     env.NOZOKI_CONNECTOR_TOKEN = createHash('sha256')
       .update('nozoki-node-connector-v1:' + values.AUTH_RATE_LIMIT_SECRET)
