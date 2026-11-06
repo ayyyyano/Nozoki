@@ -29,7 +29,12 @@ export async function runCollection(
   raw: Database,
   env: Record<string, unknown>,
   scheduledTime: number,
-  options: { clock?: () => Date; reader?: SourceReader } = {},
+  options: {
+    clock?: () => Date
+    reader?: SourceReader
+    sourceIds?: readonly string[]
+    wallBudgetMs?: number
+  } = {},
 ) {
   const clock = options.clock ?? (() => new Date()),
     start = clock(),
@@ -55,7 +60,10 @@ export async function runCollection(
   try {
     await requireWritableStorage(db)
     const environment = await collectionEnvironment(db, env),
-      plans = collectionPlans(await readStoredState(db))
+      plans = collectionPlans(await readStoredState(db)).filter(
+        (p) => !options.sourceIds || options.sourceIds.includes(p.source.id),
+      )
+    const budget = Math.min(25000, Math.max(0, options.wallBudgetMs ?? 25000))
     await syncCollectionPlans(db, plans, environment, start.toISOString())
     const due = await dueCollectionStates(db, start.toISOString())
     for (const prior of due) {
@@ -67,7 +75,7 @@ export async function runCollection(
       if (
         report.selected >= COLLECTION_BUDGET.maxSources ||
         report.requests >= COLLECTION_BUDGET.maxRequests ||
-        clock().getTime() - start.getTime() > 25000
+        clock().getTime() - start.getTime() >= budget
       )
         break
       const claim = await claimCollection(
@@ -91,10 +99,16 @@ export async function runCollection(
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
         const timeout = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            controller.abort()
-            reject(new AdapterError('TIMEOUT'))
-          }, COLLECTION_BUDGET.sourceTimeoutMs)
+          timer = setTimeout(
+            () => {
+              controller.abort()
+              reject(new AdapterError('TIMEOUT'))
+            },
+            Math.min(
+              COLLECTION_BUDGET.sourceTimeoutMs,
+              Math.max(1, budget - (clock().getTime() - start.getTime())),
+            ),
+          )
         })
         const result = await Promise.race([
           (options.reader ?? collectSource)(plan, env, controller.signal, clock(), stats),
@@ -140,7 +154,7 @@ export async function runCollection(
         report.responseBytes += stats.responseBytes
       }
     }
-    report.cleaned = await cleanupCollection(db, clock().toISOString())
+    report.cleaned = options.sourceIds ? false : await cleanupCollection(db, clock().toISOString())
     if (report.cleaned) {
       try {
         // The collector is also the only scheduled writer. Apply the shared retention policy

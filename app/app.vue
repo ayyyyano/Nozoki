@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDashboardSync } from './composables/useDashboardSync'
 const shared = useSharedDashboard()
 const { data: dashboard } = await useFetch<
   | import('../shared/contracts/public-dashboard').PublicDashboard
@@ -28,14 +29,41 @@ useHead(() => ({
 }))
 const displayMode = useState<'dashboard' | 'wallpaper'>('nozoki-display-mode', () => 'dashboard')
 provide('resetPersonalAppearance', resetPersonal)
-provide('reloadDashboard', async () => {
-  try {
-    await refreshNuxtData('dashboard')
-  } catch {
-    // Keep the last server-filtered projection visible. A transient refresh failure must
-    // not turn a successful login/save/logout transaction into a client-side failure.
+let refreshing: Promise<void> | undefined
+let refreshAgain = false
+const refreshRequest = shallowRef<AbortController | null>(null)
+function reloadDashboard(): Promise<void> {
+  if (refreshing) {
+    refreshAgain = true
+    return refreshing
   }
-})
+  refreshing = (async () => {
+    do {
+      refreshAgain = false
+      const prior = shared.value
+      refreshRequest.value = new AbortController()
+      try {
+        const value = await $fetch<typeof dashboard.value>('/api/dashboard', {
+          signal: refreshRequest.value.signal,
+          timeout: 10000,
+        })
+        // A logout/clear while the read was in flight must not restore an admin projection.
+        if (value?.contractVersion === 1 && shared.value === prior) {
+          dashboard.value = value
+          await nextTick()
+        }
+      } catch {
+        // A transient read failure retains the last server-filtered projection.
+      }
+    } while (refreshAgain && !refreshRequest.value?.signal.aborted)
+  })().finally(() => {
+    refreshing = undefined
+  })
+  return refreshing
+}
+provide('reloadDashboard', reloadDashboard)
+useDashboardSync(reloadDashboard)
+onBeforeUnmount(() => refreshRequest.value?.abort())
 provide('openAppearance', () => settings.value?.open())
 provide('themeControl', { dark, toggleTheme, ready })
 if (import.meta.dev) provide('dxDevelopment', { dx, dxMounted })

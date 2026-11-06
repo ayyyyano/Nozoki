@@ -181,6 +181,7 @@ const adminPreview = useState<Pick<Appearance, 'sourceColor' | 'background'> | n
   () => null,
 )
 const reloadDashboard = inject<() => Promise<void>>('reloadDashboard')!
+const notifyDashboardSaved = inject<() => void>('notifyDashboardSaved')!
 watch(
   [draft, preview],
   () => {
@@ -271,19 +272,28 @@ async function save() {
   busy.value = true
   try {
     const csrf = await $fetch<CsrfDto>('/api/auth/csrf')
-    await $fetch('/api/admin/config', {
-      method: 'PUT',
-      headers: { 'X-Nozoki-CSRF': csrf.token, 'Idempotency-Key': pending.key },
-      body: parsed.data,
-    })
+    const result = await $fetch<{ collection?: 'scheduled' | 'not_needed' | 'deferred' }>(
+      '/api/admin/config',
+      {
+        method: 'PUT',
+        headers: { 'X-Nozoki-CSRF': csrf.token, 'Idempotency-Key': pending.key },
+        body: parsed.data,
+      },
+    )
     // Release plaintext before any subsequent request; do not retain it in a retry signature.
     clearSecrets()
     pending = null
     savedNeedsReload.value = true
+    notifyDashboardSaved()
     const saved = await $fetch<Config>('/api/admin/config')
     accept(saved)
     await reloadDashboard()
-    message.value = '已保存并确认持久化'
+    message.value =
+      result.collection === 'scheduled'
+        ? '配置已保存，已安排数据更新；结果将在采集完成后显示'
+        : result.collection === 'deferred'
+          ? '配置已保存，数据更新将由定时任务重试'
+          : '已保存并确认持久化'
   } catch (error) {
     const data = (error as { data?: { code?: string; fieldErrors?: string[]; reason?: string } })
       .data

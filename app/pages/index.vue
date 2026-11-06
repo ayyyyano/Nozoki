@@ -53,9 +53,6 @@ watch(shared, (value) => {
 })
 const visible = computed(() => layoutModules(modules.value))
 useHead(() => ({ title: shared.value?.site.siteName ?? 'Nozoki' }))
-const reload = inject<() => Promise<void>>('reloadDashboard')
-onMounted(() => window.addEventListener('focus', reload!))
-onBeforeUnmount(() => window.removeEventListener('focus', reload!))
 
 const account = useTemplateRef('account')
 const accountLabel = computed(() => (shared.value?.viewer === 'admin' ? '管理后台' : '账户登录'))

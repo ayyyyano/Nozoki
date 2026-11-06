@@ -246,12 +246,21 @@ export async function commitConfig(
           m.ipVisibility ?? 'admin',
         ),
     )
-  statements.push(db.prepare('DELETE FROM quote_symbols'))
+  const quoteIds = input.quotes.map((q) => JSON.stringify([q.market, q.symbol, q.provider]))
+  statements.push(
+    db
+      .prepare('DELETE FROM quote_symbols WHERE id NOT IN (SELECT value FROM json_each(?))')
+      .bind(JSON.stringify(quoteIds)),
+  )
   for (const q of input.quotes)
     statements.push(
       db
         .prepare(
-          'INSERT INTO quote_symbols(id,market,symbol,display_name,provider,sort_order,enabled,refresh_interval) VALUES(?,?,?,?,?,?,?,?)',
+          `INSERT INTO quote_symbols(id,market,symbol,display_name,provider,sort_order,enabled,refresh_interval) VALUES(?,?,?,?,?,?,?,?)
+ ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,sort_order=excluded.sort_order,
+ enabled=excluded.enabled,refresh_interval=excluded.refresh_interval
+ WHERE display_name IS NOT excluded.display_name OR sort_order IS NOT excluded.sort_order
+ OR enabled IS NOT excluded.enabled OR refresh_interval IS NOT excluded.refresh_interval`,
         )
         .bind(
           JSON.stringify([q.market, q.symbol, q.provider]),

@@ -10,6 +10,13 @@ const { listener } = await import(new URL('./server/index.mjs', import.meta.url)
 const db = new SqliteDatabase(databasePath())
 await assertMigrated(db, fileURLToPath(new URL('./migrations', import.meta.url)))
 const env = await nodeEnvironment()
+const backgroundTasks = new Set()
+function waitUntil(task) {
+  const pending = Promise.resolve(task)
+    .catch(() => {})
+    .finally(() => backgroundTasks.delete(pending))
+  backgroundTasks.add(pending)
+}
 const server = createServer({ maxHeaderSize: 16384 }, async (req, res) => {
   try {
     let url
@@ -21,7 +28,7 @@ const server = createServer({ maxHeaderSize: 16384 }, async (req, res) => {
     }
     if (!(await boundedBody(req, res, url))) return
     // h3 forwards this platform context to SSR's internal API requests.
-    req.__unenv__ = { _platform: { nozokiNode: { db, env, request: new Request(url) } } }
+    req.__unenv__ = { waitUntil, _platform: { nozokiNode: { db, env, request: new Request(url) } } }
     delete req.headers['x-forwarded-host']
     delete req.headers['x-forwarded-proto']
     delete req.headers.forwarded
@@ -54,7 +61,8 @@ for (const signal of ['SIGTERM', 'SIGINT'])
       db.close()
       process.exit(1)
     }, 20000).unref()
-    server.close(() => {
+    server.close(async () => {
+      await Promise.allSettled([...backgroundTasks])
       clearTimeout(timer)
       db.close()
     })
