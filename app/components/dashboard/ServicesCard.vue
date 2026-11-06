@@ -19,10 +19,15 @@ const states: Record<Monitor['state'], string> = {
     :observed-at="snapshot.observedAt"
   >
     <DashboardDataState
+      :configured="snapshot.sourceConfigured"
+      :error-code="snapshot.errorCode"
       :status="snapshot.status"
       :empty="!snapshot.data?.monitors.length"
       :last-success-at="snapshot.lastSuccessAt"
     />
+    <p v-if="snapshot.partialFailures" class="scope-note" role="status">
+      {{ snapshot.partialFailures }} 个监控来源暂不可用，以下为已获取的监控数据。
+    </p>
     <div v-if="snapshot.data?.monitors.length" class="monitor-list">
       <article v-for="monitor in snapshot.data.monitors" :key="monitor.id" class="monitor-row">
         <span class="monitor-indicator" :data-state="monitor.state" />

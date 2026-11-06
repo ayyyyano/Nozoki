@@ -1,3 +1,4 @@
+import { bindSources } from '../../shared/integration-presets/bindings.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createDefaultConfig, ConfigWriteSchema } from '../../shared/contracts/config.ts'
@@ -77,7 +78,7 @@ test('source reset explicitly clears credentials and removes unreferenced source
   assert.equal(draft.integrations[0]!.credential.operation, 'replace')
 })
 
-test('source reset refuses dangling module and quote references without touching drafts', () => {
+test('source reset resolves module and quote references from the resulting source list', () => {
   for (const reference of ['module', 'quote'] as const) {
     const draft = customDraft()
     draft.integrations.push({ ...draft.integrations[0]!, id: 'custom-source' })
@@ -86,8 +87,14 @@ test('source reset refuses dangling module and quote references without touching
       draft.modules[0]!.sources.main = { sourceId: 'custom-source', subject: 'default' }
     } else draft.quotes[0]!.provider = 'custom-source'
     const before = structuredClone(draft)
-    assert.match(sectionResetIssue(draft, 'integrations')!, /custom-source/)
-    assert.throws(() => defaultSectionPatch(draft, 'integrations'), /先解除/)
+    assert.equal(sectionResetIssue(draft, 'integrations'), null)
+    const reset = bindSources({ ...draft, ...defaultSectionPatch(draft, 'integrations') })
+    assert.ok(
+      reset.modules.every((m) =>
+        Object.values(m.sources).every((s) => s.sourceId !== 'custom-source'),
+      ),
+    )
+    assert.ok(reset.quotes.every((q) => q.provider !== 'custom-source'))
     assert.deepEqual(draft, before)
     assert.equal(sectionResetIssue(draft, 'links'), null)
   }
@@ -117,4 +124,15 @@ test('reset outputs are fresh defaults rather than a shared mutable template', (
   defaultSectionPatch(draft, 'links').links![0]!.title = 'Changed reset result'
   assert.equal(defaultSectionPatch(draft, 'links').links![0]!.title, '博客')
   assert.equal(createDefaultConfig().links[0]!.title, '博客')
+})
+
+test('source reset never adds an untested default and preserves a historical default source ID', () => {
+  const config = customDraft()
+  config.integrations[0]!.id = 'historical-tencent'
+  assert.equal(
+    defaultSectionPatch(config, 'integrations').integrations![0]!.id,
+    'historical-tencent',
+  )
+  config.integrations = []
+  assert.deepEqual(defaultSectionPatch(config, 'integrations').integrations, [])
 })

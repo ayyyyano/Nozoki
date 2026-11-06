@@ -14,6 +14,8 @@ const stale = computed(
 <template>
   <DashboardModuleCard id="tailscale" :title="title" :status="snapshot.status">
     <DashboardDataState
+      :configured="snapshot.sourceConfigured"
+      :error-code="snapshot.errorCode"
       :status="snapshot.status"
       :empty="!snapshot.data?.devices.length"
       :last-success-at="snapshot.lastSuccessAt"

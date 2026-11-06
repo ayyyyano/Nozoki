@@ -193,13 +193,16 @@ test('draft probes are transient, bounded and cannot move saved secrets to a dif
       'https://host.local/',
       'https://example.com/../admin/',
     ]) {
-      const bad = createIntegrationDraft('sleepy', latest.integrations, 'bad')
+      const bad = createIntegrationDraft('sleepy', [], 'bad')
       bad.baseUrl = root
       await assert.rejects(invoke(bad), (e) => e.code === 'INVALID_REQUEST')
     }
-    const unapproved = createIntegrationDraft('sleepy', latest.integrations, 'unapproved')
+    const unapproved = createIntegrationDraft('sleepy', [], 'unapproved')
+    unapproved.id = 'unsaved-sleepy'
     unapproved.baseUrl = 'https://source.example.com/'
-    assert.equal((await invoke(unapproved)).code, 'ACCESS_NOT_APPROVED')
+    assert.equal((await invoke(unapproved)).protocolMatched, true)
+    assert.equal(calls.length, sent + 1)
+    await resetLimits()
     const stale = await body(deep)
     stale.expectedVersion--
     await assert.rejects(
@@ -212,7 +215,7 @@ test('draft probes are transient, bounded and cannot move saved secrets to a dif
       testIntegrationDraft(db, deep.id, invalid, session, env),
       (e) => e.code === 'INVALID_REQUEST',
     )
-    assert.equal(calls.length, sent)
+    assert.equal(calls.length, sent + 1)
   } finally {
     db.close()
   }

@@ -323,8 +323,7 @@ p {
 .sync-time,
 .scope-note,
 .quiet-note,
-.capability-note,
-.quote-time {
+.capability-note {
   color: var(--n-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -359,15 +358,6 @@ p {
   letter-spacing: normal;
   margin-left: 8px;
 }
-.balance-row {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 9px;
-}
-.balance-list {
-  margin: 6px 0;
-}
 .unit {
   color: var(--n-muted);
   font-size: 12px;
@@ -390,7 +380,8 @@ p {
 .balance-bars {
   display: flex;
   gap: 6px;
-  height: 100px;
+  min-height: 110px;
+  align-items: end;
 }
 .balance-history {
   margin: 12px 0 0;
@@ -402,6 +393,15 @@ p {
   flex-direction: column;
   justify-content: end;
   align-items: center;
+}
+.balance-bar-value {
+  font-size: clamp(9px, 2.5cqi, 10px);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  margin-bottom: 4px;
 }
 .balance-bar-track {
   display: flex;
@@ -437,6 +437,7 @@ p {
   pointer-events: none;
 }
 .balance-private-preview .balance-bars {
+  height: 100px;
   align-items: end;
   padding: 12px 0;
 }
@@ -481,6 +482,7 @@ p {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px 12px;
+  align-items: start;
 }
 .device-row {
   display: grid;
@@ -536,11 +538,6 @@ p {
 .device-state:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
-}
-@media (max-width: 600px) {
-  .device-list {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 .battery-value strong {
   font-size: 19px;
@@ -665,18 +662,19 @@ p {
   margin: 8px 0;
   font-size: 11px;
 }
+.quote-details > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
 .quote-details dt {
   color: var(--n-muted);
 }
 .quote-details dd {
   margin: 0;
   overflow-wrap: anywhere;
-}
-.quote-time {
-  font-size: 10px;
-}
-.quote-extra {
-  margin-top: 10px;
 }
 .tailnet-list {
   display: grid;
@@ -945,9 +943,11 @@ p {
     scroll-behavior: auto !important;
   }
 }
-@container (max-width: 400px) {
-  .device-list {
+@container (max-width: 340px) {
+  .device-row {
     grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    align-content: start;
   }
 }
 @media (max-width: 650px) {

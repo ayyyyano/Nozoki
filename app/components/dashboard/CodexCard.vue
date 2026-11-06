@@ -25,6 +25,8 @@ const accountStates = {
     :observed-at="snapshot.observedAt"
   >
     <DashboardDataState
+      :configured="snapshot.sourceConfigured"
+      :error-code="snapshot.errorCode"
       :status="snapshot.status"
       :empty="!snapshot.data?.accounts?.length && !snapshot.data?.quota?.accounts.length"
       :last-success-at="snapshot.lastSuccessAt"

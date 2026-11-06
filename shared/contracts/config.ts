@@ -250,6 +250,7 @@ export const IntegrationWriteSchema = IntegrationSettingsBaseSchema.omit({
 })
   .extend({
     credential: CredentialOperationSchema,
+    connectionProof: z.string().max(100).optional(),
     identityCredential: z
       .strictObject({
         operation: z.literal('import'),

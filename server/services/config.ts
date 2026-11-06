@@ -1,3 +1,4 @@
+import { bindSources, duplicateSourceType } from '../../shared/integration-presets/bindings.ts'
 import {
   backgroundImageHash,
   decodeBackgroundImage,
@@ -104,7 +105,9 @@ export async function saveConfig(
         ),
       ],
     }
-  const { config, expectedVersion } = parsed.data
+  const { expectedVersion } = parsed.data
+  const config =
+    options.actor.kind === 'admin' ? bindSources(parsed.data.config) : parsed.data.config
   const actor = z
     .strictObject({
       kind: z.enum(['system', 'unattributed', 'admin']),
@@ -166,12 +169,28 @@ export async function saveConfig(
       if (!exists)
         return { success: false, code: 'VALIDATION_ERROR', fieldErrors: ['site.background'] }
     }
+    if (
+      actor.data.kind === 'admin' &&
+      duplicateSourceType(config.integrations, current.config.integrations)
+    )
+      return {
+        success: false,
+        code: 'VALIDATION_ERROR',
+        fieldErrors: ['integrations'],
+        reason: 'SOURCE_TYPE_DUPLICATE',
+      }
     const stored: StoredIntegration[] = []
     for (const i of config.integrations) {
       const old = current.integrations.find((s) => s.settings.id === i.id)
-      const { credential, identityCredential, ...settings } = i
+      const { credential, identityCredential, connectionProof: _proof, ...settings } = i
       settings.baseUrl = normalizeServiceTarget(settings.baseUrl)
       settings.access ??= { mode: 'legacy' }
+      if (
+        credential.operation === 'clear' &&
+        settings.access.mode !== 'legacy' &&
+        settings.access.authentication !== 'none'
+      )
+        settings.access = { ...settings.access, approved: false, approvedTarget: null }
       if (actor.data.kind === 'admin') {
         const issue = integrationWriteIssue(
           { ...i, baseUrl: settings.baseUrl },

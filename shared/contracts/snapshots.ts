@@ -242,7 +242,7 @@ export const DataSchemas = {
           capabilities: caps,
         }),
       )
-      .max(200),
+      .max(400),
   }),
 } satisfies Record<ModuleId, z.ZodType>
 export function snapshotSchema(id: ModuleId) {

@@ -1,3 +1,4 @@
+import { CONFIG_BODY_LIMIT } from '../../shared/contracts/admin.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
@@ -101,9 +102,9 @@ test('phase 04 atomic HTTP-save core in real D1/workerd', async (t) => {
     'streaming budget counts actual bytes despite missing or false Content-Length',
     async () => {
       const worker = await mf.getWorker()
-      assert.equal(await worker.bodyProbe('1', 262145), 413)
-      assert.equal(await worker.bodyProbe(null, 262145), 413)
-      assert.equal(await worker.bodyProbe('262145', 1), 413)
+      assert.equal(await worker.bodyProbe('1', CONFIG_BODY_LIMIT + 1), 413)
+      assert.equal(await worker.bodyProbe(null, CONFIG_BODY_LIMIT + 1), 413)
+      assert.equal(await worker.bodyProbe(String(CONFIG_BODY_LIMIT + 1), 1), 413)
       assert.equal(await worker.bodyProbe('1', 8192), 8192)
       assert.equal(await worker.bodyProbe('1', 4097, '/api/auth/login'), 413)
     },
@@ -188,6 +189,17 @@ test('phase 04 atomic HTTP-save core in real D1/workerd', async (t) => {
       source.access.approvedTarget = sourceTargetKey(source, source.access)
       source.credential = { operation: 'replace', value: 'SYNTHETIC_PRIVATE_CREDENTIAL' }
       i.config.integrations = [source]
+      const probe = JSON.parse(
+        await (
+          await mf.getWorker()
+        ).testProof(source.id, {
+          expectedVersion: i.expectedVersion,
+          draft: source,
+          quoteSymbols: [],
+        }),
+      )
+      assert.ok(probe.connectionProof, JSON.stringify(probe))
+      source.connectionProof = probe.connectionProof
       assert.equal((await save(i)).success, true)
       let c = await readConfig(db)
       assert.equal(c.integrations[0].credentialState.configured, true)
@@ -201,6 +213,8 @@ test('phase 04 atomic HTTP-save core in real D1/workerd', async (t) => {
       const version = i.expectedVersion
       assert.equal((await save(i)).code, 'VALIDATION_ERROR')
       assert.equal((await readConfig(db)).site.configVersion, version)
+      // Clearing the saved key is safe; a changed target still requires a new successful test.
+      i = await input()
       i.config.integrations[0].credential = { operation: 'clear' }
       assert.equal((await save(i)).success, true)
       assert.equal((await readConfig(db)).integrations[0].credentialState.configured, false)

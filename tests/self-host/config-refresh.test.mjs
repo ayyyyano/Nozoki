@@ -1,3 +1,5 @@
+import { bindSources } from '../../shared/integration-presets/bindings.ts'
+import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -100,6 +102,24 @@ test(
     const path = resolve(directory, 'test.sqlite'),
       db = new SqliteDatabase(path)
     await migrateDatabase(db, 'migrations', resolve(directory, 'backups'))
+    // Existing approved source, disabled initially. Node has no connector, so no network is used.
+    const seed = await readConfig(db)
+    const seededConfig = editableConfig(seed)
+    const sleepy = createIntegrationDraft('sleepy', [], 'fixture')
+    sleepy.baseUrl = 'https://fixture.example.com/'
+    sleepy.access.approved = true
+    sleepy.access.approvedTarget = sourceTargetKey(sleepy, sleepy.access)
+    seededConfig.integrations = [sleepy]
+    assert.equal(
+      (
+        await saveConfig(
+          db,
+          { expectedVersion: seed.site.configVersion, config: bindSources(seededConfig) },
+          { actor: { kind: 'system' } },
+        )
+      ).success,
+      true,
+    )
     db.close()
     const socket = createServer()
     await new Promise((r) => socket.listen(0, '127.0.0.1', r))
@@ -153,10 +173,8 @@ test(
     const csrf = await (await fetch(origin + '/api/auth/csrf', { headers })).json()
     const current = await (await fetch(origin + '/api/admin/config', { headers })).json(),
       config = editableConfig(current)
-    // Unsupported protocol: exercise scheduling/failure persistence without contacting a vendor.
-    const changed = config.integrations.find((s) => s.id === 'tencent')
-    changed.protocolVersion = 'fixture-unsupported'
-    changed.access.approvedTarget = sourceTargetKey(changed, changed.access)
+    // Enabling an existing source schedules collection without changing its tested target.
+    config.integrations.find((s) => s.id === 'sleepy').enabled = true
     const saved = await fetch(origin + '/api/admin/config', {
       method: 'PUT',
       headers: {
@@ -176,7 +194,7 @@ test(
       let row
       for (let n = 0; n < 100; n++) {
         row = await check
-          .prepare("SELECT status FROM collection_state WHERE source_id='tencent'")
+          .prepare("SELECT status FROM collection_state WHERE source_id='sleepy'")
           .first()
         if (
           row?.status === 'error' ||

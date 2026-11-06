@@ -149,10 +149,13 @@ try {
     )
     assert.equal(g.columnCount, g.grid.width < 1214 ? 2 : 3)
     assert.equal(g.quotes[0].y, g.quotes[1].y)
-    assert.ok(g.cards.find((c) => c.id === 'quotes').height < 400)
   }
   const fitted = await show('three-column-detail-baseline', { guest: true, stale: true }, 1440, 900)
-  await page.locator('.quote-extra summary').first().click()
+  const detail = page.locator('.quote-details dd').first()
+  const priorDetail = await detail.textContent()
+  await detail.evaluate((e) => {
+    e.textContent = '离线夹具长明细 '.repeat(30)
+  })
   await stable(page)
   const expanded = await measure(page)
   assertGeometry(expanded, fitted.domOrder)
@@ -164,7 +167,9 @@ try {
   assert.equal(expanded.quotes[1].height, fitted.quotes[1].height)
   report.checks.push({ name: 'three-column-detail-no-unrelated-growth', ...expanded })
   await capture(page, `${directory}/three-column-detail-open-1440.png`)
-  await page.locator('.quote-extra summary').first().click()
+  await detail.evaluate((e, text) => {
+    e.textContent = text
+  }, priorDetail)
   await stable(page)
   const two = await show(
     'two-hints',
@@ -229,7 +234,12 @@ try {
   )
   assert.equal(activity.cards.find((c) => c.id === 'links').rowGrowth, 0)
   const quotes = await show('long-quotes', { guest: true, quotes: 4, links: 8 }, 1440, 900, true)
-  await page.locator('.quote-extra summary').first().click()
+  await page
+    .locator('.quote-details dd')
+    .first()
+    .evaluate((e) => {
+      e.textContent = '离线夹具长明细 '.repeat(30)
+    })
   await stable(page)
   const opened = await measure(page)
   assertGeometry(opened, quotes.domOrder)

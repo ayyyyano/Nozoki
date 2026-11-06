@@ -13,6 +13,8 @@ export const SOURCE_WRITE_ERRORS = {
   SOURCE_MAPPING_FIXED: '此来源仅允许编辑已支持的配置字段。',
   SOURCE_CAPABILITIES_READONLY: '能力状态由服务验证，不能手动更改。',
   SOURCE_STATUS_PAGE_REQUIRED: '请填写有效的状态页标识。',
+  SOURCE_TEST_REQUIRED: '请先测试此来源，测试通过后再保存。',
+  SOURCE_TYPE_DUPLICATE: '此类型已添加，请编辑已有来源。',
   SOURCE_IN_USE: '此来源仍被模块或行情标的引用，请先解除引用。',
 } as const
 export type SourceWriteIssue = keyof typeof SOURCE_WRITE_ERRORS
@@ -56,7 +58,7 @@ const definitions: IntegrationPreset[] = [
     instanceAddress: false,
     interval: 300,
     builtin: false,
-    singleton: false,
+    singleton: true,
     fields: [],
     capabilities: [{ key: 'balance', label: '账户余额' }],
   },
@@ -73,7 +75,7 @@ const definitions: IntegrationPreset[] = [
     instanceAddress: true,
     interval: 300,
     builtin: false,
-    singleton: false,
+    singleton: true,
     fields: [],
     capabilities: [
       { key: 'devices', label: '设备状态' },
@@ -97,7 +99,7 @@ const definitions: IntegrationPreset[] = [
     instanceAddress: false,
     interval: 300,
     builtin: false,
-    singleton: false,
+    singleton: true,
     fields: [],
     capabilities: [
       { key: 'devices', label: '设备列表' },
@@ -118,7 +120,7 @@ const definitions: IntegrationPreset[] = [
     instanceAddress: true,
     interval: 300,
     builtin: false,
-    singleton: false,
+    singleton: true,
     fields: [],
     capabilities: [
       { key: 'accounts', label: '账户状态' },
@@ -139,7 +141,7 @@ const definitions: IntegrationPreset[] = [
     instanceAddress: true,
     interval: 300,
     builtin: false,
-    singleton: false,
+    singleton: true,
     fields: [{ key: 'status_page_slug', label: '状态页标识（slug）', max: 64 }],
     capabilities: [
       { key: 'status', label: '监控状态' },
@@ -159,7 +161,7 @@ const definitions: IntegrationPreset[] = [
     instanceAddress: true,
     interval: 300,
     builtin: false,
-    singleton: false,
+    singleton: true,
     fields: [],
     capabilities: [
       { key: 'status', label: '监控状态' },
@@ -205,8 +207,9 @@ const definitions: IntegrationPreset[] = [
 ]
 export const INTEGRATION_PRESETS: readonly IntegrationPreset[] = definitions
 export function integrationPreset(
-  source: Pick<IntegrationSettings, 'provider' | 'protocolVersion'>,
+  source: Pick<IntegrationSettings, 'provider' | 'protocolVersion'> | undefined,
 ) {
+  if (!source) return undefined
   return INTEGRATION_PRESETS.find(
     (p) => p.provider === source.provider && p.protocol === source.protocolVersion,
   )
@@ -236,16 +239,9 @@ export function createIntegrationDraft(
 ): IntegrationDraft {
   const p = INTEGRATION_PRESETS.find((p) => p.id === presetId)
   if (!p || presetAlreadyAdded(p, sources)) throw new Error('SOURCE_PRESET_UNAVAILABLE')
-  const suffix = entropy
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-    .slice(0, 12)
-  if (!suffix) throw new Error('INVALID_SOURCE_ENTROPY')
   const ids = new Set(sources.map((s) => s.id))
-  const base = p.singleton ? p.id : p.id + '-' + suffix
-  let id = base,
-    counter = 1
-  while (ids.has(id)) id = base + '-' + counter++
+  if (ids.has(p.id)) throw new Error('SOURCE_PRESET_UNAVAILABLE')
+  const id = p.id
   const source: IntegrationDraft = {
     id,
     provider: p.provider,

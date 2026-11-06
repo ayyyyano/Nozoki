@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { SqliteDatabase } from '../../platform/node/sqlite.mjs'
 import { migrateDatabase } from '../../platform/node/migrations.mjs'
 import { readConfig, saveConfig } from '../../server/services/config.ts'
+import { testIntegrationDraft } from '../../server/services/integration-draft-test.ts'
 import { saveAdminConfig } from '../../server/services/admin-config.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
@@ -154,7 +155,12 @@ test('exact legacy targets migrate atomically, preserving ciphertext, references
       (await saveConfig(db, input(unchanged.config), { actor: { kind: 'system' } })).success,
       true,
     )
-    assert.deepEqual((await readStoredState(db)).integrations, unchanged.integrations)
+    // Materializing derived module references may advance collection revisions, never secrets.
+    const withoutRevision = ({ revision: _revision, ...source }) => source
+    assert.deepEqual(
+      (await readStoredState(db)).integrations.map(withoutRevision),
+      unchanged.integrations.map(withoutRevision),
+    )
   } finally {
     db.close()
   }
@@ -217,6 +223,16 @@ test('Codex old identity import proves account ACL matches, encrypts both keys a
     }
     value.config.integrations[value.config.integrations.findIndex((i) => i.id === id)] = migrated
     const before = await readConfig(db)
+    const { identityCredential: _identity, ...draft } = migrated
+    const probe = await testIntegrationDraft(
+      db,
+      id,
+      { expectedVersion: value.expectedVersion, draft, quoteSymbols: [] },
+      session,
+      env,
+    )
+    assert.equal(probe.protocolMatched, true)
+    migrated.connectionProof = probe.connectionProof
     assert.equal(
       (await saveAdminConfig(db, value, randomUUID(), session, env)).reason,
       'IDENTITY_IMPORT_UNVERIFIED',
@@ -226,7 +242,7 @@ test('Codex old identity import proves account ACL matches, encrypts both keys a
     const key = randomUUID()
     assert.equal((await saveAdminConfig(db, value, key, session, env)).success, true)
     assert.equal((await saveAdminConfig(db, value, key, session, env)).success, true)
-    assert.equal(calls, 2)
+    assert.equal(calls, 3)
     const state = await readStoredState(db),
       record = state.integrations.find((i) => i.settings.id === id)
     assert.equal(state.config.integrations.find((i) => i.id === id).identityConfigured, true)

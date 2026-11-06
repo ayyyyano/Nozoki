@@ -192,8 +192,8 @@ test('phase 05 D1 connection-test admission and fail-closed services', async (t)
         )
       const before = await business(),
         r = JSON.parse(await (await mf.getWorker()).probe(i.id))
-      assert.equal(r.code, 'TARGET_NOT_APPROVED')
-      assert.equal(r.status, 'unsupported')
+      assert.equal(r.code, 'ACCESS_NOT_APPROVED')
+      assert.equal(r.status, 'error')
       assert.deepEqual(await business(), before)
       assert.equal(
         (

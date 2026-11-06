@@ -131,14 +131,22 @@ try {
     assert.equal(compact.quotes[0].y, compact.quotes[1].y)
     assert.equal(compact.quotes[2].y, compact.quotes[3].y)
     const sibling = compact.quotes[1].height
-    await page.locator('.quote-extra summary').first().click()
+    const detail = page.locator('.quote-details dd').first()
+    const priorDetail = await detail.textContent()
+    await detail.evaluate((e) => {
+      e.textContent = '离线夹具长明细 '.repeat(30)
+    })
     await stable(page)
     const opened = await measure(page)
     assert.equal(opened.quotes[1].height, sibling)
-    assert.equal(await page.locator('.quote-extra[open]').count(), 1)
+    assert.equal(await page.locator('.quote-item details').count(), 0)
+    assert.equal(await page.locator('.quote-details:visible').count(), 4)
     assert.equal(opened.cards.find((c) => c.id === 'activity').height, activity.height)
     await capture(page, `${directory}/after-detail-open-1440.png`)
     report.checks.push({ name: 'independent-detail', ...opened })
+    await detail.evaluate((e, text) => {
+      e.textContent = text
+    }, priorDetail)
     const long = await show('long-activity', { guest: true, longActivity: true }, 1440, 900, true)
     assert.ok(
       long.cards.find((c) => c.id === 'activity').height >

@@ -1,3 +1,4 @@
+import { issueSourceTestProof } from './source-test-proof.ts'
 import { DraftIntegrationTestSchema } from '../../shared/contracts/integration-test.ts'
 import { ProbeResultSchema, type ProbeResult } from '../../shared/contracts/adapter.ts'
 import { integrationWriteIssue } from '../../shared/integration-presets/index.ts'
@@ -44,9 +45,18 @@ export async function testIntegrationDraft(
     current.config.integrations.find((s) => s.id === id),
   )
   if (issue) throw new AuthError(400, issue)
-  const { credential: operation, identityCredential: _identity, ...settings } = draft
+  const {
+    credential: operation,
+    identityCredential: _identity,
+    connectionProof: _proof,
+    ...settings
+  } = draft
   // Explicit testing is allowed while disabled. This flag exists only in this request's copy.
   const source = { ...settings, enabled: true, credentialState: credentialState(null) }
+  if (source.access?.mode === 'public') {
+    source.access = { ...source.access, approved: true, approvedTarget: null }
+    source.access.approvedTarget = sourceTargetKey(source, source.access)
+  }
   const now = new Date()
   const response: ProbeResult = {
     sourceId: id,
@@ -132,6 +142,17 @@ export async function testIntegrationDraft(
       response.protocolMatched = false
       response.capabilities = declaredCapabilities(source.provider)
       response.summary = { items: 0, views: 0 }
+    } else if (
+      !response.code &&
+      response.protocolMatched &&
+      ['ok', 'stale', 'offline'].includes(response.status)
+    ) {
+      response.connectionProof = await issueSourceTestProof(
+        { ...draft, access: source.access },
+        old,
+        session,
+        expectedVersion,
+      )
     }
   } catch (e) {
     if (e instanceof AuthError) throw e

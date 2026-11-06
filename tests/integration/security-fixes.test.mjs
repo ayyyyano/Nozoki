@@ -182,7 +182,7 @@ test('phase 02 security fixes on isolated real workerd D1', async (t) => {
         updated = await db.prepare('SELECT * FROM site_settings').first()
       assert.equal(updated.settings_json, prior.settings_json)
       assert.equal(updated.links_json, prior.links_json)
-      assert.equal(updated.config_version, prior.config_version + 2)
+      assert.equal(updated.config_version, prior.config_version + 3)
       const upgraded = await db.prepare('SELECT * FROM integration_snapshot_views').first()
       assert.deepEqual(Object.fromEntries(Object.keys(old).map((key) => [key, upgraded[key]])), old)
       assert.match(upgraded.source_revision, /^[a-f0-9]{32}:1$/)

@@ -22,6 +22,8 @@ export interface DataSnapshot<T> {
   lastSuccessAt: string | null
   expiresAt: string | null
   errorCode?: string
+  sourceConfigured?: boolean
+  partialFailures?: number
   collection?: {
     status: DataStatus
     errorCode: string | null

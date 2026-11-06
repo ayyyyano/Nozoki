@@ -9,7 +9,15 @@ import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
 import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
 import { saveConfig } from '../../server/services/config.ts'
-import { source, sleepMeta, sleepStatus, balance } from '../fixtures/adapters.ts'
+import {
+  source,
+  sleepMeta,
+  sleepStatus,
+  balance,
+  kumaMeta,
+  kumaHearts,
+  flare,
+} from '../fixtures/adapters.ts'
 import { expect } from 'playwright/test'
 
 const require = createRequire(import.meta.url),
@@ -76,6 +84,16 @@ test(
       outboundService: async (request) => {
         const url = new URL(request.url)
         if (url.hostname.startsWith('blocked.')) throw new Error('Synthetic network refusal')
+        if (url.hostname.startsWith('html.'))
+          return new Response('<html>Fixture login</html>', {
+            headers: { 'Content-Type': 'text/html' },
+          })
+        if (url.hostname.startsWith('redirect.'))
+          return new Response(null, { status: 302, headers: { Location: 'https://127.0.0.1/' } })
+        if (url.pathname.endsWith('api/data'))
+          return Response.json({ ...flare, updatedAt: Date.now() / 1000 })
+        if (url.pathname.includes('api/status-page/heartbeat/')) return Response.json(kumaHearts)
+        if (url.pathname.includes('api/status-page/')) return Response.json(kumaMeta)
         assert.equal(request.method, 'GET')
         assert.equal(request.headers.get('cookie'), null)
         upstream.push({ url: url.href, authorization: request.headers.get('authorization') })
@@ -178,7 +196,10 @@ test(
       request('/api/admin/config', 'PUT', value, { 'Idempotency-Key': key })
     if (
       process.env.NOZOKI_TEST_LIST_HEADERS === '1' ||
-      process.env.NOZOKI_TEST_BACKGROUND === '1'
+      process.env.NOZOKI_TEST_BACKGROUND === '1' ||
+      process.env.NOZOKI_TEST_DEVICE_COLUMNS === '1' ||
+      process.env.NOZOKI_TEST_CARD_METRICS === '1' ||
+      process.env.NOZOKI_TEST_ONBOARDING === '1'
     ) {
       const { launch, settle } = await import('../browser/support.mjs')
       const { exerciseAdminListHeaders } = await import('../browser/admin-list-headers.mjs')
@@ -191,7 +212,25 @@ test(
       const page = await context.newPage()
       await page.goto(origin + '/admin')
       await settle(page)
-      if (process.env.NOZOKI_TEST_BACKGROUND === '1') {
+      if (process.env.NOZOKI_TEST_ONBOARDING === '1') {
+        const { exerciseSourceOnboarding } = await import('../browser/source-onboarding.mjs')
+        await exerciseSourceOnboarding(page, {
+          origin,
+          input,
+          request,
+          save,
+          db,
+          collector,
+          env,
+          evidence,
+        })
+      } else if (process.env.NOZOKI_TEST_CARD_METRICS === '1') {
+        const { exerciseCardMetrics } = await import('../browser/card-metrics.mjs')
+        await exerciseCardMetrics(page, { origin, evidence })
+      } else if (process.env.NOZOKI_TEST_DEVICE_COLUMNS === '1') {
+        const { exerciseDeviceColumns } = await import('../browser/device-columns.mjs')
+        await exerciseDeviceColumns(page, { origin, evidence })
+      } else if (process.env.NOZOKI_TEST_BACKGROUND === '1') {
         const { exerciseSharedBackground } = await import('../browser/admin-background.mjs')
         await exerciseSharedBackground(page, {
           browser,
@@ -261,12 +300,31 @@ test(
       s.access.approvedTarget = sourceTargetKey(s, s.access)
       return { ...s, credential: { operation: 'keep' } }
     }
+    const prove = async (value, ids) => {
+      for (const id of ids) {
+        const source = value.config.integrations.find((s) => s.id === id)
+        const { identityCredential: _identity, connectionProof: _proof, ...draft } = source
+        const result = await (
+          await request('/api/admin/integrations/' + id + '/test', 'POST', {
+            expectedVersion: value.expectedVersion,
+            draft,
+            quoteSymbols: [],
+          })
+        ).json()
+        assert.ok(result.connectionProof, JSON.stringify(result))
+        source.connectionProof = result.connectionProof
+      }
+    }
     let value = await input()
     for (const m of value.config.modules) m.sources = {}
     value.config.quotes.forEach((q) => {
       q.provider = null
     })
     value.config.integrations = [approved('fixture'), approved('blocked', 'blocked.example.com')]
+    const blocked = value.config.integrations.find((s) => s.id === 'blocked')
+    blocked.provider = 'uptimeflare'
+    blocked.protocolVersion = 'uptimeflare-data-2024'
+    blocked.access.approvedTarget = sourceTargetKey(blocked, blocked.access)
     const devices = value.config.modules.find((m) => m.id === 'devices')
     devices.enabled = true
     devices.visibility = 'public'
@@ -285,11 +343,16 @@ test(
       ).status,
       403,
     )
+    // Import an unavailable legacy fixture internally; new sources use the tested onboarding path.
+    assert.equal((await saveConfig(db, value, { actor: { kind: 'system' } })).success, true)
+    value = await input()
+    value.config.site.siteName = 'HTTP save fixture'
     const key = crypto.randomUUID(),
       saved = await save(value, key)
     assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
     assert.equal((await (await save(value, key)).json()).replayed, true)
     assert.equal((await save(value)).status, 409)
+    await collector.fetch(origin + '/collect')
     await expect
       .poll(
         async () =>
@@ -382,6 +445,7 @@ test(
       sourceId: deep.id,
       subject: 'default',
     }
+    await prove(value, [sleep.id, deep.id])
     assert.equal((await save(value)).status, 200)
     await expect
       .poll(
@@ -463,6 +527,7 @@ test(
       ).identity_envelope_json,
       null,
     )
+    await prove(value, [codex.id])
     codex.identityCredential = { operation: 'import', value: importedIdentity }
     assert.equal((await save(value)).status, 200)
     const identity = (
@@ -497,6 +562,7 @@ test(
       operation: 'replace',
       value: 'Synthetic-replacement-key',
     }
+    await prove(value, ['codex-fixture'])
     assert.equal((await save(value)).status, 200)
     assert.equal(
       (
@@ -530,7 +596,7 @@ test(
         const page = await context.newPage()
         await page.goto(origin + '/admin')
         await settle(page)
-        await exerciseSourceManager(page, { input, save, deepId: deep.id, evidence })
+        await exerciseSourceManager(page, { input, save, deepId: deep.id, evidence, db })
         await context.close()
         await browser.close()
         browser = null

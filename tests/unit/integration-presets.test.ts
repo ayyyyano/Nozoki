@@ -50,8 +50,8 @@ test('presets match registered adapters, approved fixed targets and material ico
 })
 test('new sources have stable, collision-free IDs; singleton checks include disabled and renamed instances', () => {
   const first = createIntegrationDraft('sleepy', [], 'ABC-123')
-  const copy = createIntegrationDraft('sleepy', [first], 'ABC-123')
-  assert.notEqual(first.id, copy.id)
+  assert.equal(first.id, 'sleepy')
+  assert.throws(() => createIntegrationDraft('sleepy', [first], 'ABC-123'))
   const tencent = { ...createIntegrationDraft('tencent', [], 'x'), id: 'my-quotes', enabled: false }
   assert.equal(presetAlreadyAdded(integrationPreset(tencent)!, [tencent]), true)
   assert.throws(() => createIntegrationDraft('tencent', [tencent], 'x'))

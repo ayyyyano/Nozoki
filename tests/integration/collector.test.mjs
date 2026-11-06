@@ -1,3 +1,4 @@
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
@@ -55,7 +56,7 @@ const modules = (await walk(root))
         : a.localeCompare(b),
   )
   .map((path) => ({ type: 'ESModule', path }))
-const s = source('sleepy'),
+const s = { ...source('sleepy'), baseUrl: 'https://source.example.com/service/' },
   relayToken = randomToken(),
   rootBytes = crypto.getRandomValues(new Uint8Array(32)),
   encryption = Buffer.from(rootBytes).toString('base64url'),
@@ -97,9 +98,17 @@ function options() {
     d1Databases: { DB: dbid },
     serviceBindings: { NOZOKI_PRIVATE_RELAY: binding },
     outboundService: async (request) => {
-      hostnames++
-      assert.equal(new URL(request.url).origin, 'https://api.deepseek.com')
-      return Response.json(balance)
+      if (new URL(request.url).hostname === 'api.deepseek.com') {
+        hostnames++
+        return Response.json(balance)
+      }
+      assert.equal(new URL(request.url).origin, 'https://source.example.com')
+      upstream++
+      if (relayFailure) return new Response('SYNTHETIC-ERROR', { status: 503 })
+      const v = sleepyDevicesFixture()
+      v.time = Date.now() / 1000
+      v.last_updated = v.time
+      return Response.json(v)
     },
   }
   const c = convertV4MiniflareOptions({
@@ -165,6 +174,9 @@ const save = async (change) => {
   const current = await readConfig(db),
     config = editableConfig(current)
   change(config)
+  for (const source of config.integrations)
+    if (source.access?.mode === 'public' && source.access.approved)
+      source.access.approvedTarget = sourceTargetKey(source, source.access)
   const result = await saveConfig(
     db,
     { expectedVersion: current.site.configVersion, config },
@@ -186,14 +198,37 @@ async function reset(spec = [['fixture', 'sleepy', 'devices']]) {
   await save((c) => {
     c.integrations = spec.map(([id, provider]) => {
       const { credentialState: _, ...settings } = source(provider)
-      return { ...settings, id, credential: { operation: 'keep' } }
+      const value = {
+        ...settings,
+        id,
+        baseUrl:
+          provider === 'sleepy'
+            ? s.baseUrl
+            : provider === 'deepseek'
+              ? 'https://api.deepseek.com/'
+              : settings.baseUrl,
+        credential: { operation: 'keep' },
+      }
+      if (provider !== 'quotes-custom') {
+        value.access = {
+          mode: 'public',
+          authentication: provider === 'deepseek' ? 'bearer' : 'none',
+          approved: true,
+          approvedTarget: null,
+        }
+        value.access.approvedTarget = sourceTargetKey(value, value.access)
+      }
+      return value
     })
     for (const m of c.modules) {
       m.sources = {}
       m.fields = {}
     }
-    for (const [id, _provider, moduleId] of spec)
-      c.modules.find((m) => m.id === moduleId).sources.main = { sourceId: id, subject: 'default' }
+    for (const [id, _provider, moduleId] of spec) {
+      const module = c.modules.find((m) => m.id === moduleId)
+      module.enabled = true
+      module.sources.main = { sourceId: id, subject: 'default' }
+    }
   })
 }
 test('phase 06 real workerd/D1 collector fences, schedules and shared reads', async (t) => {
@@ -331,7 +366,7 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
     async () => {
       const mutations = [
         (c) => {
-          c.integrations[0].baseUrl = 'https://another.invalid/root/'
+          c.integrations[0].baseUrl = 'https://another.example.com/root/'
           c.integrations[0].credential = { operation: 'clear' }
         },
         (c) => {
@@ -390,43 +425,34 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
     },
   )
   await check(
-    'second module SQL failure rolls back parent, all views and success state; multi-view retry commits together',
+    'view SQL failure rolls back parent and success state; retry commits the view and parent together',
     async () => {
       await reset()
-      await save((c) => {
-        c.modules.find((m) => m.id === 'codex').sources.main = {
-          sourceId: 'fixture',
-          subject: 'default',
-        }
-      })
       await db
         .prepare(
-          "CREATE TRIGGER injected_second_view BEFORE INSERT ON integration_snapshot_views WHEN NEW.module_id='codex' BEGIN SELECT RAISE(ABORT,'INJECTED_SQL_FAILURE'); END",
+          "CREATE TRIGGER injected_view BEFORE INSERT ON integration_snapshot_views BEGIN SELECT RAISE(ABORT,'INJECTED_SQL_FAILURE'); END",
         )
         .run()
-      let result = JSON.parse(await h1.run(at, 'multi'))
+      let result = JSON.parse(await h1.run(at))
       assert.equal(result.failure, 1)
       assert.equal((await rows('integration_snapshots')).length, 0)
       assert.equal((await rows('integration_snapshot_views')).length, 0)
       assert.ok((await rows('collection_runs')).every((r) => r.status === 'failure'))
       assert.equal((await rows('collection_commit_guard')).length, 0)
-      await db.prepare('DROP TRIGGER injected_second_view').run()
-      result = JSON.parse(await h1.run(at + 601000, 'multi'))
+      await db.prepare('DROP TRIGGER injected_view').run()
+      result = JSON.parse(await h1.run(at + 601000))
       assert.equal(result.success, 1)
       assert.equal((await rows('integration_snapshots')).length, 1)
-      assert.equal((await rows('integration_snapshot_views')).length, 2)
+      assert.equal((await rows('integration_snapshot_views')).length, 1)
       await save((c) => {
-        c.modules.find((m) => m.id === 'codex').enabled = false
+        c.modules.find((m) => m.id === 'devices').enabled = false
       })
-      const before = (await rows('integration_snapshot_views')).find((r) => r.module_id === 'codex')
-      result = JSON.parse(await h1.run(at + 902000, 'multi'))
-      assert.equal(result.success, 1)
-      assert.deepEqual(
-        (await rows('integration_snapshot_views')).find((r) => r.module_id === 'codex'),
-        before,
-      )
+      const before = await rows('integration_snapshot_views')
+      result = JSON.parse(await h1.run(at + 902000))
+      assert.equal(result.selected, 0)
+      assert.deepEqual(await rows('integration_snapshot_views'), before)
       await save((c) => {
-        c.modules.find((m) => m.id === 'codex').enabled = true
+        c.modules.find((m) => m.id === 'devices').enabled = true
       })
     },
   )
@@ -533,11 +559,11 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
     },
   )
   await check(
-    'unreferenced/disabled/local modules do not collect; unknown quote providers never create a price',
+    'disabled sources and modules do not collect; unapproved quote sources never create a price',
     async () => {
       await reset()
       await save((c) => {
-        c.modules.find((m) => m.id === 'devices').sources = {}
+        c.modules.find((m) => m.id === 'devices').enabled = false
       })
       assert.equal(JSON.parse(await h1.run(at)).selected, 0)
       await reset()
@@ -549,12 +575,13 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
       const n = upstream
       await ca.scheduled({ scheduledTime: Date.now(), cron: '*/5 * * * *' })
       assert.equal(upstream, n)
-      assert.equal((await rows('collection_state')).length, 0)
+      assert.equal((await rows('collection_state')).length, 1)
+      assert.equal((await rows('collection_state'))[0].error_code, 'ACCESS_NOT_APPROVED')
       assert.equal((await rows('integration_snapshot_views')).length, 0)
     },
   )
   await check(
-    'actual scheduled handler uses a private binding once; not-due/duplicate and guest reads make zero additional requests',
+    'actual scheduled handler uses the approved public route once; not-due/duplicate and guest reads make zero additional requests',
     async () => {
       await reset()
       const before = upstream
@@ -850,18 +877,22 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
       await reset()
       await save((c) => {
         c.integrations[0].baseUrl = 'https://unapproved.invalid/'
+        c.integrations[0].access = { mode: 'legacy' }
         c.integrations[0].credential = { operation: 'clear' }
       })
       let before = { upstream, hostnames }
       await ca.scheduled({ scheduledTime: Date.now(), cron: '*/5 * * * *' })
       assert.deepEqual({ upstream, hostnames }, before)
-      assert.equal((await rows('collection_state'))[0].error_code, 'TARGET_NOT_APPROVED')
+      assert.equal((await rows('collection_state'))[0].error_code, 'ACCESS_NOT_APPROVED')
       await reset()
+      await save((c) => {
+        c.integrations[0].access = { mode: 'legacy' }
+      })
       const unbound = await mf.getWorker('collector-unbound')
       before = { upstream, hostnames }
       await unbound.scheduled({ scheduledTime: Date.now(), cron: '*/5 * * * *' })
       assert.deepEqual({ upstream, hostnames }, before)
-      assert.equal((await rows('collection_state'))[0].error_code, 'TARGET_NOT_APPROVED')
+      assert.equal((await rows('collection_state'))[0].error_code, 'ACCESS_NOT_APPROVED')
       const rejected = JSON.parse(await h1.run(Date.now()))
       assert.equal(rejected.fatal, 'COLLECTION_UNAVAILABLE')
       assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, [])

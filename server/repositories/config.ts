@@ -1,3 +1,4 @@
+import { bindSources } from '../../shared/integration-presets/bindings.ts'
 import { requestStatements, type ConfigRequest } from './config-requests.ts'
 import {
   ConfigSchema,
@@ -29,7 +30,7 @@ const parseJson = (value: unknown) => {
     throw new DataLayerError('CONFIG_BASELINE_INVALID')
   return JSON.parse(value) as unknown
 }
-/** One transactional batch also gives a consistent read across configuration and snapshots. */
+/** Read configuration atomically, then load derived snapshot references behind its version fence. */
 export async function readStoredState(
   db: Database,
   withSnapshots: boolean | 'admin' = false,
@@ -40,13 +41,7 @@ export async function readStoredState(
       db.prepare('SELECT * FROM dashboard_modules ORDER BY sort_order,id'),
       db.prepare('SELECT * FROM quote_symbols ORDER BY sort_order,id'),
       db.prepare('SELECT * FROM integrations ORDER BY id'),
-      db.prepare(
-        withSnapshots
-          ? `SELECT DISTINCT s.* FROM dashboard_modules m JOIN json_each(m.sources_json) mapping
-             JOIN integration_snapshot_views s ON s.source_id=json_extract(mapping.value,'$.sourceId') AND s.subject=json_extract(mapping.value,'$.subject') AND s.module_id=m.id
-             WHERE m.enabled=1 ${withSnapshots === 'admin' ? '' : "AND m.visibility='public'"}`
-          : 'SELECT * FROM integration_snapshot_views WHERE 0',
-      ),
+      db.prepare('SELECT * FROM integration_snapshot_views WHERE 0'),
       db.prepare('PRAGMA table_info(dashboard_modules)'),
       db.prepare('PRAGMA table_info(integrations)'),
     ])
@@ -147,7 +142,24 @@ export async function readStoredState(
         ...(i.identityEnvelope ? { identityConfigured: true } : {}),
       })),
     })
-    return { config, integrations, snapshots: results[4]!.results, storageMode: mode }
+    const bound = bindSources(config)
+    const refs = bound.modules
+      .filter((m) => m.enabled && (withSnapshots === 'admin' || m.visibility === 'public'))
+      .flatMap((m) => Object.values(m.sources).map((s) => ({ ...s, moduleId: m.id })))
+    const snapshots =
+      withSnapshots && refs.length
+        ? (
+            await db
+              .prepare(
+                `SELECT DISTINCT s.* FROM integration_snapshot_views s JOIN json_each(?) r
+      ON s.source_id=json_extract(r.value,'$.sourceId') AND s.subject=json_extract(r.value,'$.subject') AND s.module_id=json_extract(r.value,'$.moduleId')
+      WHERE (SELECT config_version FROM site_settings WHERE id=1)=?`,
+              )
+              .bind(JSON.stringify(refs), config.site.configVersion)
+              .all()
+          ).results
+        : []
+    return { config: bound, integrations, snapshots, storageMode: mode }
   } catch (e) {
     if (e instanceof DataLayerError) throw e
     if (e instanceof Error && e.message.includes('no such table: site_settings'))
