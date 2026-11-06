@@ -1,0 +1,218 @@
+<script setup lang="ts">
+import type { ConfigWrite, IntegrationSettings } from '../../../shared/contracts/config'
+import type { ProbeResult } from '../../../shared/contracts/adapter'
+import {
+  INTEGRATION_PRESETS,
+  integrationPreset,
+  createIntegrationDraft,
+  presetAlreadyAdded,
+  sourceReferences,
+  type IntegrationDraft,
+  type IntegrationPreset,
+} from '../../../shared/integration-presets'
+const model = defineModel<IntegrationDraft[]>({ required: true })
+const props = defineProps<{
+  saved: IntegrationSettings[]
+  modules: ConfigWrite['modules']
+  quotes: ConfigWrite['quotes']
+  timezone: string
+  readOnly: boolean
+}>()
+const root = useTemplateRef<HTMLElement>('root')
+const open = ref<Record<string, boolean>>({}),
+  probes = ref<Record<string, ProbeResult | null>>({})
+const picker = ref(false),
+  pickerError = ref('')
+let createdId = ''
+function choose(preset: IntegrationPreset) {
+  if (props.readOnly || model.value.length >= 10) return
+  try {
+    const source = createIntegrationDraft(preset.id, model.value, crypto.randomUUID())
+    model.value.push(source)
+    open.value[source.id] = true
+    createdId = source.id
+    picker.value = false
+    pickerError.value = ''
+  } catch {
+    pickerError.value = '此类型已添加或暂不可用。'
+  }
+}
+function afterPicker() {
+  if (!createdId) return
+  const card = [...(root.value?.querySelectorAll<HTMLElement>('[data-source-id]') ?? [])].find(
+    (e) => e.dataset.sourceId === createdId,
+  )
+  card?.querySelector<HTMLElement>('input,.admin-item-toggle')?.focus()
+  createdId = ''
+}
+function saved(source: IntegrationDraft) {
+  return props.saved.find((s) => s.id === source.id)
+}
+function title(source: IntegrationDraft) {
+  return integrationPreset(source)?.name ?? '旧数据源'
+}
+function hint(source: IntegrationDraft) {
+  const p = integrationPreset(source),
+    probe = probes.value[source.id]
+  if (probe)
+    return probe.code ? '测试未通过' : probe.protocolMatched ? '连接协议已确认' : '连接尚未确认'
+  if (!p) return '旧配置 · 只读'
+  if (p.builtin) return '内置 · 无需凭据'
+  if (!source.baseUrl) return '待填写实例地址'
+  if (source.credential.operation === 'clear') return '凭据待清除 · 未保存'
+  if (source.credential.operation === 'replace') return '凭据待更新 · 未保存'
+  const needsSecret =
+    p.authentication !== 'none' ||
+    (source.access?.mode !== 'legacy' && source.access?.authentication === 'bearer')
+  if (needsSecret && !saved(source)?.credentialState.configured) return '待配置凭据'
+  return p.authentication === 'none' ? '无需凭据 · 未验证' : '已配置 · 未验证'
+}
+const removing = ref(false),
+  removingId = ref(''),
+  loading = ref(false),
+  removalError = ref('')
+const removal = ref<{ protectedHistory: boolean; hasSnapshots: boolean } | null>(null)
+const target = computed(() => model.value.find((s) => s.id === removingId.value))
+const references = computed(() => sourceReferences(props, removingId.value))
+const removalBlocked = computed(
+  () =>
+    loading.value ||
+    !!removalError.value ||
+    !!references.value.length ||
+    !!removal.value?.protectedHistory ||
+    !target.value,
+)
+async function requestRemoval(source: IntegrationDraft) {
+  removingId.value = source.id
+  removal.value = null
+  removalError.value = ''
+  removing.value = true
+  if (!saved(source)) {
+    removal.value = { protectedHistory: false, hasSnapshots: false }
+    return
+  }
+  loading.value = true
+  try {
+    removal.value = await $fetch(
+      '/api/admin/integrations/' + encodeURIComponent(source.id) + '/removal',
+    )
+  } catch {
+    removalError.value = '无法确认来源历史状态，请稍后重试。'
+  } finally {
+    loading.value = false
+  }
+}
+function confirmRemoval() {
+  if (props.readOnly || removalBlocked.value) return
+  const index = model.value.findIndex((s) => s.id === removingId.value)
+  if (index >= 0) {
+    model.value[index]!.credential = { operation: 'keep' }
+    delete model.value[index]!.identityCredential
+    model.value.splice(index, 1)
+  }
+  removing.value = false
+}
+function afterRemoval() {
+  if (!target.value) root.value?.querySelector<HTMLButtonElement>('.admin-add-button')?.focus()
+}
+defineExpose({
+  expandAll: () => {
+    model.value.forEach((s) => {
+      open.value[s.id] = true
+    })
+  },
+})
+</script>
+<template>
+  <div ref="root" class="source-manager">
+    <AdminEditorItem
+      v-for="(source, index) in model"
+      :key="source.id"
+      v-model:open="open[source.id]"
+      class="source-card"
+      :data-source-id="source.id"
+      :title="title(source)"
+      :description="hint(source) + ' · ' + source.id"
+      :icon="integrationPreset(source)?.icon ?? 'server'"
+    >
+      <template #actions
+        ><label class="source-enable"
+          ><span class="source-enable-copy"
+            >{{ source.enabled ? '已启用' : '已停用'
+            }}<small v-if="!saved(source) || saved(source)?.enabled !== source.enabled"
+              >未保存</small
+            ></span
+          ><VarSwitch
+            v-model="source.enabled"
+            :aria-label="`启用 ${title(source)} ${source.id}`" /></label
+      ></template>
+      <AdminIntegrationEditor
+        v-model="model[index]!"
+        :timezone="timezone"
+        :saved="saved(source)"
+        @tested="probes[source.id] = $event"
+      />
+      <div class="source-danger-zone">
+        <VarButton type="danger" tonal @click="requestRemoval(source)"
+          ><CommonAppIcon name="DeleteRound" :size="18" />删除来源</VarButton
+        >
+      </div>
+    </AdminEditorItem>
+    <p v-if="!model.length" class="admin-note">尚未添加数据源。选择一种类型开始配置。</p>
+    <VarButton
+      class="admin-add-button"
+      type="primary"
+      tonal
+      :disabled="readOnly || model.length >= 10"
+      @click="picker = true"
+      ><CommonAppIcon name="AddRound" :size="20" />添加来源</VarButton
+    >
+    <AdminSourceDialog v-model:show="picker" title="选择数据源类型" @closed="afterPicker">
+      <div class="source-options">
+        <button
+          v-for="preset in INTEGRATION_PRESETS"
+          :key="preset.id"
+          type="button"
+          class="source-option"
+          :disabled="presetAlreadyAdded(preset, model)"
+          @click="choose(preset)"
+        >
+          <CommonAppIcon :name="preset.icon" :size="24" /><span
+            ><strong>{{ preset.name }}</strong
+            ><small>{{
+              presetAlreadyAdded(preset, model)
+                ? '已添加，可在列表中启用或停用'
+                : preset.description
+            }}</small></span
+          ><CommonAppIcon v-if="presetAlreadyAdded(preset, model)" name="check" :size="18" />
+        </button>
+      </div>
+      <p v-if="pickerError" role="alert">{{ pickerError }}</p>
+    </AdminSourceDialog>
+    <AdminSourceDialog
+      v-model:show="removing"
+      :title="`删除 ${target ? title(target) : '此来源'}？`"
+      confirm="删除来源"
+      danger
+      :busy="loading"
+      :blocked="removalBlocked"
+      @confirm="confirmRemoval"
+      @closed="afterRemoval"
+    >
+      <p class="source-target">{{ removingId }}</p>
+      <p>
+        从草稿中移除此来源及其凭据，全局保存后生效。缓存快照也会随来源移除；保存前可通过「放弃修改」恢复。
+      </p>
+      <p v-if="references.length" class="source-warning">
+        仍被 {{ [...new Set(references)].join('、') }} 引用。请先解除这些引用。
+      </p>
+      <p v-if="removal?.protectedHistory" class="source-warning">
+        此来源存在受保护的历史数据，无法删除。可以使用标题行开关停用。
+      </p>
+      <p v-if="removal?.hasSnapshots && !removal.protectedHistory" class="admin-note">
+        此来源已有缓存快照，确认删除后不再保留这些缓存。
+      </p>
+      <p v-if="removalError" class="source-warning" role="alert">{{ removalError }}</p>
+    </AdminSourceDialog>
+  </div>
+</template>

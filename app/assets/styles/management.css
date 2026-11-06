@@ -308,6 +308,213 @@
 .admin-item-body[style*='display: none'] {
   display: none;
 }
+.source-manager {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.source-manager .source-card > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.source-card .admin-item-toggle {
+  width: 100%;
+}
+.source-enable {
+  padding-inline: 8px;
+}
+.source-enable-copy {
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--color-on-surface-variant);
+}
+.source-enable-copy small {
+  color: var(--color-primary);
+  font-size: 10px;
+}
+.source-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 24px;
+  min-width: 0;
+}
+.source-settings-grid > * {
+  min-width: 0;
+}
+.source-service-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-on-surface-variant);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.source-service-summary span {
+  min-width: 0;
+}
+.source-credential {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.source-secret-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.source-secret-summary > span {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 14px;
+}
+.source-secret-summary small {
+  color: var(--color-on-surface-variant);
+}
+.source-secret-placeholder {
+  letter-spacing: 2px;
+}
+.source-secret-input .var-form-details {
+  display: none;
+}
+.source-secret-input .var-input {
+  margin-bottom: 0;
+}
+.source-warning {
+  color: var(--color-danger);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.source-approval {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+.source-test-result {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.source-test-result small {
+  color: var(--color-on-surface-variant);
+}
+.source-test-result[data-test-status='error'] > p:first-child {
+  color: var(--color-danger);
+}
+.source-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+}
+.source-danger-zone {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+.source-danger-zone .var-button {
+  --button-danger-color: var(--color-danger);
+}
+.source-test-actions .var-button__content,
+.source-danger-zone .var-button__content {
+  gap: 8px;
+}
+.source-dialog {
+  width: min(480px, calc(100vw - 32px));
+}
+.source-dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.source-dialog-heading h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.source-dialog-heading .var-button {
+  flex-shrink: 0;
+}
+.source-dialog-actions {
+  justify-content: flex-end;
+}
+.source-options {
+  display: grid;
+  gap: 4px;
+}
+.source-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+}
+.source-option > .app-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+.source-option > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.source-option strong {
+  font-size: 14px;
+}
+.source-option small {
+  font-size: 12px;
+  color: var(--color-on-surface-variant);
+  line-height: 1.5;
+}
+.source-option:hover:not(:disabled) {
+  background: var(--color-surface-container-highest);
+}
+.source-option:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.source-target {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  color: var(--color-on-surface-variant);
+}
+@media (max-width: 540px) {
+  .source-manager .admin-item-status {
+    display: none;
+  }
+  .source-manager .source-enable-copy {
+    max-width: 40px;
+  }
+  .source-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .source-manager .admin-item-actions {
+    padding: 0;
+  }
+  .source-manager .source-enable {
+    gap: 6px;
+    padding-inline: 0 4px;
+  }
+  .source-dialog {
+    padding: 20px;
+  }
+}
 .admin-form .admin-add-button.var-button {
   --button-primary-icon-container-color: var(--color-secondary-container);
   --button-primary-icon-color: var(--color-on-secondary-container);

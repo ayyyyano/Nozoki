@@ -20,6 +20,11 @@ import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { randomToken } from './auth-crypto.ts'
 import { parseFieldPath } from '../../shared/contracts/field-paths.ts'
 import { TailscaleCredentialsSchema } from '../adapters/tailscale-transport.ts'
+import {
+  integrationWriteIssue,
+  sourceReferences,
+  type SourceWriteIssue,
+} from '../../shared/integration-presets/index.ts'
 export function accountPolicyIds(config: Pick<Config, 'modules'>, sourceId: string) {
   return [
     ...new Set(
@@ -51,7 +56,11 @@ export type SaveResult =
         | 'DATABASE_ERROR'
         | 'MIGRATIONS_REQUIRED'
       fieldErrors?: string[]
-      reason?: 'CONFIG_NOT_INITIALIZED' | 'CONFIG_BASELINE_INVALID' | 'IDENTITY_IMPORT_UNVERIFIED'
+      reason?:
+        | 'CONFIG_NOT_INITIALIZED'
+        | 'CONFIG_BASELINE_INVALID'
+        | 'IDENTITY_IMPORT_UNVERIFIED'
+        | SourceWriteIssue
     }
 export async function readConfig(db: Database): Promise<Config> {
   return (await readStoredState(db)).config
@@ -114,12 +123,39 @@ export async function saveConfig(
     if (current.storageMode === 'read-only') return { success: false, code: 'MIGRATIONS_REQUIRED' }
     if (current.config.site.configVersion !== expectedVersion)
       return { success: false, code: 'CONFIG_CONFLICT' }
+    if (
+      actor.data.kind === 'admin' &&
+      current.config.integrations.some(
+        (old) =>
+          !config.integrations.some((next) => next.id === old.id) &&
+          sourceReferences(config, old.id).length,
+      )
+    )
+      return {
+        success: false,
+        code: 'VALIDATION_ERROR',
+        fieldErrors: ['integrations'],
+        reason: 'SOURCE_IN_USE',
+      }
     const stored: StoredIntegration[] = []
     for (const i of config.integrations) {
       const old = current.integrations.find((s) => s.settings.id === i.id)
       const { credential, identityCredential, ...settings } = i
       settings.baseUrl = normalizeServiceTarget(settings.baseUrl)
       settings.access ??= { mode: 'legacy' }
+      if (actor.data.kind === 'admin') {
+        const issue = integrationWriteIssue(
+          { ...i, baseUrl: settings.baseUrl },
+          current.config.integrations.find((s) => s.id === i.id),
+        )
+        if (issue)
+          return {
+            success: false,
+            code: 'VALIDATION_ERROR',
+            fieldErrors: ['integrations.' + i.id],
+            reason: issue,
+          }
+      }
       if (settings.access.mode !== 'legacy') {
         const oauth = settings.access.authentication === 'tailscale-oauth'
         if (
@@ -176,6 +212,10 @@ export async function saveConfig(
         !!old &&
         (old.settings.provider !== i.provider ||
           normalizeServiceTarget(old.settings.baseUrl) !== settings.baseUrl)
+      if (actor.data.kind === 'admin' && targetChanged)
+        settings.capabilities = Object.fromEntries(
+          Object.entries(settings.capabilities).map(([key, c]) => [key, { ...c, verified: false }]),
+        )
       if (
         actor.data.kind === 'admin' &&
         Object.entries(settings.capabilities).some(
