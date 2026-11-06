@@ -10,7 +10,7 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 
 | Module    | Content                                                                                                   |
 | --------- | --------------------------------------------------------------------------------------------------------- |
-| DeepSeek  | Account balances, currencies, topped-up balances and granted balances                                     |
+| DeepSeek  | Current balance and a seven-day remaining-balance bar chart, with optional guest masking                  |
 | Devices   | Sleepy status text, identifiable foreground applications, optional battery and external power information |
 | Tailscale | Device names, control-plane connection status and IP visibility based on login                            |
 | Codex     | CLIProxyAPI account status and passive quota observations supplied by the source                          |
@@ -22,6 +22,8 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 The admin interface controls module availability, ordering, titles and access permissions. The server filters data for the current session. Visitor requests read saved results from the database.
 
 The admin page manages source addresses, protocols, credentials and access approvals. Cloudflare Workers fetch approved public HTTPS sources directly. Node.js uses an embedded connector. QQQM and VOO use the enabled Tencent source by default. Codex displays account status and confirmed passive quota observations.
+
+DeepSeek needs only a balance source. Today's bar updates with collection; historical bars use the last successful sample of each day in the site timezone. Missing days stay empty. The existing scheduler brings collection forward before day end, but outages or upstream failures can prevent a closing sample. Enable guest masking under Dashboard modules → DeepSeek to return placeholder data to guests; authenticated viewers remain subject to field permissions.
 
 ## Tech stack
 
@@ -206,7 +208,7 @@ In Cloudflare, open **Workers & Pages → Create application → GitHub**. Autho
 | Setting           | Value                                                   |
 | ----------------- | ------------------------------------------------------- |
 | Worker name       | `nozoki-dashboard`, matching `name` in `wrangler.jsonc` |
-| Production branch | `master`, or your actual branch                           |
+| Production branch | `master`, or your actual branch                         |
 | Root directory    | Repository root; keep the default                       |
 | Build command     | `pnpm build`                                            |
 | Deploy command    | `pnpm deploy:cloudflare`                                |
@@ -301,7 +303,6 @@ Tailscale and Sleepy are independent modules. Tailscale is disabled by default a
 4. Choose whether IP addresses are visible, hidden, or visible after login. The default is after login. Hidden addresses appear as `****`; the server does not send their real values to unauthorized viewers.
 
 Connection status uses `connectedToControl`. It describes the control-plane connection and does not prove service reachability. This API does not supply foreground apps or battery data; Sleepy continues to handle those. The Collector calls the official API without joining the tailnet. Each run POSTs to the fixed official `/api/v2/oauth/token` endpoint for a read-only token, then GETs the device list. The Client Secret goes to that token endpoint, and redirects are rejected.
-
 
 ### Default Tencent quotes
 

@@ -25,7 +25,7 @@ test('Sleepy adapter parses mixed optional batteries, full titles and timestamps
   assert.equal(r.capabilities.battery!.verified, true)
   assert.deepEqual(
     d.slice(0, 4).map((x) => x.batteryPercent),
-    [66, 0, 100, null],
+    [66, 0, 100, 40],
   )
   assert.ok(d.every((x) => x.charging === null && x.heartbeatAt === null))
   assert.ok(d.find((x) => x.id === 'long')!.stateText!.length > 500)

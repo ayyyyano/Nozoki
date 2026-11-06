@@ -96,6 +96,23 @@ test('missing labels keep old defaults; blank, oversized and unknown keys fail v
     })
   }
 })
+test('custom labels also drive countdown captions, timeline and next-period descriptions', () => {
+  const schedule = basic()
+  schedule.labels = { active: '上课中', break: '课间休息', after: '放学' }
+  assert.equal(view(schedule, '2026-10-26T00:00:00Z').caption, '距离 上课中')
+  assert.equal(view(schedule, '2026-10-26T01:00:00Z').caption, '距离 课间休息')
+  assert.equal(view(schedule, '2026-10-26T04:00:00Z').caption, '距离 课间休息 结束')
+  assert.equal(view(schedule, '2026-10-26T06:00:00Z').caption, '距离 放学')
+  assert.ok(
+    view(schedule, '2026-10-26T01:00:00Z').periods.every(
+      (p) => !p.text.includes('工作中') && !p.text.includes('午休中'),
+    ),
+  )
+  const custom = normalizeSchedule(schedule)
+  custom.templates[0]!.slots[0]!.display = { label: '数学课' }
+  assert.equal(view(custom, '2026-10-26T00:00:00Z').nextPeriodLabel, '数学课')
+  assert.equal(view(custom, '2026-10-26T00:00:00Z').caption, '距离 数学课')
+})
 test('label ACL paths filter private text and keep guest configuration hashes unchanged', async () => {
   assert.ok(parseFieldPath('activity', '/schedule/labels/active'))
   assert.equal(parseFieldPath('activity', '/schedule/labels/unknown'), null)

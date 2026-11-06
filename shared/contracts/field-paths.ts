@@ -22,7 +22,8 @@ const scheduleRule: FieldNode = {
 export const FIELD_MODEL: Record<ModuleId, FieldNode> = {
   deepseek: {
     balances: array(leaf('currency', 'total', 'toppedUp', 'granted')),
-    spend: array(leaf('day', 'currency', 'amount')),
+    dailyBalances: array(leaf('day', 'currency', 'total', 'collectedAt')),
+    timezone: null,
   },
   devices: {
     devices: array(
@@ -165,6 +166,16 @@ export function parseFieldPath(module: ModuleId, path: string): string[] | null 
     if (parts.some((part, i) => part.startsWith('@') && i < parts.length - 1)) return null
   }
   if (parts.length === 1 && FIELD_GROUPS[module].includes(parts[0]!)) return parts
+  // Stored ACLs for the retired spend payload stay readable, but it is not editable or exposed.
+  if (
+    module === 'deepseek' &&
+    parts[0] === 'spend' &&
+    (parts.length === 1 ||
+      (parts[1] === '*' &&
+        (parts.length === 2 ||
+          (parts.length === 3 && ['day', 'currency', 'amount'].includes(parts[2]!)))))
+  )
+    return parts
   let node: FieldNode = FIELD_MODEL[module]
   for (const part of parts) {
     if (node === null) return null

@@ -14,6 +14,16 @@ test('portable Sleepy parser recognizes source-confirmed prefix/suffix decoratio
     ['App[100%]🔋', 100, 'App'],
     ['[🔋66.5%] Window', 66.5, 'Window'],
     ['[🔋66%] <script>alert("x")</script>', 66, '<script>alert("x")</script>'],
+    ['[68%]淘宝', 68, '淘宝'],
+    ['Infinity-X Launcher[88%]⚡', 88, 'Infinity-X Launcher'],
+    ['电量 35％', 35, '电量'],
+    ['Task 66% complete', 66, 'Task  complete'],
+    ['App [66%]', 66, 'App'],
+    ['[66%] App🔋', 66, 'App🔋'],
+    ['App [🔋66%] Text', 66, 'App Text'],
+    [' [🔋66%] App', 66, 'App'],
+    ['[🔋66%]App', 66, 'App'],
+    ['App[66%]🔋 extra', 66, 'App extra'],
   ] as const) {
     const p = parseSleepyStatus(text)
     assert.equal(p.batteryPercent, percent, text)
@@ -21,18 +31,14 @@ test('portable Sleepy parser recognizes source-confirmed prefix/suffix decoratio
     assert.equal(p.charging, null, 'glyph means power, not proven actual charging')
   }
 })
-test('portable unknown/invalid formats are lossless and percentages in app titles are not batteries', () => {
+test('invalid or ambiguous percentages are lossless; inference can be disabled', () => {
   for (const raw of [
     '[🔋101%] App',
     'App[-1%]🔋',
     '[🔋NaN%] App',
-    'Task 66% complete',
-    'App [66%]',
-    '[66%] App🔋',
-    'App [🔋66%] Text',
-    ' [🔋66%] App',
-    '[🔋66%]App',
-    'App[66%]🔋 extra',
+    '电量 50% 进度 70%',
+    'App[1000%]',
+    'App[-0.1%]',
     '',
     'x'.repeat(3000),
   ]) {

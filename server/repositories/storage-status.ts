@@ -23,6 +23,12 @@ export function storageMode(columns: Record<string, unknown>[]): StorageMode {
 
 export async function requireWritableStorage(db: Database): Promise<void> {
   if (
+    !(await db.prepare('PRAGMA table_info(dashboard_modules)').all()).results.some(
+      (c) => c.name === 'guest_blur',
+    )
+  )
+    throw new DataLayerError('MIGRATIONS_REQUIRED')
+  if (
     storageMode((await db.prepare('PRAGMA table_info(dashboard_modules)').all()).results) !==
     'ready'
   )

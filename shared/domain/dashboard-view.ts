@@ -22,8 +22,10 @@ export function dashboardView(dto: PublicDashboard | AdminDashboard): DashboardS
             granted: null,
             ...v,
           })),
-          spend: raw.spend ?? [],
-          capabilities: { balance: unavailableCapability(), spend: unavailableCapability() },
+          dailyBalances: raw.dailyBalances ?? [],
+          timezone: raw.timezone,
+          masked: raw.masked === true,
+          capabilities: { balance: unavailableCapability() },
         }
       if (m.id === 'devices')
         data = {

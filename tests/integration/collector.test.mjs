@@ -596,7 +596,7 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
         data = JSON.parse(view.snapshot_json)
       assert.equal(data.observedAt, null)
       assert.equal(data.data.balances[0].total, '110.000000000000000001')
-      assert.deepEqual(data.data.spend, [])
+      assert.equal(Object.hasOwn(data.data, 'spend'), false)
       assert.equal((await rows('balance_observations')).length, 2)
       assert.equal((await rows('daily_usage')).length, 0)
     },

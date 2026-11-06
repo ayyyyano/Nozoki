@@ -53,6 +53,7 @@ export async function readStoredState(
     const moduleMode = storageMode(results[5]!.results)
     const mode =
       moduleMode === 'ready' &&
+      results[5]!.results.some((c) => c.name === 'guest_blur') &&
       ['access_json', 'identity_envelope_json'].every((name) =>
         results[6]!.results.some((c) => c.name === name),
       )
@@ -129,6 +130,7 @@ export async function readStoredState(
         fields: parseJson(m.fields_json),
         sources: parseJson(m.sources_json),
         ...(m.id === 'tailscale' ? { ipVisibility: m.ip_visibility } : {}),
+        ...(m.id === 'deepseek' ? { guestBlur: m.guest_blur === 1 } : {}),
       })),
       quotes: results[2]!.results.map((q) => ({
         market: q.market,
@@ -232,8 +234,8 @@ export async function commitConfig(
     statements.push(
       db
         .prepare(
-          `INSERT INTO dashboard_modules(id,enabled,title,sort_order,visibility,guest_behavior,fields_json,sources_json,ip_visibility) VALUES(?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,title=excluded.title,sort_order=excluded.sort_order,visibility=excluded.visibility,guest_behavior=excluded.guest_behavior,fields_json=excluded.fields_json,sources_json=excluded.sources_json,ip_visibility=excluded.ip_visibility`,
+          `INSERT INTO dashboard_modules(id,enabled,title,sort_order,visibility,guest_behavior,fields_json,sources_json,ip_visibility,guest_blur) VALUES(?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,title=excluded.title,sort_order=excluded.sort_order,visibility=excluded.visibility,guest_behavior=excluded.guest_behavior,fields_json=excluded.fields_json,sources_json=excluded.sources_json,ip_visibility=excluded.ip_visibility,guest_blur=excluded.guest_blur`,
         )
         .bind(
           m.id,
@@ -245,6 +247,7 @@ export async function commitConfig(
           JSON.stringify(m.fields),
           JSON.stringify(m.sources),
           m.ipVisibility ?? 'admin',
+          Number(m.guestBlur ?? false),
         ),
     )
   const quoteIds = input.quotes.map((q) => JSON.stringify([q.market, q.symbol, q.provider]))

@@ -21,7 +21,7 @@ const ResponseSchema = z
 async function read(context: AdapterContext) {
   const response = await context.transport.get('user/balance'),
     value = parse(ResponseSchema, response.value)
-  const result = sourceResult(context, { balance: cap(true, true), spend: cap(false) })
+  const result = sourceResult(context, { balance: cap(true, true) })
   // This API has no account-observation timestamp; collection time is not invented as observation time.
   result.facts = { isAvailable: value.is_available }
   result.items = value.balance_infos.length
@@ -33,15 +33,15 @@ async function read(context: AdapterContext) {
       granted: b.granted_balance,
       toppedUp: b.topped_up_balance,
     })),
-    spend: [],
-    capabilities: result.capabilities,
+    dailyBalances: [],
+    capabilities: { balance: result.capabilities.balance! },
   })
   return result
 }
 export const deepseek: Adapter = {
   provider: 'deepseek',
   versions: ADAPTER_PROTOCOLS.deepseek,
-  expectedCapabilities: ['balance', 'spend'],
+  expectedCapabilities: ['balance'],
   probe: read,
   read,
 }

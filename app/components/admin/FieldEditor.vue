@@ -6,14 +6,17 @@ const visibleRules = computed(() =>
   Object.fromEntries(
     Object.entries(model.value.fields).filter(
       ([path]) =>
-        model.value.id !== 'codex' ||
-        !['usage', 'estimatedCost'].includes(String(parseFieldPath('codex', path)?.[0])),
+        !(model.value.id === 'deepseek' && parseFieldPath('deepseek', path)?.[0] === 'spend') &&
+        (model.value.id !== 'codex' ||
+          !['usage', 'estimatedCost'].includes(String(parseFieldPath('codex', path)?.[0]))),
     ),
   ),
 )
 const choices = computed(() =>
   fieldChoices(model.value.id).filter(
-    (c) => model.value.id !== 'codex' || !['usage', 'estimatedCost'].includes(String(c.path[0])),
+    (c) =>
+      !(model.value.id === 'deepseek' && c.path[0] === 'spend') &&
+      (model.value.id !== 'codex' || !['usage', 'estimatedCost'].includes(String(c.path[0]))),
   ),
 )
 const selected = ref(''),

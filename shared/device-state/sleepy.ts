@@ -1,22 +1,23 @@
 import { normalizeDeviceState } from './types.ts'
 import type { DeviceState } from './types.ts'
 
-/** Recognize only decorations emitted by the pinned Windows/AutoX.js/Magisk clients. */
+/** A single, bounded percentage in status text is a battery hint, not a heartbeat. */
 export function parseSleepyStatus(status: string | null | undefined, batteryEnabled = true) {
   const raw = status ?? null
-  const number = '(\\d{1,3}(?:\\.\\d{1,6})?)'
-  const prefix = batteryEnabled
-    ? new RegExp('^\\[🔋' + number + '%(?:⚡)?\\](?: |$)').exec(raw ?? '')
-    : null
-  const suffix = batteryEnabled
-    ? new RegExp('\\[' + number + '%\\](?:🔋|⚡)$').exec(raw ?? '')
-    : null
-  const match = prefix ?? suffix
-  if (!match) return { stateText: raw, batteryPercent: null, charging: null }
-  const percent = Number(match[1])
-  if (!Number.isFinite(percent) || percent < 0 || percent > 100)
-    return { stateText: raw, batteryPercent: null, charging: null }
-  const body = prefix ? raw!.slice(match[0].length) : raw!.slice(0, match.index)
+  const unknown = { stateText: raw, batteryPercent: null, charging: null }
+  if (!batteryEnabled || !raw) return unknown
+  const matches = [...raw.matchAll(/(?<![\d.+-])(\d+(?:\.\d+)?)\s*[%％]/gu)]
+  if (matches.length !== 1) return unknown
+  const match = matches[0]!,
+    percent = Number(match[1])
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) return unknown
+  // Remove the recognized decoration, retaining the application/status on either side.
+  const decoration = /[\[【（(]\s*🔋?\s*\d+(?:\.\d+)?\s*[%％]\s*⚡?\s*[\]】）)]\s*[🔋⚡]?/u
+  const body = (
+    decoration.test(raw)
+      ? raw.replace(decoration, '')
+      : raw.replace(match[0], '').replace(/🔋/gu, '')
+  ).trim()
   // The same glyph may mean Windows external power; it cannot establish actual charging.
   return { stateText: body || null, batteryPercent: percent, charging: null }
 }

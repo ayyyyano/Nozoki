@@ -111,12 +111,19 @@ export const ModuleSettingsSchema = z
     guestBehavior: z.enum(['hidden', 'login_hint']),
     fields: z.record(FieldPathSchema, FieldPolicySchema),
     ipVisibility: z.enum(['public', 'hidden', 'admin']).optional(),
+    guestBlur: z.boolean().optional(),
     sources: z.record(
       IdSchema,
       z.strictObject({ sourceId: IdSchema, subject: z.string().min(1).max(128) }),
     ),
   })
   .superRefine((value, ctx) => {
+    if (value.id !== 'deepseek' && value.guestBlur !== undefined)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['guestBlur'],
+        message: 'Only DeepSeek supports balance blur',
+      })
     if (value.id !== 'tailscale' && value.ipVisibility !== undefined)
       ctx.addIssue({
         code: 'custom',

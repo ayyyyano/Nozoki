@@ -387,12 +387,15 @@ p {
   font-size: 11px;
   color: var(--n-muted);
 }
-.spend-bars {
+.balance-bars {
   display: flex;
   gap: 6px;
-  height: 64px;
+  height: 100px;
 }
-.spend-bar {
+.balance-history {
+  margin: 12px 0 0;
+}
+.balance-bar {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -400,16 +403,56 @@ p {
   justify-content: end;
   align-items: center;
 }
-.spend-bar i {
+.balance-bar-track {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 76px;
+  width: 100%;
+}
+.balance-bar-track i {
   display: block;
   width: 70%;
   background: var(--n-primary);
   border-radius: 4px 4px 0 0;
-  min-height: 1px;
+  min-height: 3px;
 }
-.spend-bar small {
+.balance-bar small {
   font-size: 10px;
   color: var(--n-muted);
+}
+.balance-bar-missing {
+  color: var(--n-muted);
+}
+.balance-bar-track .balance-negative {
+  background: var(--color-danger);
+}
+.balance-private {
+  position: relative;
+  padding: 8px 0;
+}
+.balance-private-preview {
+  filter: blur(7px);
+  user-select: none;
+  pointer-events: none;
+}
+.balance-private-preview .balance-bars {
+  align-items: end;
+  padding: 12px 0;
+}
+.balance-private-preview .balance-bars i {
+  flex: 1;
+  height: 52%;
+  background: var(--n-primary);
+  border-radius: 4px;
+}
+.balance-private-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  color: var(--n-text);
+  font-size: 13px;
 }
 .inline-metrics {
   display: flex;

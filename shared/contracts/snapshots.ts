@@ -7,6 +7,7 @@ import {
   HttpsSchema,
   LinkSettingsSchema,
   ScheduleSchema,
+  TimezoneSchema,
   UtcSchema,
 } from './config.ts'
 import type { ModuleId } from './dashboard.ts'
@@ -35,22 +36,43 @@ const quote = z.strictObject({
   capabilities: caps,
 })
 export const DataSchemas = {
-  deepseek: z.strictObject({
-    balances: z
-      .array(
-        z.strictObject({
-          currency,
-          total: DecimalSchema,
-          toppedUp: DecimalSchema,
-          granted: DecimalSchema,
-        }),
-      )
-      .max(20),
-    spend: z
-      .array(z.strictObject({ day: DaySchema, currency, amount: DecimalSchema, sourceId: text }))
-      .max(500),
-    capabilities: z.strictObject({ balance: CapabilitySchema, spend: CapabilitySchema }),
-  }),
+  deepseek: z.preprocess(
+    (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+      const { spend: _spend, ...data } = value as Record<string, unknown>
+      const caps = data.capabilities
+      if (caps && typeof caps === 'object' && !Array.isArray(caps)) {
+        const { spend: _legacyCapability, ...current } = caps as Record<string, unknown>
+        data.capabilities = current
+      }
+      return data
+    },
+    z.strictObject({
+      balances: z
+        .array(
+          z.strictObject({
+            currency,
+            total: DecimalSchema,
+            toppedUp: DecimalSchema,
+            granted: DecimalSchema,
+          }),
+        )
+        .max(20),
+      dailyBalances: z
+        .array(
+          z.strictObject({
+            day: DaySchema,
+            currency,
+            total: DecimalSchema,
+            collectedAt: UtcSchema,
+          }),
+        )
+        .max(140)
+        .default([]),
+      timezone: TimezoneSchema.optional(),
+      capabilities: z.strictObject({ balance: CapabilitySchema }),
+    }),
+  ),
   devices: z.strictObject({
     devices: z
       .array(

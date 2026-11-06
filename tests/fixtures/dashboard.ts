@@ -36,13 +36,14 @@ export function createFixture(scenario: Scenario): DashboardSnapshots {
       },
       { currency: 'USD', total: '0.00', toppedUp: '0.00', granted: '0.00' },
     ],
-    spend: Array.from({ length: 8 }, (_, i) => ({
-      day: `2026-10-${16 + i}`,
+    dailyBalances: Array.from({ length: 7 }, (_, i) => ({
+      day: `2026-10-${17 + i}`,
       currency: 'CNY',
-      amount: String([2, 5, 1, 4, 3, 7, 2, 4][i]),
-      sourceId: FIXTURE_MARKER,
+      total: String([150, 147, 140, 137, 133, 130, 126.5][i]),
+      collectedAt: `2026-10-${17 + i}T15:55:00.000Z`,
     })),
-    capabilities: { balance: capability(), spend: capability() },
+    timezone: 'Asia/Shanghai',
+    capabilities: { balance: capability() },
   }
   data.devices.data = {
     devices: [
@@ -215,7 +216,7 @@ export function createFixture(scenario: Scenario): DashboardSnapshots {
   if (scenario === 'empty') {
     data.activity.data = null
     data.deepseek.data!.balances = []
-    data.deepseek.data!.spend = []
+    data.deepseek.data!.dailyBalances = []
     data.devices.data!.devices = []
     data.codex.data!.usage!.days = []
     data.codex.data!.quota!.accounts = []

@@ -292,7 +292,7 @@ try {
       assert.equal(value.protocolMatched, true)
       assert.equal(value.authentication, 'accepted')
       assert.equal(value.capabilities.balance.verified, true)
-      assert.equal(value.capabilities.spend.supported, false)
+      assert.equal(Object.hasOwn(value.capabilities, 'spend'), false)
       assert.equal(calls, 1)
       assert.deepEqual(await business(), before)
       for (const marker of [

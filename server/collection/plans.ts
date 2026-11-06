@@ -12,6 +12,7 @@ export interface CollectionPlan {
   configVersion: number
   references: { moduleId: ModuleId; subject: string }[]
   quoteSymbols?: readonly QuoteSymbolInput[]
+  timezone?: string
 }
 export function collectionPlans(state: StoredState): CollectionPlan[] {
   return state.integrations.flatMap((i) => {
@@ -43,6 +44,7 @@ export function collectionPlans(state: StoredState): CollectionPlan[] {
         envelope: i.envelope,
         identityEnvelope: i.identityEnvelope,
         configVersion: state.config.site.configVersion,
+        timezone: state.config.site.timezone,
         references: refs.filter((r) => r.moduleId !== 'links'),
         ...(quoteSymbols ? { quoteSymbols } : {}),
       },
