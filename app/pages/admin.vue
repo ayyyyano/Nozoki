@@ -160,6 +160,17 @@ function themeFromMenu() {
 }
 const expandedLinks = ref<Record<string, boolean>>({})
 const expandedQuotes = ref<Record<string, boolean>>({})
+const quoteKeys = new WeakMap<object, string>()
+let nextQuoteKey = 0
+function quoteKey(quote: ConfigWrite['quotes'][number]) {
+  const value = toRaw(quote)
+  if (!quoteKeys.has(value)) quoteKeys.set(value, `quote-${nextQuoteKey++}`)
+  return quoteKeys.get(value)!
+}
+function removeQuote(index: number) {
+  const [quote] = draft.value!.quotes.splice(index, 1)
+  if (quote) delete expandedQuotes.value[quoteKey(quote)]
+}
 const sourceManager = useTemplateRef('sourceManager')
 const expandedModules = ref<Record<string, boolean>>({})
 function linkSummary(url: string) {
@@ -229,7 +240,7 @@ function locate(error: string) {
     draft.value.links.forEach((l) => (expandedLinks.value[l.id] = true))
     draft.value.modules.forEach((m) => (expandedModules.value[m.id] = true))
     sourceManager.value?.expandAll()
-    draft.value.quotes.forEach((_, i) => (expandedQuotes.value[String(i)] = true))
+    draft.value.quotes.forEach((q) => (expandedQuotes.value[quoteKey(q)] = true))
   }
   nextTick(() =>
     document
@@ -337,7 +348,6 @@ function makePrivate(module: ConfigWrite['modules'][number]) {
     for (const policy of Object.values(module.fields)) policy.visibility = 'admin'
 }
 function addQuote() {
-  expandedQuotes.value[String(draft.value!.quotes.length)] = true
   draft.value!.quotes.push({
     market: 'US',
     symbol: 'NEW',
@@ -347,6 +357,7 @@ function addQuote() {
     enabled: true,
     refreshInterval: 300,
   })
+  expandedQuotes.value[quoteKey(draft.value!.quotes.at(-1)!)] = true
 }
 function addLink() {
   const id = 'link-' + crypto.randomUUID().slice(0, 8)
@@ -616,7 +627,7 @@ onBeforeRouteLeave(() => {
               :status="m.visibility === 'public' ? '公开' : '管理员'"
               :data-edit-module="m.id"
               :icon="MODULE_ICONS[m.id]"
-              class="admin-module-card"
+              class="admin-module-card admin-order-card"
             >
               <template #actions>
                 <VarButton
@@ -642,7 +653,7 @@ onBeforeRouteLeave(() => {
                   :title="`启用或停用 ${m.title}`"
                 />
               </template>
-              <div class="admin-fields">
+              <div class="admin-fields admin-module-fields">
                 <AdminText v-model="m.title" :label="`${m.id} 标题`" :max="100" /><VarSelect
                   v-model="m.visibility"
                   :aria-label="`${m.id} 模块权限`"
@@ -741,18 +752,63 @@ onBeforeRouteLeave(() => {
             <legend class="sr-only">行情标的</legend>
             <AdminEditorItem
               v-for="(q, index) in draft.quotes"
-              :key="index"
-              v-model:open="expandedQuotes[String(index)]"
+              :key="quoteKey(q)"
+              v-model:open="expandedQuotes[quoteKey(q)]"
               :title="q.symbol"
               :description="q.displayName"
-              :status="q.enabled ? q.market : '已关闭'"
+              :status="q.market"
               icon="chart"
+              class="admin-quote-card admin-order-card"
+              :data-edit-quote="quoteKey(q)"
             >
+              <template #actions>
+                <VarButton
+                  text
+                  round
+                  :disabled="index === 0"
+                  :aria-label="`上移标的 ${q.symbol}`"
+                  :title="`上移 ${q.symbol}`"
+                  @click="move(draft.quotes, index, -1)"
+                  ><CommonAppIcon name="up" :size="20"
+                /></VarButton>
+                <VarButton
+                  text
+                  round
+                  :disabled="index === draft.quotes.length - 1"
+                  :aria-label="`下移标的 ${q.symbol}`"
+                  :title="`下移 ${q.symbol}`"
+                  @click="move(draft.quotes, index, 1)"
+                  ><CommonAppIcon name="down" :size="20"
+                /></VarButton>
+                <VarButton
+                  text
+                  round
+                  type="danger"
+                  :aria-label="`移除标的 ${q.symbol}`"
+                  :title="`移除 ${q.symbol}`"
+                  @click="removeQuote(index)"
+                  ><CommonAppIcon name="DeleteRound" :size="20"
+                /></VarButton>
+                <VarSwitch
+                  v-model="q.enabled"
+                  :aria-label="`启用标的 ${index + 1}`"
+                  :title="`启用或停用 ${q.symbol}`"
+                />
+              </template>
               <div class="admin-fields">
-                <AdminText v-model="q.market" :label="`标的 ${index + 1} 市场`" /><AdminText
+                <AdminText
+                  v-model="q.market"
+                  :label="`标的 ${index + 1} 市场`"
+                  reserve-details
+                /><AdminText
                   v-model="q.symbol"
                   :label="`标的 ${index + 1} 代码`"
-                /><AdminText v-model="q.displayName" :label="`标的 ${index + 1} 名称`" /><VarSelect
+                  reserve-details
+                /><AdminText
+                  v-model="q.displayName"
+                  :label="`标的 ${index + 1} 名称`"
+                  reserve-details
+                /><VarSelect
                   v-model="q.provider"
                   :aria-label="`标的 ${index + 1} Provider`"
                   placeholder="供应商槽位"
@@ -765,24 +821,8 @@ onBeforeRouteLeave(() => {
                 ><AdminNumber
                   v-model="q.refreshInterval"
                   :label="`标的 ${index + 1} 刷新间隔`"
-                /><label
-                  ><VarSwitch
-                    v-model="q.enabled"
-                    :aria-label="`启用标的 ${index + 1}`"
-                  />启用</label
-                >
-              </div>
-              <div class="admin-actions">
-                <VarButton text :disabled="index === 0" @click="move(draft.quotes, index, -1)"
-                  >上移标的 {{ index + 1 }}</VarButton
-                ><VarButton
-                  text
-                  :disabled="index === draft.quotes.length - 1"
-                  @click="move(draft.quotes, index, 1)"
-                  >下移标的 {{ index + 1 }}</VarButton
-                ><VarButton text @click="draft.quotes.splice(index, 1)"
-                  >删除标的 {{ index + 1 }}</VarButton
-                >
+                  class="admin-quote-refresh"
+                />
               </div>
             </AdminEditorItem>
             <VarButton

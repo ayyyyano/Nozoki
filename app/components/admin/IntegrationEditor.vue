@@ -290,7 +290,7 @@ const identityImport = computed({
       <VarButton v-if="!approved" tonal type="primary" @click="requestApproval"
         >确认来源访问</VarButton
       >
-      <VarButton v-else text @click="revoke">撤销访问批准</VarButton>
+      <VarButton v-else tonal type="primary" @click="revoke">撤销访问批准</VarButton>
       <p v-if="approvalError" class="source-warning" role="alert">{{ approvalError }}</p>
     </div>
     <div class="admin-actions source-test-actions">

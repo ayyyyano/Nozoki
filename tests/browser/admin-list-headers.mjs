@@ -73,7 +73,57 @@ export async function exerciseAdminListHeaders(page, { input, evidence }) {
     ...order.slice(2),
   ])
   await toggle(module('activity'), '启用 activity')
+  const tailscale = module('tailscale')
+  await tailscale.locator('.admin-item-toggle').click()
+  const fields = await tailscale.locator('.admin-module-fields > *').all()
+  const boxes = await Promise.all(fields.map((f) => f.boundingBox()))
+  assert.equal(boxes.length, 3)
+  for (const box of boxes) {
+    assert.ok(Math.abs(box.y - boxes[0].y) <= 2)
+    assert.ok(Math.abs(box.width - boxes[0].width) <= 2)
+  }
   await page.screenshot({ path: resolve(evidence, 'module-headers-desktop.png'), fullPage: true })
+  await tailscale.locator('.admin-item-toggle').click()
+
+  await section('行情标的')
+  const quoteCards = page.locator('[data-edit-quote]')
+  const firstQuoteId = await quoteCards.nth(0).getAttribute('data-edit-quote')
+  const secondQuoteId = await quoteCards.nth(1).getAttribute('data-edit-quote')
+  const quote = (id) => page.locator(`[data-edit-quote="${id}"]`)
+  const firstSymbol = initial.config.quotes[0].symbol
+  const secondSymbol = initial.config.quotes[1].symbol
+  await toggle(quote(firstQuoteId), '启用标的 1')
+  await quote(secondQuoteId).locator('.admin-item-toggle').click()
+  await quote(secondQuoteId)
+    .getByRole('button', { name: `上移标的 ${secondSymbol}`, exact: true })
+    .click()
+  await expect(quoteCards.first()).toHaveAttribute('data-edit-quote', secondQuoteId)
+  await expect(quote(secondQuoteId).locator('.admin-item-toggle')).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(quote(firstQuoteId).locator('.admin-item-toggle')).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  const symbolInput = quote(secondQuoteId).locator('input[aria-label="标的 1 代码"]')
+  await expect(symbolInput).toHaveValue(secondSymbol)
+  await symbolInput.fill('TEST')
+  await expect(symbolInput).toBeFocused()
+  await quote(firstQuoteId)
+    .getByRole('button', { name: `移除标的 ${firstSymbol}`, exact: true })
+    .click()
+  await expect(quoteCards).toHaveCount(1)
+  await expect(symbolInput).toHaveValue('TEST')
+  await page.getByRole('button', { name: '添加行情标的', exact: true }).click()
+  await expect(quoteCards).toHaveCount(2)
+  await expect(quoteCards.last().locator('.admin-item-toggle')).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await quoteCards.last().locator('.admin-item-toggle').click()
+  await quote(secondQuoteId).locator('.admin-item-toggle').click()
+  await page.screenshot({ path: resolve(evidence, 'quote-controls-desktop.png'), fullPage: true })
 
   await section('常用链接')
   await toggle(link(initial.config.links[0].id), '启用链接 1')
@@ -86,10 +136,26 @@ export async function exerciseAdminListHeaders(page, { input, evidence }) {
     source,
     await source.locator('header').getByRole('switch').getAttribute('aria-label'),
   )
+  await page.getByRole('button', { name: '添加来源', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: '选择数据源类型', exact: true })
+    .getByRole('button', { name: /^Sleepy / })
+    .click()
+  const sleep = page.locator('[data-source-id]').last()
+  await sleep.locator('input[aria-label="实例 HTTPS 地址"]').fill('https://fixture.example.com/')
+  await sleep.getByRole('button', { name: '确认来源访问', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: '允许访问此服务？', exact: true })
+    .getByRole('button', { name: '确认访问', exact: true })
+    .click()
+  const revoke = sleep.getByRole('button', { name: '撤销访问批准', exact: true })
+  const background = await revoke.evaluate((e) => getComputedStyle(e).backgroundColor)
+  assert.ok(!['transparent', 'rgba(0, 0, 0, 0)'].includes(background))
+  await sleep.locator('.admin-item-toggle').click()
 
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 900 })
-    for (const name of ['Dashboard 模块', '常用链接', '数据源']) {
+    for (const name of ['Dashboard 模块', '行情标的', '常用链接', '数据源']) {
       await section(name)
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       const visibleCards = page.locator('fieldset:visible .admin-editor-item')
@@ -100,7 +166,7 @@ export async function exerciseAdminListHeaders(page, { input, evidence }) {
         await expect(control).toBeVisible()
         const box = await control.boundingBox()
         assert.ok(box.x >= bounds.x && box.x + box.width <= bounds.x + bounds.width)
-        if (name !== 'Dashboard 模块') {
+        if (!['Dashboard 模块', '行情标的'].includes(name)) {
           const title = await header.locator('.admin-item-toggle').boundingBox()
           assert.ok(Math.abs(box.y + box.height / 2 - title.y - title.height / 2) <= 2)
         }
