@@ -219,6 +219,17 @@
 .admin-fields > * {
   min-width: 0;
 }
+.admin-module-card .admin-module-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (min-width: 760px) {
+  .admin-module-card .admin-module-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.admin-quote-refresh {
+  grid-column: 1 / -1;
+}
 .admin-fields > label {
   align-self: center;
 }
@@ -314,27 +325,27 @@
   min-width: 0;
 }
 .source-manager .source-card > header,
-.admin-editor-item.admin-module-card > header,
+.admin-editor-item.admin-order-card > header,
 .admin-editor-item.admin-link-card > header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 .source-card .admin-item-toggle,
-.admin-module-card .admin-item-toggle,
+.admin-order-card .admin-item-toggle,
 .admin-link-card .admin-item-toggle {
   width: 100%;
 }
 .source-enable {
   padding-inline: 8px;
 }
-.admin-module-card .admin-item-actions,
+.admin-order-card .admin-item-actions,
 .admin-link-card .admin-item-actions {
   align-items: center;
   gap: 4px;
   flex-wrap: nowrap;
   padding-inline: 4px 12px;
 }
-.admin-module-card .admin-item-actions > .var-switch {
+.admin-order-card .admin-item-actions > .var-switch {
   margin-inline-start: 8px;
 }
 .source-settings-grid {
@@ -502,10 +513,10 @@
   .source-manager .admin-item-status {
     display: none;
   }
-  .admin-editor-item.admin-module-card > header {
+  .admin-editor-item.admin-order-card > header {
     grid-template-columns: minmax(0, 1fr);
   }
-  .admin-module-card .admin-item-actions {
+  .admin-order-card .admin-item-actions {
     justify-self: end;
   }
   .source-settings-grid {
