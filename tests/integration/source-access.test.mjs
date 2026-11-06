@@ -154,6 +154,10 @@ test(
       })
     assert.equal((await request('/api/admin/source-connector')).status, 401)
     assert.equal((await request('/api/admin/integrations/fixture/removal')).status, 401)
+    assert.equal(
+      (await request('/api/admin/integrations/new-draft/test', 'POST', { draft: {} })).status,
+      401,
+    )
     const login = await request('/api/auth/login', 'POST', { email: env.ADMIN_EMAIL, password })
     assert.equal(login.status, 200)
     cookie = login.headers.get('set-cookie').split(';')[0]
@@ -172,6 +176,51 @@ test(
     }
     const save = (value, key = crypto.randomUUID()) =>
       request('/api/admin/config', 'PUT', value, { 'Idempotency-Key': key })
+    await t.test(
+      'unsaved, disabled source probe preserves D1 config, ciphertext and snapshots',
+      async () => {
+        const initial = await input()
+        const draft = createIntegrationDraft('deepseek', initial.config.integrations, 'probe')
+        draft.credential = { operation: 'replace', value: 'Synthetic-transient-key' }
+        const body = { expectedVersion: initial.expectedVersion, draft, quoteSymbols: [] }
+        const path = '/api/admin/integrations/' + draft.id + '/test'
+        const tables = [
+          'integration_snapshots',
+          'integration_snapshot_views',
+          'collection_runs',
+          'integration_audit',
+        ]
+        const beforeCounts = await Promise.all(
+          tables.map((table) => db.prepare(`SELECT count(*) n FROM ${table}`).first()),
+        )
+        const sent = upstream.length
+        assert.equal((await request(path, 'POST', body, { 'X-Nozoki-CSRF': '' })).status, 403)
+        assert.equal(upstream.length, sent)
+        const tested = await request(path, 'POST', body)
+        const result = await tested.json()
+        assert.equal(tested.status, 200, JSON.stringify(result))
+        assert.equal(result.protocolMatched, true)
+        assert.equal(upstream.at(-1).authorization, 'Bearer Synthetic-transient-key')
+        assert.ok(!JSON.stringify(result).includes('Synthetic-transient-key'))
+        assert.deepEqual(await input(), initial)
+        assert.deepEqual(
+          await Promise.all(
+            tables.map((table) => db.prepare(`SELECT count(*) n FROM ${table}`).first()),
+          ),
+          beforeCounts,
+        )
+        const forged = structuredClone(body)
+        forged.draft.access.authentication = 'none'
+        assert.equal((await request(path, 'POST', forged)).status, 400)
+        assert.equal(upstream.length, sent + 1)
+        const stale = structuredClone(body)
+        stale.expectedVersion++
+        assert.equal((await request(path, 'POST', stale)).status, 409)
+        await db.prepare('DELETE FROM login_limits').run()
+        // Keep the existing collector assertions independent of this explicit probe.
+        upstream.length = 0
+      },
+    )
     const approved = (id, host = 'source.example.com', authentication = 'none') => {
       const { credentialState: _, ...s } = source('sleepy')
       s.id = id
@@ -433,6 +482,7 @@ test(
     const refreshBeforeBrowser = (await input()).config.integrations.find(
       (i) => i.id === 'fixture',
     ).refreshInterval
+    await db.prepare('DELETE FROM login_limits').run()
     await t.test(
       'provider-driven source manager, credential lifecycle and responsive dialogs',
       { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },

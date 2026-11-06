@@ -7,6 +7,7 @@ withDefaults(
     secret?: boolean
     multiline?: boolean
     readonly?: boolean
+    reserveDetails?: boolean
     max?: number
   }>(),
   { max: 2048 },
@@ -26,13 +27,19 @@ withDefaults(
     autocomplete="off"
     variant="outlined"
     class="admin-text"
-    :class="{ 'admin-text--count': focused || (model?.length ?? 0) >= max * 0.9 }"
+    :class="{
+      'admin-text--count': focused || (model?.length ?? 0) >= max * 0.9,
+      'admin-text--stable-details': reserveDetails,
+    }"
     @focus="focused = true"
     @blur="focused = false"
   />
 </template>
 <style scoped>
-.admin-text:not(.admin-text--count) :deep(.var-form-details) {
+.admin-text:not(.admin-text--count):not(.admin-text--stable-details) :deep(.var-form-details) {
   display: none;
+}
+.admin-text--stable-details:not(.admin-text--count) :deep(.var-form-details) {
+  visibility: hidden;
 }
 </style>

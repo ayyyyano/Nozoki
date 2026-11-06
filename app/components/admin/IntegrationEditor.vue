@@ -3,6 +3,10 @@ import type { ProbeResult } from '../../../shared/contracts/adapter'
 import { canonical } from '../../../shared/contracts/admin'
 import type { CsrfDto } from '../../../shared/contracts/auth'
 import type { IntegrationSettings } from '../../../shared/contracts/config'
+import {
+  DraftIntegrationTestSchema,
+  type DraftIntegrationTest,
+} from '../../../shared/contracts/integration-test'
 import { sourceTargetKey } from '../../../shared/contracts/source-access'
 import {
   integrationPreset,
@@ -12,8 +16,13 @@ import {
 } from '../../../shared/integration-presets'
 import { formatTimestamp } from '../../../shared/domain/format'
 const model = defineModel<IntegrationDraft>({ required: true })
-const props = defineProps<{ timezone: string; saved?: IntegrationSettings }>()
-const emit = defineEmits<{ tested: [ProbeResult | null] }>()
+const props = defineProps<{
+  timezone: string
+  saved?: IntegrationSettings
+  expectedVersion: number
+  quoteSymbols: { market: string; symbol: string }[]
+}>()
+const emit = defineEmits<{ tested: [ProbeResult | null, boolean?] }>()
 const preset = computed(() => integrationPreset(model.value))
 const knownTarget = computed(() => fixedPresetTarget(model.value))
 const instanceAddress = computed(
@@ -49,6 +58,22 @@ const savedMatches = computed(() => {
   const { credential: _credential, ...draft } = model.value
   return canonical(saved) === canonical(draft)
 })
+const testInput = () => {
+  const { identityCredential: _identity, ...draft } = model.value
+  return { draft, expectedVersion: props.expectedVersion, quoteSymbols: props.quoteSymbols }
+}
+const testFingerprint = () => canonical(testInput())
+const canTest = computed(
+  () =>
+    approved.value &&
+    !addressChanged.value &&
+    DraftIntegrationTestSchema.safeParse(testInput()).success &&
+    (!needsCredential.value ||
+      (model.value.credential.operation === 'replace'
+        ? !!model.value.credential.value.trim()
+        : model.value.credential.operation === 'keep' && configured.value)) &&
+    (model.value.provider !== 'quotes-custom' || !!props.quoteSymbols.length),
+)
 const approved = computed(() => {
   try {
     const access = model.value.access
@@ -134,19 +159,25 @@ function revoke() {
 const testing = ref(false),
   result = ref<ProbeResult | null>(null),
   testError = ref('')
+let revision = 0
+const draftResult = ref(false)
 watch(
-  model,
+  testFingerprint,
   () => {
+    revision++
     result.value = null
     testError.value = ''
     emit('tested', null)
   },
-  { deep: true },
+  { flush: 'sync' },
 )
 const feedback = computed(() => {
   if (!result.value) return ''
   const messages: Record<string, string> = {
-    ACCESS_NOT_APPROVED: '请确认来源访问目标并保存。',
+    ACCESS_NOT_APPROVED: '请先确认来源访问目标。',
+    CREDENTIAL_INVALID: '凭据无效，或不能在修改后的目标复用，请重新输入。',
+    NOT_CONFIGURED: '请补齐实例地址、凭据或行情标的。',
+    SOURCE_CHANGED: '配置已变更，请读取最新配置后重新测试。',
     TARGET_NOT_APPROVED: '请核对实例地址并重新批准。',
     DESTINATION_BLOCKED: '目标地址被安全策略拒绝，请使用可信的公网 HTTPS 服务。',
     CONNECTOR_UNAVAILABLE: '执行环境尚未就绪，请检查部署与加密配置。',
@@ -162,13 +193,18 @@ const feedback = computed(() => {
   return result.value.code
     ? (messages[result.value.code] ?? '连接未完成，请检查服务配置后重试。')
     : result.value.protocolMatched
-      ? '连接协议已确认；各项能力见下方结果。'
+      ? draftResult.value
+        ? '草稿测试通过，尚未保存；各项能力见下方结果。'
+        : '连接协议已确认；各项能力见下方结果。'
       : '尚未确认服务协议。'
 })
 async function testConnection() {
-  if (testing.value || !savedMatches.value) return
-  const submitted = canonical(model.value),
+  if (testing.value || !canTest.value) return
+  const submitted = testFingerprint(),
+    startedRevision = revision,
+    unsaved = !savedMatches.value,
     id = model.value.id
+  let body: DraftIntegrationTest | undefined = DraftIntegrationTestSchema.parse(testInput())
   testing.value = true
   result.value = null
   testError.value = ''
@@ -176,19 +212,24 @@ async function testConnection() {
     const csrf = await $fetch<CsrfDto>('/api/auth/csrf')
     const response = await $fetch<ProbeResult>(
       '/api/admin/integrations/' + encodeURIComponent(id) + '/test',
-      { method: 'POST', headers: { 'X-Nozoki-CSRF': csrf.token }, body: {} },
+      { method: 'POST', headers: { 'X-Nozoki-CSRF': csrf.token }, body },
     )
-    if (savedMatches.value && canonical(model.value) === submitted) {
+    if (revision === startedRevision && testFingerprint() === submitted) {
+      draftResult.value = unsaved
       result.value = response
-      emit('tested', response)
+      emit('tested', response, unsaved)
     }
   } catch (e) {
+    if (revision !== startedRevision || testFingerprint() !== submitted) return
     const code = (e as { data?: { code?: string } }).data?.code
     testError.value =
-      code === 'TEST_LIMITED' || code === 'TEST_BUSY'
-        ? '测试暂时受限，请稍后再试。'
-        : '测试未完成，请检查登录状态或服务配置。'
+      code === 'CONFIG_CONFLICT'
+        ? '配置已被其他窗口修改，请读取最新配置后重新测试。'
+        : code === 'TEST_LIMITED' || code === 'TEST_BUSY'
+          ? '测试暂时受限，请稍后再试。'
+          : '测试未完成，请检查登录状态或服务配置。'
   } finally {
+    body = undefined
     testing.value = false
   }
 }
@@ -210,13 +251,14 @@ const identityImport = computed({
       <VarButton v-if="!model.baseUrl" text @click="url = preset.roots[0]!">使用预设地址</VarButton>
     </div>
     <div class="source-settings-grid">
-      <AdminText v-if="instanceAddress" v-model="url" label="实例 HTTPS 地址" />
+      <AdminText v-if="instanceAddress" v-model="url" label="实例 HTTPS 地址" reserve-details />
       <AdminText
         v-for="field in preset.fields"
         :key="field.key"
         :model-value="model.fieldMappings[field.key] ?? ''"
         :label="field.label"
         :max="field.max"
+        reserve-details
         @update:model-value="model.fieldMappings[field.key] = $event"
       />
       <AdminNumber v-model="model.refreshInterval" label="刷新间隔（秒）" />
@@ -252,20 +294,18 @@ const identityImport = computed({
       <p v-if="approvalError" class="source-warning" role="alert">{{ approvalError }}</p>
     </div>
     <div class="admin-actions source-test-actions">
-      <VarButton
-        tonal
-        :loading="testing"
-        :disabled="testing || !savedMatches || !approved || !model.enabled"
-        @click="testConnection"
+      <VarButton tonal :loading="testing" :disabled="testing || !canTest" @click="testConnection"
         ><CommonAppIcon name="LinkRound" :size="18" />测试连接</VarButton
       ><span class="admin-note">{{
-        !savedMatches
-          ? '请先保存此来源的修改'
-          : !model.enabled
-            ? '启用并保存后可测试'
-            : !approved
-              ? '请确认访问目标并保存'
-              : '仅验证连接，不保存采集快照'
+        !approved
+          ? '请先确认来源访问目标'
+          : addressChanged
+            ? '地址已更改，请更新或清除原凭据'
+            : !canTest
+              ? '请补齐此来源的必要配置'
+              : !savedMatches
+                ? '验证当前草稿，不保存配置或快照'
+                : '仅验证连接，不保存采集快照'
       }}</span>
     </div>
     <div
@@ -293,7 +333,13 @@ const identityImport = computed({
     </ul>
     <details v-if="preset.identityImport && !saved?.identityConfigured" class="admin-details">
       <summary>迁移已有账户权限</summary>
-      <AdminText v-model="identityImport" label="原账户身份密钥（迁移时填写）" secret :max="43" />
+      <AdminText
+        v-model="identityImport"
+        label="原账户身份密钥（迁移时填写）"
+        secret
+        :max="43"
+        reserve-details
+      />
       <p class="admin-note">
         新来源留空。迁移旧账户权限时填写原有密钥；保存前会只读核对账户身份，匹配后加密保存。
       </p>
@@ -307,7 +353,7 @@ const identityImport = computed({
       <p>
         {{ preset.name }} 只会请求已登记的只读端点{{
           approvalAccess().authentication === 'none' ? '，不发送凭据' : '，会使用此来源的认证凭据'
-        }}。请确认该地址可信；批准在全局保存后生效。
+        }}。请确认该地址可信；确认后可测试草稿，正式采集须全局保存后生效。
       </p></AdminSourceDialog
     >
   </template>

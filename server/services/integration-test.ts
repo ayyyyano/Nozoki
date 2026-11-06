@@ -16,6 +16,39 @@ import type { AuthSession } from './sessions.ts'
 import { AuthError } from './auth-settings.ts'
 import { readManagedSource } from '../collection/managed-read.ts'
 import { collectionEnvironmentMatches } from '../collection/environment.ts'
+export function applyProbeResult(
+  response: ProbeResult,
+  result: AdapterRead,
+  requiresAuthentication: boolean,
+) {
+  response.status = result.status
+  response.capabilities = result.capabilities
+  response.observedAt = result.observedAt
+  response.code = result.code
+  response.retryAfterSeconds = result.retryAfterSeconds
+  response.protocolMatched = !result.code
+  response.reachable =
+    !result.code ||
+    [
+      'AUTH_REQUIRED',
+      'NOT_FOUND',
+      'RATE_LIMITED',
+      'REDIRECT_REJECTED',
+      'RESPONSE_TOO_LARGE',
+      'INVALID_RESPONSE',
+    ].includes(result.code)
+      ? true
+      : null
+  response.authentication =
+    result.code === 'AUTH_REQUIRED'
+      ? 'rejected'
+      : result.code
+        ? 'unverified'
+        : requiresAuthentication
+          ? 'accepted'
+          : 'not_required'
+  response.summary = { items: result.items, views: Object.keys(result.views).length }
+}
 export async function testIntegration(
   db: Database,
   id: string,
@@ -72,33 +105,7 @@ export async function testIntegration(
     } else {
       throw new AdapterError('ACCESS_NOT_APPROVED')
     }
-    response.status = result.status
-    response.capabilities = result.capabilities
-    response.observedAt = result.observedAt
-    response.code = result.code
-    response.retryAfterSeconds = result.retryAfterSeconds
-    response.protocolMatched = !result.code
-    response.reachable =
-      !result.code ||
-      [
-        'AUTH_REQUIRED',
-        'NOT_FOUND',
-        'RATE_LIMITED',
-        'REDIRECT_REJECTED',
-        'RESPONSE_TOO_LARGE',
-        'INVALID_RESPONSE',
-      ].includes(result.code)
-        ? true
-        : null
-    response.authentication =
-      result.code === 'AUTH_REQUIRED'
-        ? 'rejected'
-        : result.code
-          ? 'unverified'
-          : requiresAuthentication
-            ? 'accepted'
-            : 'not_required'
-    response.summary = { items: result.items, views: Object.keys(result.views).length }
+    applyProbeResult(response, result, requiresAuthentication)
     if (result.code === 'RATE_LIMITED' && result.retryAfterSeconds)
       await deferIntegrationTest(db, slot.sourceHash, result.retryAfterSeconds)
     const current = await readIntegration(db, id)

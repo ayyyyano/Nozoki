@@ -717,6 +717,7 @@ onBeforeRouteLeave(() => {
               ref="sourceManager"
               v-model="draft.integrations"
               :saved="baseline?.integrations ?? []"
+              :expected-version="baseline!.site.configVersion"
               :modules="draft.modules"
               :quotes="draft.quotes"
               :timezone="draft.site.timezone"
