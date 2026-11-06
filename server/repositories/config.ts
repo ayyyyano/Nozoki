@@ -173,6 +173,8 @@ export async function commitConfig(
   changedFields: string[],
   request?: ConfigRequest,
   changed = true,
+  backgroundImage?: { hash: string; bytes: Uint8Array },
+  removeBackground = false,
 ) {
   await requireWritableStorage(db)
   const token = crypto.randomUUID(),
@@ -195,6 +197,38 @@ export async function commitConfig(
     ])
     return
   }
+  if (backgroundImage)
+    statements.push(
+      db
+        .prepare(
+          'INSERT INTO site_background_images(hash,data) VALUES(?,?) ON CONFLICT(hash) DO NOTHING',
+        )
+        .bind(backgroundImage.hash, backgroundImage.bytes),
+    )
+  if (input.site.background.source === 'uploaded') {
+    // The same CAS transaction verifies the reference and removes superseded image bytes.
+    statements.push(
+      db
+        .prepare(
+          'INSERT INTO site_background_images(hash,data) SELECT ?,NULL WHERE NOT EXISTS(SELECT 1 FROM site_background_images WHERE hash=?)',
+        )
+        .bind(
+          input.site.background.url.slice('/api/background/'.length),
+          input.site.background.url.slice('/api/background/'.length),
+        ),
+    )
+  }
+  // Superseded bytes are removed in the same guarded transaction as the configuration.
+  if (backgroundImage || input.site.background.source === 'uploaded' || removeBackground)
+    statements.push(
+      db
+        .prepare('DELETE FROM site_background_images WHERE hash<>?')
+        .bind(
+          input.site.background.source === 'uploaded'
+            ? input.site.background.url.slice('/api/background/'.length)
+            : '',
+        ),
+    )
   for (const i of integrations)
     statements.push(
       db

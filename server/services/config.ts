@@ -1,4 +1,9 @@
 import {
+  backgroundImageHash,
+  decodeBackgroundImage,
+  BACKGROUND_IMAGE_PATH,
+} from '../../shared/contracts/background-image.ts'
+import {
   canonical,
   orderedConfig,
   editableConfig,
@@ -137,6 +142,30 @@ export async function saveConfig(
         fieldErrors: ['integrations'],
         reason: 'SOURCE_IN_USE',
       }
+    if (
+      (parsed.data.backgroundUpload !== undefined ||
+        config.site.background.source === 'uploaded') &&
+      !(await db.prepare('PRAGMA table_info(site_background_images)').all()).results.length
+    )
+      return { success: false, code: 'MIGRATIONS_REQUIRED' }
+    let backgroundImage: { hash: string; bytes: Uint8Array } | undefined
+    if (parsed.data.backgroundUpload !== undefined) {
+      const bytes = decodeBackgroundImage(parsed.data.backgroundUpload)
+      if (!bytes || config.site.background.source !== 'uploaded')
+        return { success: false, code: 'VALIDATION_ERROR', fieldErrors: ['site.background'] }
+      const hash = await backgroundImageHash(bytes)
+      if (config.site.background.url !== '/api/background/' + hash)
+        return { success: false, code: 'VALIDATION_ERROR', fieldErrors: ['site.background'] }
+      backgroundImage = { hash, bytes }
+    } else if (config.site.background.source === 'uploaded') {
+      const hash = BACKGROUND_IMAGE_PATH.exec(config.site.background.url)![1]!
+      const exists = await db
+        .prepare('SELECT hash FROM site_background_images WHERE hash=?')
+        .bind(hash)
+        .first()
+      if (!exists)
+        return { success: false, code: 'VALIDATION_ERROR', fieldErrors: ['site.background'] }
+    }
     const stored: StoredIntegration[] = []
     for (const i of config.integrations) {
       const old = current.integrations.find((s) => s.settings.id === i.id)
@@ -354,6 +383,8 @@ export async function saveConfig(
       changedFields,
       options.request,
       options.request ? changed : true,
+      backgroundImage,
+      current.config.site.background.source === 'uploaded',
     )
     const nextVersion = expectedVersion + Number(changed)
     return options.request

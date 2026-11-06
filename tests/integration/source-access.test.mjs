@@ -176,7 +176,10 @@ test(
     }
     const save = (value, key = crypto.randomUUID()) =>
       request('/api/admin/config', 'PUT', value, { 'Idempotency-Key': key })
-    if (process.env.NOZOKI_TEST_LIST_HEADERS === '1') {
+    if (
+      process.env.NOZOKI_TEST_LIST_HEADERS === '1' ||
+      process.env.NOZOKI_TEST_BACKGROUND === '1'
+    ) {
       const { launch, settle } = await import('../browser/support.mjs')
       const { exerciseAdminListHeaders } = await import('../browser/admin-list-headers.mjs')
       await mf.ready
@@ -188,7 +191,18 @@ test(
       const page = await context.newPage()
       await page.goto(origin + '/admin')
       await settle(page)
-      await exerciseAdminListHeaders(page, { input, evidence })
+      if (process.env.NOZOKI_TEST_BACKGROUND === '1') {
+        const { exerciseSharedBackground } = await import('../browser/admin-background.mjs')
+        await exerciseSharedBackground(page, {
+          browser,
+          origin,
+          input,
+          request,
+          save,
+          db,
+          evidence,
+        })
+      } else await exerciseAdminListHeaders(page, { input, evidence })
       await context.close()
       await browser.close()
       browser = null

@@ -1,10 +1,11 @@
+import { isUploadedBackgroundUrl } from './background-image.ts'
 import { parseSourceColor } from '../domain/color-input.ts'
 export interface Appearance {
   mode: 'system' | 'light' | 'dark'
   sourceColor: string
   reduceMotion: boolean
   background: {
-    source: 'off' | 'builtin' | 'custom'
+    source: 'off' | 'builtin' | 'custom' | 'uploaded'
     url: string
     layout: 'banner' | 'page'
     fit: 'cover' | 'contain'
@@ -41,8 +42,13 @@ export function parseAppearance(value: unknown): Appearance {
   if (typeof v.reduceMotion === 'boolean') fallback.reduceMotion = v.reduceMotion
   const b = v.background
   if (b && typeof b === 'object') {
-    if (['off', 'builtin', 'custom'].includes(b.source)) fallback.background.source = b.source
-    if (typeof b.url === 'string' && b.url.length <= 2048 && isHttpsImageUrl(b.url))
+    if (['off', 'builtin', 'custom', 'uploaded'].includes(b.source))
+      fallback.background.source = b.source
+    if (
+      typeof b.url === 'string' &&
+      b.url.length <= 2048 &&
+      (isHttpsImageUrl(b.url) || isUploadedBackgroundUrl(b.url))
+    )
       fallback.background.url = b.url
     if (b.layout === 'banner' || b.layout === 'page') fallback.background.layout = b.layout
     if (b.fit === 'cover' || b.fit === 'contain') fallback.background.fit = b.fit

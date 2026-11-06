@@ -143,7 +143,10 @@ defineExpose({ open })
             aria-label="背景来源"
             ><VarOption label="关闭" value="off" /><VarOption
               label="内置图片"
-              value="builtin" /><VarOption label="自定义 HTTPS 图片" value="custom"
+              value="builtin" /><VarOption
+              v-if="model.background.source === 'uploaded'"
+              label="站点上传图片"
+              value="uploaded" /><VarOption label="自定义 HTTPS 图片" value="custom"
           /></VarSelect>
           <VarSelect
             v-model="model.background.layout"

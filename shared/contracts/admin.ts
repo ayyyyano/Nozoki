@@ -1,5 +1,5 @@
 import type { Config, ConfigWrite } from './config.ts'
-export const CONFIG_BODY_LIMIT = 262144
+export const CONFIG_BODY_LIMIT = 1024 * 1024
 export const AUTH_BODY_LIMIT = 4096
 export const validRequestKey = (key: string) =>
   /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(key)
