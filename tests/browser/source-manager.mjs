@@ -122,6 +122,7 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   await deep.getByRole('button', { name: '编辑', exact: true }).click()
   const newKey = 'SYNTHETIC-UI-REPLACEMENT'
   await deep.locator('input[aria-label="新 API Key"]').fill(newKey)
+  await expect(deep.getByRole('button', { name: '测试连接', exact: true })).toBeEnabled()
   await expect(deep.locator('input[aria-label="新 API Key"]')).toHaveAttribute('type', 'password')
   await deep.getByRole('button', { name: '显示新API Key', exact: true }).click()
   await expect(deep.locator('input[aria-label="新 API Key"]')).toHaveAttribute('type', 'text')
@@ -174,18 +175,54 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   const id = await added.getAttribute('data-source-id')
   assert.match(id, /^sleepy-[a-z0-9-]+$/)
   await added.locator('input[aria-label="实例 HTTPS 地址"]').fill('https://ui.example.com/')
-  await added.getByRole('switch').click()
   await expect(added.getByRole('button', { name: '测试连接', exact: true })).toBeDisabled()
   await added.getByRole('button', { name: '确认来源访问', exact: true }).click()
   const approval = page.getByRole('dialog', { name: '允许访问此服务？', exact: true })
+  await expect(approval)
+    .toBeVisible({ timeout: 3000 })
+    .catch(async (e) => {
+      await page.screenshot({ path: resolve(evidence, 'draft-approval-failure.png') })
+      throw new Error(JSON.stringify({ errors, text: await added.innerText() }), { cause: e })
+    })
   await approval.getByRole('button', { name: '确认访问', exact: true }).click()
-  await commit()
+  const beforeDraftTest = await input()
   const probe = page.waitForResponse((r) => r.url().endsWith(`/integrations/${id}/test`))
   await added.getByRole('button', { name: '测试连接', exact: true }).click()
   assert.equal((await (await probe).json()).protocolMatched, true)
-  await expect(added.getByText(/连接协议已确认；/)).toBeVisible()
+  await expect(added.getByText(/草稿测试通过，尚未保存；/)).toBeVisible()
+  assert.deepEqual(await input(), beforeDraftTest)
+  await expect(added.getByRole('switch')).not.toBeChecked()
+  await added.getByRole('switch').click()
+  await expect(added.locator('.source-test-result')).toHaveCount(0)
+  await commit()
   await added.locator('input[aria-label="刷新间隔（秒）"]').fill('600')
-  await expect(added.getByRole('button', { name: '测试连接', exact: true })).toBeDisabled()
+  await expect(added.getByRole('button', { name: '测试连接', exact: true })).toBeEnabled()
+  // A real probe finishing after another edit must not restore an outdated success message.
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  let arrived
+  const ready = new Promise((resolve) => {
+    arrived = resolve
+  })
+  const delayed = `**/integrations/${id}/test`
+  await page.route(delayed, async (route) => {
+    const response = await route.fetch()
+    assert.equal(response.status(), 200)
+    assert.equal((await response.json()).protocolMatched, true)
+    arrived()
+    await gate
+    await route.fulfill({ response })
+  })
+  await added.getByRole('button', { name: '测试连接', exact: true }).click()
+  await ready
+  await added.locator('input[aria-label="刷新间隔（秒）"]').fill('601')
+  release()
+  await expect(added.getByRole('button', { name: '测试连接', exact: true })).toBeEnabled()
+  await expect(added.locator('.source-test-result')).toHaveCount(0)
+  await page.unroute(delayed)
+  await added.locator('input[aria-label="刷新间隔（秒）"]').fill('600')
   // Independent drafts survive section changes.
   await page.getByRole('button', { name: '站点与外观', exact: true }).click()
   await section()

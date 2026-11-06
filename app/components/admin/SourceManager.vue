@@ -13,6 +13,7 @@ import {
 const model = defineModel<IntegrationDraft[]>({ required: true })
 const props = defineProps<{
   saved: IntegrationSettings[]
+  expectedVersion: number
   modules: ConfigWrite['modules']
   quotes: ConfigWrite['quotes']
   timezone: string
@@ -21,6 +22,11 @@ const props = defineProps<{
 const root = useTemplateRef<HTMLElement>('root')
 const open = ref<Record<string, boolean>>({}),
   probes = ref<Record<string, ProbeResult | null>>({})
+const draftProbes = ref<Record<string, boolean>>({})
+function tested(id: string, result: ProbeResult | null, draft = false) {
+  probes.value[id] = result
+  draftProbes.value[id] = draft
+}
 const picker = ref(false),
   pickerError = ref('')
 let createdId = ''
@@ -48,12 +54,26 @@ function afterPicker() {
 function saved(source: IntegrationDraft) {
   return props.saved.find((s) => s.id === source.id)
 }
+function testSymbols(source: IntegrationDraft) {
+  if (source.provider !== 'quotes-custom') return []
+  const enabled = props.quotes.filter((q) => q.enabled)
+  const bound = enabled.filter((q) => q.provider === source.id)
+  return (bound.length ? bound : enabled)
+    .slice(0, 1)
+    .map(({ market, symbol }) => ({ market, symbol }))
+}
 function title(source: IntegrationDraft) {
   return integrationPreset(source)?.name ?? '旧数据源'
 }
 function hint(source: IntegrationDraft) {
   const p = integrationPreset(source),
     probe = probes.value[source.id]
+  if (probe && draftProbes.value[source.id])
+    return probe.code
+      ? '草稿测试未通过'
+      : probe.protocolMatched
+        ? '草稿测试通过 · 未保存'
+        : '草稿连接尚未确认'
   if (probe)
     return probe.code ? '测试未通过' : probe.protocolMatched ? '连接协议已确认' : '连接尚未确认'
   if (!p) return '旧配置 · 只读'
@@ -150,7 +170,9 @@ defineExpose({
         v-model="model[index]!"
         :timezone="timezone"
         :saved="saved(source)"
-        @tested="probes[source.id] = $event"
+        :expected-version="expectedVersion"
+        :quote-symbols="testSymbols(source)"
+        @tested="(result, draft) => tested(source.id, result, draft)"
       />
       <div class="source-danger-zone">
         <VarButton type="danger" tonal @click="requestRemoval(source)"

@@ -266,8 +266,8 @@ The collection environment follows the [Cloudflare deployment version](https://d
 
 1. Open Data sources, click Add source and choose DeepSeek, Sleepy, CLIProxyAPI or another supported type. The app fills in the protocol and authentication scheme and generates an instance ID.
 2. Enter the instance HTTPS address or credentials shown for that type. A Sleepy address might be `https://alive.example.com/`. DeepSeek needs an API Key; CLIProxyAPI needs a Management Key. New installations already include Tencent quotes, which needs no credentials.
-3. Confirm access to a custom instance, enable the source with its header switch and save the configuration.
-4. Run Test connection. Bind the source to the corresponding Dashboard module's `main` reference and save. The Collector reads it at the configured interval.
+3. Confirm access to a custom instance, then run Test connection without saving or enabling it. Newly entered credentials are used only for this probe. Saved secrets can be reused only while the source type, protocol, address and authentication scheme remain unchanged.
+4. After a successful test, enable the source, bind it to the corresponding Dashboard module's `main` reference, and select Save configuration. The Collector reads it at the configured interval. Tests do not save configuration, credentials or production snapshots. Editing the tested fields invalidates the previous result.
 
 An instance's type and protocol are fixed after creation. Changing its address requires approval again and replacement or deletion of credentials bound to the old address. Saved secrets appear as placeholders. Edit opens an empty field for a new value; Delete asks for confirmation and schedules removal for the next save. You can undo deletion before saving. Credentials are encrypted in the database; admin reads return their configuration status. Each configuration supports up to 10 sources.
 
