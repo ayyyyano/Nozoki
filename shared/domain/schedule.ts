@@ -35,15 +35,27 @@ export function legacyScheduleView(
         : 'after'
   const caption = state.current
     ? phase === 'lunch'
-      ? '距离午休结束'
+      ? config.labels?.break
+        ? `距离 ${config.labels.break} 结束`
+        : '距离午休结束'
       : state.current.id === 'morning'
-        ? '距离午休'
-        : '距离下班'
+        ? config.labels?.break
+          ? `距离 ${config.labels.break}`
+          : '距离午休'
+        : config.labels?.after
+          ? `距离 ${config.labels.after}`
+          : '距离下班'
     : !state.nextPeriod
-      ? '暂无已知工作日'
+      ? config.labels?.active
+        ? '暂无已知安排'
+        : '暂无已知工作日'
       : phase === 'before'
-        ? '距离上班'
-        : '距离下次上班'
+        ? config.labels?.active
+          ? `距离 ${config.labels.active}`
+          : '距离上班'
+        : config.labels?.active
+          ? `距离下次 ${config.labels.active}`
+          : '距离下次上班'
   const periods =
     state.current?.originDate === state.localDate ? state.day!.periods : (state.day?.carryIn ?? [])
   const first = periods[0],

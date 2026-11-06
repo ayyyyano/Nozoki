@@ -12,6 +12,8 @@ export function activityScheduleView(
   labels: ScheduleLabels = legacy?.labels ?? {},
 ) {
   const old = legacy && state.valid ? legacyScheduleView(state, legacy, now) : null
+  const periodLabel = (period: NonNullable<ScheduleEvaluation['current']>) =>
+    period.display?.label ?? labels[period.category] ?? period.name
   const label =
     state.override?.text ??
     state.current?.display?.label ??
@@ -39,8 +41,8 @@ export function activityScheduleView(
         : state.nextChange.kind === 'day-boundary'
           ? '距离日程切换'
           : state.nextChange.kind === 'start'
-            ? `距离 ${state.nextChange.period?.name ?? '下一安排'}`
-            : `距离 ${state.nextChange.period?.name ?? '当前时段'} 结束`))
+            ? `距离 ${state.nextChange.period ? periodLabel(state.nextChange.period) : '下一安排'}`
+            : `距离 ${state.nextChange.period ? periodLabel(state.nextChange.period) : '当前时段'} 结束`))
     : '查找范围内暂无下一安排'
   return {
     label,
@@ -67,9 +69,10 @@ export function activityScheduleView(
           : '自由时间',
     periods: [...(state.day?.carryIn ?? []), ...(state.day?.periods ?? [])].map((p) => ({
       id: p.originDate + ':' + p.id,
-      name: p.name,
-      text: `${p.startDayOffset ? '次日 ' : ''}${p.start}–${p.endDayOffset ? '次日 ' : ''}${p.end} ${p.name}`,
+      name: periodLabel(p),
+      text: `${p.startDayOffset ? '次日 ' : ''}${p.start}–${p.endDayOffset ? '次日 ' : ''}${p.end} ${periodLabel(p)}`,
     })),
+    nextPeriodLabel: state.nextPeriod ? periodLabel(state.nextPeriod) : null,
     exceptionName: state.day?.exceptionName ?? (state.exception ? '日期例外' : null),
   }
 }

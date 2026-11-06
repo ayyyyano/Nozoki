@@ -1,7 +1,7 @@
 import type { IntegrationSettings } from '../../shared/contracts/config.ts'
 import { cap } from './common.ts'
 const known = {
-  deepseek: { balance: true, spend: false },
+  deepseek: { balance: true },
   'deepseek-spend': { spend: false },
   sleepy: { metadata: true, devices: true, battery: false, heartbeat: false },
   tailscale: { devices: true, connection: true, addresses: true },

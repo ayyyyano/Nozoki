@@ -25,6 +25,8 @@ async function fresh(legacy = false) {
       .filter((f) => f.endsWith('.sql') && f < '0019')
       .sort())
       db.connection.exec(await readFile('migrations/' + name, 'utf8'))
+    // This fixture isolates the 0019 source-grant migration; display schema is current.
+    db.connection.exec(await readFile('migrations/0020_balance_display.sql', 'utf8'))
   } else await migrateDatabase(db, 'migrations', resolve(folder, 'backups'))
   return db
 }

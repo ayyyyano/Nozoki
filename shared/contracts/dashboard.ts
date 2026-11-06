@@ -39,11 +39,14 @@ export interface ModuleConfig {
   guestBehavior: 'hidden' | 'login_hint'
   fields: Record<string, { enabled: boolean; visibility: 'public' | 'admin' }>
   ipVisibility?: 'public' | 'hidden' | 'admin'
+  guestBlur?: boolean
 }
 export interface DeepSeekData {
   balances: { currency: string; total: Decimal; toppedUp: Decimal; granted: Decimal }[]
-  spend: { day: string; currency: string; amount: Decimal; sourceId: string }[]
-  capabilities: { balance: SourceCapability; spend: SourceCapability }
+  dailyBalances: { day: string; currency: string; total: Decimal; collectedAt: string }[]
+  timezone?: string
+  masked?: boolean
+  capabilities: { balance: SourceCapability }
 }
 export interface Device extends DeviceState {
   heartbeatAt: string | null

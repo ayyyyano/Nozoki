@@ -10,7 +10,7 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 
 | 模块      | 内容                                                      |
 | --------- | --------------------------------------------------------- |
-| DeepSeek  | 账户余额、币种及充值余额、赠金余额                        |
+| DeepSeek  | 当前余额与近 7 日剩余余额柱状图，可为访客模糊展示         |
 | Devices   | Sleepy 设备状态文字、可确认的前台应用、可选电量和供电信息 |
 | Tailscale | 设备名称、控制面连接状态及可按登录身份隐藏的 Tailnet IP   |
 | Codex     | CLIProxyAPI 账户状态及来源提供的被动额度观测              |
@@ -20,6 +20,8 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 | Services  | Uptime Kuma、UptimeFlare 监控状态和延迟                   |
 
 后台可设置模块启停、顺序、标题和访问权限。服务端根据登录身份过滤数据，访客刷新页面时从数据库读取已保存的结果。
+
+DeepSeek 只需绑定余额来源。今日余额随采集更新，历史柱取站点时区内当天最后一次成功观测；未采集的日期留空。现有定时任务会在日终前安排一次采集，服务中断或上游失败时无法保证取得日终余额。后台「Dashboard 模块 → DeepSeek」可开启「未登录时模糊展示余额」；访客仅收到占位数据，登录后按字段权限显示真实余额。
 
 后台管理数据源的地址、协议、凭据和访问批准。Cloudflare Workers 直接读取在后台批准的公网 HTTPS 来源。Node.js 部署使用内嵌连接器。QQQM、VOO 默认使用已启用的腾讯来源。Codex 展示账户状态及可确认的被动配额。
 
@@ -206,7 +208,7 @@ git push origin master
 | 设置        | 填写内容                                               |
 | ----------- | ------------------------------------------------------ |
 | Worker 名称 | `nozoki-dashboard`，与 `wrangler.jsonc` 的 `name` 相同 |
-| 生产分支    | `master`，或自己的实际分支                               |
+| 生产分支    | `master`，或自己的实际分支                             |
 | 根目录      | 仓库根目录，保留默认值                                 |
 | 构建命令    | `pnpm build`                                           |
 | 部署命令    | `pnpm deploy:cloudflare`                               |
@@ -302,7 +304,6 @@ Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 
 
 在线状态来自 `connectedToControl`，表示 Tailscale 控制面连接状态，不保证设备上的服务可达。接口不提供前台应用或电量；这些信息继续由 Sleepy 提供。Collector 访问官方 API，无需加入 Tailnet。每轮先向固定官方 `/api/v2/oauth/token` 端点 POST 换取只读令牌，再 GET 设备列表，共两次请求。Client Secret 仅发给该官方令牌端点，重定向会被拒绝。
 
-
 ### 默认腾讯行情
 
 新数据库自动加载来源 `tencent`：Provider 为 `quotes-custom`，协议为 `tencent-us-v1`，服务根地址为 `https://web.ifzq.gtimg.cn/`。来源已启用，每 300 秒检查刷新；QQQM、VOO 和行情模块的 `main` 引用均已绑定。默认来源已保存等价的后台批准，无需 API Key 或额外 Worker 变量。
@@ -329,7 +330,7 @@ Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 
 | 登录提示“暂时无法登录”            | `AUTH_ORIGIN` 与地址栏是否一致、两个登录 Secret 是否添加在运行时设置中                                              |
 | 绑定自定义域名后无法登录          | `AUTH_ORIGIN` 是否已改为自定义域名并重新部署；改前通过 `workers.dev` 地址之外的自定义域名访问时，任何密码都会被拒绝 |
 | 登录提示“邮箱或密码错误”          | 登录邮箱是否与 `ADMIN_EMAIL` 相同，密码是否与 Secret 中设置的值相同                                                 |
-| 数据源显示未配置或目标未批准      | 后台批准、凭据及执行环境是否一致，旧来源还需检查 Relay 设置                                                               |
+| 数据源显示未配置或目标未批准      | 后台批准、凭据及执行环境是否一致，旧来源还需检查 Relay 设置                                                         |
 
 控制台操作参考 Cloudflare 的 [Git 仓库部署](https://developers.cloudflare.com/workers/ci-cd/builds/)、[D1 数据库](https://developers.cloudflare.com/d1/get-started/) 和 [Secret 设置](https://developers.cloudflare.com/workers/configuration/secrets/) 文档。
 

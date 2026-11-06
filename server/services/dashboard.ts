@@ -47,7 +47,7 @@ function group(module: ModuleSettings, path: string[]): string | undefined {
   if (module.id === 'deepseek') {
     if (path[0] === 'balances')
       return ['toppedUp', 'granted'].includes(field ?? '') ? 'balanceBreakdown' : 'balance'
-    if (path[0] === 'spend') return 'spend'
+    if (path[0] === 'dailyBalances') return 'balance'
   }
   if (module.id === 'devices') {
     if (['batteryPercent', 'charging'].includes(field ?? '')) return 'battery'
@@ -78,6 +78,15 @@ function projectValue(
     return undefined
   const g = group(module, path)
   if (g && !allowed(module, [g], admin, rules)) return undefined
+  if (module.id === 'deepseek' && path[0] === 'dailyBalances') {
+    if (!allowed(module, ['balances'], admin, rules)) return undefined
+    const field = path.at(-1)
+    if (
+      ['total', 'currency'].includes(field ?? '') &&
+      !allowed(module, ['balances', '*', field!], admin, rules)
+    )
+      return undefined
+  }
   // A window title may exist in either alias, including old snapshots. Apply the stricter
   // policy to both, so a hidden application cannot reappear through fallback text/tooltips.
   if (module.id === 'devices' && ['stateText', 'foregroundApp'].includes(path.at(-1) ?? '')) {
@@ -280,6 +289,19 @@ async function projectDashboard(state: StoredState, now = new Date(), admin = fa
     if (!ModuleSettingsSchema.safeParse(m).success)
       throw new DataLayerError('CONFIG_BASELINE_INVALID')
     if (!m.enabled) continue
+    // Redact before reading/projecting values. Placeholders carry no data-dependent heights,
+    // tooltips, timestamps, capabilities or collection status, even for an admin-only module.
+    if (!admin && m.id === 'deepseek' && m.guestBlur) {
+      const { sourceId: _sourceId, ...safe } = snapshot('ok', { masked: true })
+      modules.push({
+        id: m.id,
+        title: m.title,
+        sortOrder: m.sortOrder,
+        kind: 'data',
+        snapshot: safe as Record<string, Json>,
+      })
+      continue
+    }
     if (!admin && m.visibility !== 'public') {
       if (m.guestBehavior === 'login_hint')
         modules.push({ id: m.id, title: m.title, sortOrder: m.sortOrder, kind: 'login_required' })

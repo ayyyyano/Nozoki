@@ -4,6 +4,8 @@ import { DataLayerError } from '../types/database.ts'
 import { snapshotSchema } from '../../shared/contracts/snapshots.ts'
 import type { ModuleId } from '../../shared/contracts/dashboard.ts'
 import { quotaExpired, safeCollectionCode } from '../../shared/collection/policy.ts'
+import { readDailyBalances, balanceSeries } from './balance-observations.ts'
+import { hashToken } from './auth-crypto.ts'
 /** Add collection failures to the last valid data; never replace data with invented empty values. */
 export async function withCollectionState(
   db: Database,
@@ -15,7 +17,7 @@ export async function withCollectionState(
     rows = (
       await db
         .prepare(
-          'SELECT s.*,e.epoch AS current_epoch FROM collection_state s JOIN collector_environment e ON e.id=1',
+          'SELECT s.*,e.epoch AS current_epoch,e.fingerprint AS current_fingerprint FROM collection_state s JOIN collector_environment e ON e.id=1',
         )
         .all()
     ).results
@@ -74,6 +76,41 @@ export async function withCollectionState(
     }
     return [{ ...row, snapshot_json: JSON.stringify(snapshot) }]
   })
+  for (const row of snapshots) {
+    if (row.module_id !== 'deepseek') continue
+    if (state.storageMode === 'read-only') continue
+    const source = state.integrations.find((s) => s.settings.id === row.source_id)
+    if (!source || typeof row.source_revision !== 'string') continue
+    let parsed
+    try {
+      parsed = snapshotSchema('deepseek').safeParse(JSON.parse(String(row.snapshot_json)))
+    } catch {
+      continue
+    }
+    if (!parsed.success || !parsed.data.data) continue
+    const data = parsed.data.data as import('../../shared/contracts/dashboard.ts').DeepSeekData
+    const series = await balanceSeries(source.settings, source.envelope)
+    const collection = rows.find((r) => r.source_id === row.source_id)
+    const legacySeries = collection
+      ? await hashToken(
+          JSON.stringify([
+            row.source_revision,
+            row.environment_epoch,
+            collection.current_fingerprint,
+          ]),
+        )
+      : undefined
+    data.dailyBalances = await readDailyBalances(
+      db,
+      String(row.source_id),
+      series,
+      state.config.site.timezone,
+      now,
+      legacySeries,
+    )
+    data.timezone = state.config.site.timezone
+    row.snapshot_json = JSON.stringify(parsed.data)
+  }
   // No successful row yet: surface a safe collection state for the configured module.
   for (const m of state.config.modules) {
     const ref = m.sources.main,

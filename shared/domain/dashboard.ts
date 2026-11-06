@@ -123,6 +123,7 @@ export function defaultModules(): ModuleConfig[] {
     }[id],
     enabled: id !== 'tailscale',
     ...(id === 'tailscale' ? { ipVisibility: 'admin' as const } : {}),
+    ...(id === 'deepseek' ? { guestBlur: false } : {}),
     sortOrder: i,
     visibility: ['activity', 'quotes', 'links'].includes(id) ? 'public' : 'admin',
     guestBehavior: 'login_hint',

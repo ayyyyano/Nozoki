@@ -69,8 +69,9 @@ test('DeepSeek preserves exact multi-currency amounts, zero and unknown observed
   assert.equal(d.balances[0]!.total, '110.000000000000000001')
   assert.equal(d.balances[1]!.total, '0.00')
   assert.equal(r.observedAt, null)
-  assert.deepEqual(d.spend, [])
-  assert.equal(d.capabilities.spend.supported, false)
+  assert.deepEqual(d.dailyBalances, [])
+  assert.equal(Object.hasOwn(d, 'spend'), false)
+  assert.equal(Object.hasOwn(d.capabilities, 'spend'), false)
   for (const invalid of [110, 'NaN', '1e20', '01.0']) {
     const map = replies('deepseek') as any
     map['user/balance'].balance_infos[0].total_balance = invalid

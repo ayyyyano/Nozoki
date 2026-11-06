@@ -668,6 +668,12 @@ onBeforeRouteLeave(() => {
                     value="login_hint"
                 /></VarSelect>
               </div>
+              <label v-if="m.id === 'deepseek'">
+                <VarSwitch
+                  v-model="m.guestBlur"
+                  aria-label="DeepSeek 未登录时模糊展示"
+                />未登录时模糊展示余额（保留卡片）
+              </label>
               <VarSelect
                 v-if="m.id === 'tailscale'"
                 v-model="m.ipVisibility"
@@ -682,7 +688,15 @@ onBeforeRouteLeave(() => {
               </VarSelect>
               <details class="admin-details">
                 <summary>数据源引用</summary>
-                <div v-for="(s, key) in m.sources" :key="key" class="admin-fields">
+                <div
+                  v-for="(s, key) in Object.fromEntries(
+                    Object.entries(m.sources).filter(
+                      ([key]) => m.id !== 'deepseek' || key === 'main',
+                    ),
+                  )"
+                  :key="key"
+                  class="admin-fields"
+                >
                   <span>{{ key }}</span
                   ><VarSelect
                     v-model="s.sourceId"

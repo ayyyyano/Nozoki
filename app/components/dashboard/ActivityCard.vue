@@ -37,9 +37,10 @@ const { state, view, legacy } = useScheduleEvaluation(
         :line-width="5"
       />
       <div v-if="legacy" class="schedule-times">
-        <span>{{ legacy.start }} 上班</span
-        ><span>{{ legacy.lunchStart }}–{{ legacy.lunchEnd }} 午休</span
-        ><span>{{ legacy.end }} 下班</span>
+        <span>{{ legacy.start }} {{ legacy.labels?.active ?? '上班' }}</span
+        ><span
+          >{{ legacy.lunchStart }}–{{ legacy.lunchEnd }} {{ legacy.labels?.break ?? '午休' }}</span
+        ><span>{{ legacy.end }} {{ legacy.labels?.after ?? '下班' }}</span>
       </div>
       <div v-else class="schedule-times">
         <span v-for="period in view.periods" :key="period.id" :title="period.text">{{
@@ -47,7 +48,7 @@ const { state, view, legacy } = useScheduleEvaluation(
         }}</span>
       </div>
       <p v-if="!legacy && state.nextPeriod" class="scope-note">
-        下一安排：{{ state.nextPeriod.name }} ·
+        下一安排：{{ view.nextPeriodLabel }} ·
         {{ formatTimestamp(state.nextPeriod.startAt, state.timezone) }}
       </p>
       <p class="scope-note">

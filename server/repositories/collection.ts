@@ -2,6 +2,8 @@ import type { Database, D1Statement } from '../types/database.ts'
 import { hashToken } from '../services/auth-crypto.ts'
 import type { CollectionPlan } from '../collection/plans.ts'
 import type { CollectionEnvironment } from '../collection/environment.ts'
+import { nextBalanceCollection } from '../../shared/domain/daily-balances.ts'
+import { balanceSeries } from '../services/balance-observations.ts'
 import {
   COLLECTION_BUDGET,
   failureStatus,
@@ -174,7 +176,8 @@ export async function commitCollection(
   const json = JSON.stringify(views),
     series = await hashToken(
       JSON.stringify([c.plan.revision, c.environment.epoch, c.environment.fingerprint]),
-    )
+    ),
+    accountSeries = balances.length ? await balanceSeries(c.plan.source, c.plan.envelope) : null
   const statements: D1Statement[] = [
     db
       .prepare(
@@ -209,10 +212,10 @@ export async function commitCollection(
     statements.push(
       db
         .prepare(
-          `INSERT INTO balance_observations(source_id,series_revision,currency,observed_at,collected_at,total,granted,topped_up)
- SELECT ?,?,json_extract(value,'$.currency'),json_extract(value,'$.observedAt'),json_extract(value,'$.collectedAt'),json_extract(value,'$.total'),json_extract(value,'$.granted'),json_extract(value,'$.toppedUp') FROM json_each(?)`,
+          `INSERT INTO balance_observations(source_id,series_revision,currency,observed_at,collected_at,total,granted,topped_up,account_series)
+ SELECT ?,?,json_extract(value,'$.currency'),json_extract(value,'$.observedAt'),json_extract(value,'$.collectedAt'),json_extract(value,'$.total'),json_extract(value,'$.granted'),json_extract(value,'$.toppedUp'),? FROM json_each(?)`,
         )
-        .bind(c.plan.source.id, series, JSON.stringify(balances)),
+        .bind(c.plan.source.id, series, accountSeries, JSON.stringify(balances)),
     )
   statements.push(
     db
@@ -221,7 +224,13 @@ export async function commitCollection(
       )
       .bind(
         now,
-        successfulSchedule(Date.parse(now), c.plan.source.refreshInterval),
+        c.plan.source.provider === 'deepseek'
+          ? nextBalanceCollection(
+              Date.parse(now),
+              c.plan.source.refreshInterval,
+              c.plan.timezone ?? 'UTC',
+            )
+          : successfulSchedule(Date.parse(now), c.plan.source.refreshInterval),
         c.plan.source.id,
       ),
     db
