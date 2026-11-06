@@ -12,7 +12,7 @@ const stale = computed(
 )
 </script>
 <template>
-  <DashboardModuleCard id="tailscale" :title="title" icon="network" :status="snapshot.status">
+  <DashboardModuleCard id="tailscale" :title="title" :status="snapshot.status">
     <DashboardDataState
       :status="snapshot.status"
       :empty="!snapshot.data?.devices.length"

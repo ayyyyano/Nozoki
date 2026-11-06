@@ -8,6 +8,7 @@ import {
 } from '../../shared/contracts/config'
 import { editableConfig, canonical } from '../../shared/contracts/admin'
 import { SOURCE_WRITE_ERRORS } from '../../shared/integration-presets'
+import { MODULE_ICONS } from '../../shared/icons/modules'
 import { COLOR_PRESETS, parseSourceColor } from '../../shared/domain/color-input'
 import type { Appearance } from '../../shared/contracts/appearance'
 import {
@@ -612,29 +613,37 @@ onBeforeRouteLeave(() => {
               v-model:open="expandedModules[m.id]"
               :title="m.title"
               :description="m.id"
-              :status="!m.enabled ? '已关闭' : m.visibility === 'public' ? '公开' : '管理员'"
+              :status="m.visibility === 'public' ? '公开' : '管理员'"
               :data-edit-module="m.id"
-              icon="devices"
+              :icon="MODULE_ICONS[m.id]"
+              class="admin-module-card"
             >
               <template #actions>
                 <VarButton
                   text
+                  round
                   :disabled="index === 0"
                   :aria-label="`上移 ${m.id}`"
+                  :title="`上移 ${m.title}`"
                   @click="move(draft.modules, index, -1)"
-                  >上移</VarButton
+                  ><CommonAppIcon name="up" :size="20" /></VarButton
                 ><VarButton
                   text
+                  round
                   :disabled="index === draft.modules.length - 1"
                   :aria-label="`下移 ${m.id}`"
+                  :title="`下移 ${m.title}`"
                   @click="move(draft.modules, index, 1)"
-                  >下移</VarButton
-                >
+                  ><CommonAppIcon name="down" :size="20"
+                /></VarButton>
+                <VarSwitch
+                  v-model="m.enabled"
+                  :aria-label="`启用 ${m.id}`"
+                  :title="`启用或停用 ${m.title}`"
+                />
               </template>
               <div class="admin-fields">
-                <AdminText v-model="m.title" :label="`${m.id} 标题`" :max="100" /><label
-                  ><VarSwitch v-model="m.enabled" :aria-label="`启用 ${m.id}`" />启用</label
-                ><VarSelect
+                <AdminText v-model="m.title" :label="`${m.id} 标题`" :max="100" /><VarSelect
                   v-model="m.visibility"
                   :aria-label="`${m.id} 模块权限`"
                   placeholder="模块权限"
@@ -794,29 +803,39 @@ onBeforeRouteLeave(() => {
               :title="l.title"
               :description="linkSummary(l.url)"
               :icon="l.icon"
-              :status="l.enabled ? '启用' : '已关闭'"
               :data-edit-link="l.id"
+              class="admin-link-card"
             >
+              <template #actions>
+                <VarSwitch
+                  v-model="l.enabled"
+                  :aria-label="`启用链接 ${index + 1}`"
+                  :title="`启用或停用 ${l.title}`"
+                />
+              </template>
               <div class="admin-fields">
                 <AdminText v-model="l.title" :label="`链接 ${index + 1} 名称`" /><AdminText
                   v-model="l.url"
                   :label="`链接 ${index + 1} URL`"
                 /><AdminLinkIconInput v-model="l.icon" :label="`链接 ${index + 1} 图标`" />
-                <label
-                  ><VarSwitch
-                    v-model="l.enabled"
-                    :aria-label="`启用链接 ${index + 1}`"
-                  />启用</label
-                >
               </div>
               <div class="admin-actions">
-                <VarButton text :disabled="index === 0" @click="move(draft.links, index, -1)"
-                  >上移链接 {{ index + 1 }}</VarButton
+                <VarButton
+                  text
+                  round
+                  :disabled="index === 0"
+                  :aria-label="`上移链接 ${index + 1}`"
+                  :title="`上移 ${l.title}`"
+                  @click="move(draft.links, index, -1)"
+                  ><CommonAppIcon name="up" :size="20" /></VarButton
                 ><VarButton
                   text
+                  round
                   :disabled="index === draft.links.length - 1"
+                  :aria-label="`下移链接 ${index + 1}`"
+                  :title="`下移 ${l.title}`"
                   @click="move(draft.links, index, 1)"
-                  >下移链接 {{ index + 1 }}</VarButton
+                  ><CommonAppIcon name="down" :size="20" /></VarButton
                 ><VarButton text @click="draft.links.splice(index, 1)"
                   >删除链接 {{ index + 1 }}</VarButton
                 >

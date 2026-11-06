@@ -156,15 +156,12 @@ defineExpose({
       :icon="integrationPreset(source)?.icon ?? 'server'"
     >
       <template #actions
-        ><label class="source-enable"
-          ><span class="source-enable-copy"
-            >{{ source.enabled ? '已启用' : '已停用'
-            }}<small v-if="!saved(source) || saved(source)?.enabled !== source.enabled"
-              >未保存</small
-            ></span
-          ><VarSwitch
+        ><div class="source-enable">
+          <VarSwitch
             v-model="source.enabled"
-            :aria-label="`启用 ${title(source)} ${source.id}`" /></label
+            :aria-label="`启用 ${title(source)} ${source.id}`"
+            :title="`启用或停用 ${title(source)}`"
+          /></div
       ></template>
       <AdminIntegrationEditor
         v-model="model[index]!"
