@@ -199,10 +199,11 @@ test(
       process.env.NOZOKI_TEST_BACKGROUND === '1' ||
       process.env.NOZOKI_TEST_DEVICE_COLUMNS === '1' ||
       process.env.NOZOKI_TEST_CARD_METRICS === '1' ||
-      process.env.NOZOKI_TEST_ONBOARDING === '1'
+      process.env.NOZOKI_TEST_ONBOARDING === '1' ||
+      process.env.NOZOKI_TEST_DATA_MANAGEMENT === '1'
     ) {
-      const { launch, settle } = await import('../browser/support.mjs')
-      const { exerciseAdminListHeaders } = await import('../browser/admin-list-headers.mjs')
+      const { launch, settle } = await import('../browser/support.ts')
+      const { exerciseAdminListHeaders } = await import('../browser/admin-list-headers.ts')
       await mf.ready
       browser = await launch()
       const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
@@ -212,8 +213,11 @@ test(
       const page = await context.newPage()
       await page.goto(origin + '/admin')
       await settle(page)
-      if (process.env.NOZOKI_TEST_ONBOARDING === '1') {
-        const { exerciseSourceOnboarding } = await import('../browser/source-onboarding.mjs')
+      if (process.env.NOZOKI_TEST_DATA_MANAGEMENT === '1') {
+        const { exerciseDataManagement } = await import('../browser/data-management.ts')
+        await exerciseDataManagement(page, { input, request, save, evidence })
+      } else if (process.env.NOZOKI_TEST_ONBOARDING === '1') {
+        const { exerciseSourceOnboarding } = await import('../browser/source-onboarding.ts')
         await exerciseSourceOnboarding(page, {
           origin,
           input,
@@ -225,13 +229,13 @@ test(
           evidence,
         })
       } else if (process.env.NOZOKI_TEST_CARD_METRICS === '1') {
-        const { exerciseCardMetrics } = await import('../browser/card-metrics.mjs')
+        const { exerciseCardMetrics } = await import('../browser/card-metrics.ts')
         await exerciseCardMetrics(page, { origin, evidence })
       } else if (process.env.NOZOKI_TEST_DEVICE_COLUMNS === '1') {
-        const { exerciseDeviceColumns } = await import('../browser/device-columns.mjs')
+        const { exerciseDeviceColumns } = await import('../browser/device-columns.ts')
         await exerciseDeviceColumns(page, { origin, evidence })
       } else if (process.env.NOZOKI_TEST_BACKGROUND === '1') {
-        const { exerciseSharedBackground } = await import('../browser/admin-background.mjs')
+        const { exerciseSharedBackground } = await import('../browser/admin-background.ts')
         await exerciseSharedBackground(page, {
           browser,
           origin,
@@ -585,8 +589,8 @@ test(
       'provider-driven source manager, credential lifecycle and responsive dialogs',
       { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
       async () => {
-        const { launch, settle } = await import('../browser/support.mjs')
-        const { exerciseSourceManager } = await import('../browser/source-manager.mjs')
+        const { launch, settle } = await import('../browser/support.ts')
+        const { exerciseSourceManager } = await import('../browser/source-manager.ts')
         await mf.ready
         browser = await launch()
         const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })

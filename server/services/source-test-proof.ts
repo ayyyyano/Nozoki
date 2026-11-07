@@ -1,36 +1,14 @@
-import type { IntegrationSettings, IntegrationWriteSchema } from '../../shared/contracts/config.ts'
+import type { IntegrationWriteSchema } from '../../shared/contracts/config.ts'
 import type { z } from 'zod'
 import type { AuthSession } from './sessions.ts'
 import type { StoredIntegration } from '../repositories/config.ts'
 import { canonical } from '../../shared/contracts/admin.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
-import { normalizeServiceTarget } from './service-target.ts'
+import { sourceConnection as connection } from '../../shared/integration-presets/connection.ts'
+export { requiresSourceTest } from '../../shared/integration-presets/connection.ts'
 import { mac, hex, unhex, verifyMac } from './auth-crypto.ts'
 
 type Draft = z.infer<typeof IntegrationWriteSchema>
-function connection(source: Draft | IntegrationSettings) {
-  return canonical([
-    source.id,
-    source.provider,
-    source.protocolVersion,
-    normalizeServiceTarget(source.baseUrl),
-    source.access?.mode,
-    source.access && source.access.mode !== 'legacy' ? source.access.authentication : null,
-    source.fieldMappings,
-  ])
-}
-export function requiresSourceTest(next: Draft, old?: IntegrationSettings) {
-  if (!old || connection(next) !== connection(old)) return true
-  if (next.credential.operation === 'clear') return false
-  const access = next.access
-  if (!access || access.mode === 'legacy' || !access.approved) return false
-  return (
-    !old.access ||
-    old.access.mode === 'legacy' ||
-    !old.access.approved ||
-    (access.authentication !== 'none' && next.credential.operation !== 'keep')
-  )
-}
 async function parts(
   draft: Draft,
   old: StoredIntegration | undefined,

@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { expect } from 'playwright/test'
-import { fixture, fixed } from '../fixtures/layout.mjs'
-import { settle } from './support.mjs'
-import { stable } from './layout-support.mjs'
+import { fixture, fixed } from '../fixtures/layout.ts'
+import { settle } from './support.ts'
+import { stable } from './layout-support.ts'
 
 export async function exerciseDeviceColumns(page, { origin, evidence }) {
   await mkdir(evidence, { recursive: true })

@@ -302,9 +302,8 @@ test(
         const { chromium } = await import('playwright')
         const { expect } = await import('playwright/test')
         const { existsSync } = await import('node:fs')
-        const { exerciseSectionResets, verifyResetSave } =
-          await import('../browser/admin-reset.mjs')
-        const { exerciseTailscale } = await import('../browser/tailscale.mjs')
+        const { exerciseSectionResets, verifyResetSave } = await import('../browser/admin-reset.ts')
+        const { exerciseTailscale } = await import('../browser/tailscale.ts')
         const db = new SqliteDatabase(env.NOZOKI_SQLITE_PATH)
         try {
           const current = await readConfig(db),

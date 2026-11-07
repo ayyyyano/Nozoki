@@ -11,7 +11,7 @@ import { runAdapter } from '../../server/adapters/registry.ts'
 import { responseTransport } from '../../server/adapters/transport.ts'
 import { upsertSnapshot } from '../../server/repositories/telemetry.ts'
 import { fieldPointer } from '../../shared/contracts/field-paths.ts'
-import { launch, settle } from '../browser/support.mjs'
+import { launch, settle } from '../browser/support.ts'
 const require = createRequire(import.meta.url),
   wrangler = createRequire(require.resolve('wrangler/package.json'))
 const { Miniflare, convertV4MiniflareOptions } = process.env.NOZOKI_TEST_MINIFLARE

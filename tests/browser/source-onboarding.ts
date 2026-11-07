@@ -7,7 +7,7 @@ import { createIntegrationDraft } from '../../shared/integration-presets/index.t
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { bindSources } from '../../shared/integration-presets/bindings.ts'
 import { saveConfig } from '../../server/services/config.ts'
-import { settle } from './support.mjs'
+import { settle } from './support.ts'
 
 export async function exerciseSourceOnboarding(
   page,

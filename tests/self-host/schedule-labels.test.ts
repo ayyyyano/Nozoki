@@ -12,7 +12,7 @@ test(
   'schedule state text edits, mode conversion, save/reload and Activity use the same labels',
   { timeout: 120000, skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
   async (t) => {
-    const { launch, settle, select } = await import('../browser/support.mjs')
+    const { launch, settle, select } = await import('../browser/support.ts')
     const { expect } = await import('playwright/test')
     const directory = await mkdtemp(resolve('.wrangler/schedule-labels-ui-'))
     const dbPath = resolve(directory, 'test.sqlite'),

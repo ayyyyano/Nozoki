@@ -205,7 +205,7 @@ test(
       'browser tab synchronization',
       { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
       async () => {
-        const { launch, settle } = await import('../browser/support.mjs')
+        const { launch, settle } = await import('../browser/support.ts')
         browser = await launch()
         const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
         await context.addCookies([

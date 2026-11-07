@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
-import { launch, settle, baseURL } from './support.mjs'
-import { capture, measure, stable } from './layout-support.mjs'
-import { fixture, fixed } from '../fixtures/layout.mjs'
+import { launch, settle, baseURL } from './support.ts'
+import { capture, measure, stable } from './layout-support.ts'
+import { fixture, fixed } from '../fixtures/layout.ts'
 import { createDefaultConfig } from '../../shared/contracts/config.ts'
 
 const require = createRequire(import.meta.url)

@@ -9,7 +9,7 @@ import { readConfig, saveConfig } from '../../server/services/config.ts'
 import { credentialKeys } from '../../server/services/credential-keys.ts'
 import { randomToken } from '../../server/services/auth-crypto.ts'
 import { balance, source } from '../fixtures/adapters.ts'
-import { launch, settle } from '../browser/support.mjs'
+import { launch, settle } from '../browser/support.ts'
 const require = createRequire(import.meta.url),
   wrangler = createRequire(require.resolve('wrangler/package.json'))
 const { Miniflare, convertV4MiniflareOptions } = process.env.NOZOKI_TEST_MINIFLARE

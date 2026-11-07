@@ -768,7 +768,7 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
         },
       })
       if (process.env.NOZOKI_TEST_BROWSER !== '1') return
-      const { launch, settle } = await import('../browser/support.mjs')
+      const { launch, settle } = await import('../browser/support.ts')
       browser = await launch()
       const context = await browser.newContext({
           viewport: { width: 1440, height: 900 },

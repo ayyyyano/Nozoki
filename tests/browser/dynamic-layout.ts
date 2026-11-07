@@ -2,9 +2,9 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { launch, settle, baseURL } from './support.mjs'
-import { measure, stable, capture } from './layout-support.mjs'
-import { fixed, fixture } from '../fixtures/layout.mjs'
+import { launch, settle, baseURL } from './support.ts'
+import { measure, stable, capture } from './layout-support.ts'
+import { fixed, fixture } from '../fixtures/layout.ts'
 import { createDefaultConfig } from '../../shared/contracts/config.ts'
 
 const before = process.argv.includes('--before')
