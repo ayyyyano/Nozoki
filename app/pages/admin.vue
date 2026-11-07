@@ -6,6 +6,7 @@ import {
   type Config,
   type ConfigWrite,
 } from '../../shared/contracts/config'
+import type { ConfigImportPlan } from '../../shared/domain/config-backup'
 import { editableConfig, canonical } from '../../shared/contracts/admin'
 import { SOURCE_WRITE_ERRORS } from '../../shared/integration-presets'
 import { bindSources, SOURCE_MODULES } from '../../shared/integration-presets/bindings'
@@ -98,7 +99,7 @@ const section = ref('site'),
   savedNeedsReload = ref(false),
   latest = ref<Config | null>(null),
   preview = ref(false)
-const sections = [
+const editorSections = [
   { id: 'site', label: '站点与外观', icon: 'tune' },
   { id: 'modules', label: 'Dashboard 模块', icon: 'devices' },
   { id: 'integrations', label: '数据源', icon: 'server' },
@@ -106,11 +107,15 @@ const sections = [
   { id: 'quotes', label: '行情标的', icon: 'chart' },
   { id: 'links', label: '常用链接', icon: 'link' },
 ] as const
+const sections = [
+  ...editorSections,
+  { id: 'data', label: '数据管理', icon: 'StorageRound' },
+] as const
 const currentSection = computed(
   () => sections.find((item) => item.id === section.value) ?? sections[0],
 )
 const showReset = ref(false)
-const resetTarget = ref<(typeof sections)[number]>(sections[0])
+const resetTarget = ref<(typeof editorSections)[number]>(editorSections[0])
 const resetIssue = computed(() =>
   draft.value ? sectionResetIssue(draft.value, resetTarget.value.id) : null,
 )
@@ -125,7 +130,9 @@ const resetDescriptions: Record<AdminSection, string> = {
 }
 function requestReset() {
   if (busy.value || !draft.value) return
-  resetTarget.value = currentSection.value
+  const target = editorSections.find((item) => item.id === section.value)
+  if (!target) return
+  resetTarget.value = target
   showReset.value = true
 }
 function resetCurrentSection() {
@@ -265,6 +272,23 @@ function clearSecrets() {
       delete i.identityCredential
     }
 }
+function applyConfigTransfer(plan: ConfigImportPlan, action: 'import' | 'reset') {
+  if (busy.value || readOnly.value) return
+  clearSecrets()
+  draft.value = plan.config
+  backgroundUpload.value = plan.backgroundUpload ?? null
+  scheduleDraftReset.value++
+  expandedLinks.value = {}
+  expandedQuotes.value = {}
+  expandedModules.value = {}
+  pending = null
+  preview.value = false
+  errors.value = []
+  message.value =
+    action === 'import'
+      ? '配置已导入草稿，保存配置后生效'
+      : '已恢复全局默认设置草稿，保存配置后生效'
+}
 function accept(config: Config) {
   backgroundUpload.value = null
   clearSecrets()
@@ -326,7 +350,6 @@ async function save() {
   message.value = ''
   conflict.value = false
   draft.value.site.timezone = draft.value.site.schedule.timezone
-  draft.value.links.forEach((link) => (link.visibility = 'public'))
   const parsed = SaveConfigSchema.safeParse({
     expectedVersion: baseline.value!.site.configVersion,
     config: draft.value,
@@ -640,6 +663,7 @@ onBeforeRouteLeave(() => {
             <VarButton
               text
               round
+              v-if="section !== 'data'"
               class="admin-icon-button"
               :disabled="busy || readOnly"
               :aria-label="`重置${currentSection.label}为默认设置`"
@@ -649,6 +673,13 @@ onBeforeRouteLeave(() => {
               <CommonAppIcon name="restore" />
             </VarButton>
           </div>
+          <AdminDataManagement
+            v-if="section === 'data' && baseline"
+            :baseline="baseline"
+            :disabled="busy || readOnly || savedNeedsReload"
+            :dirty="dirty"
+            @apply="applyConfigTransfer"
+          />
           <fieldset v-show="section === 'site'" :disabled="readOnly">
             <legend class="sr-only">站点与外观</legend>
             <AdminText v-model="draft.site.siteName" label="站点名称" :max="100" />

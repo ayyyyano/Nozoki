@@ -3,11 +3,11 @@ import assert from 'node:assert/strict'
 import { expect } from 'playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { fixture, fixed } from '../fixtures/layout.mjs'
+import { fixture, fixed } from '../fixtures/layout.ts'
 import { balanceDays } from '../../shared/domain/daily-balances.ts'
 import { decimalText } from '../../shared/domain/format.ts'
-import { settle } from './support.mjs'
-import { stable } from './layout-support.mjs'
+import { settle } from './support.ts'
+import { stable } from './layout-support.ts'
 
 export async function exerciseCardMetrics(page, { origin, evidence }) {
   await mkdir(evidence, { recursive: true })

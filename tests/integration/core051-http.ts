@@ -19,7 +19,7 @@ import { upsertSnapshot } from '../../server/repositories/telemetry.ts'
 import { readStoredState } from '../../server/repositories/config.ts'
 import { projectGuestDashboard } from '../../server/services/dashboard.ts'
 import { fieldPointer } from '../../shared/contracts/field-paths.ts'
-import { launch, settle } from '../browser/support.mjs'
+import { launch, settle } from '../browser/support.ts'
 const require = createRequire(import.meta.url),
   wrangler = createRequire(require.resolve('wrangler/package.json'))
 const { Miniflare, convertV4MiniflareOptions } = process.env.NOZOKI_TEST_MINIFLARE

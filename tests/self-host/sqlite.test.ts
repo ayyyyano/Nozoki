@@ -39,7 +39,7 @@ const input = (config) => ({
 })
 async function workers(path, requests) {
   const entries = requests.map((value) => {
-    const worker = new Worker(new URL('./cas-worker.mjs', import.meta.url), {
+    const worker = new Worker(new URL('./cas-worker.ts', import.meta.url), {
       workerData: { path, ...value },
     })
     const ready = new Promise((resolve, reject) => {
