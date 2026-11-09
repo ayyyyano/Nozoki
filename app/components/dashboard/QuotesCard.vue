@@ -1,129 +1,60 @@
 <script setup lang="ts">
-import type { DataSnapshot, Quote, QuotesData } from '../../../shared/contracts/dashboard'
-import { decimalText, formatTimestamp, signedDecimal } from '../../../shared/domain/format'
+import type { DataSnapshot, QuotesData } from '../../../shared/contracts/dashboard'
+import { formatTimestamp } from '../../../shared/domain/format'
+import { HOME_LIMITS, quoteHasDetails, quoteUpdates } from '../../../shared/domain/home-summary'
+import { additionalSuccess } from '../../../shared/domain/summary-status'
 const props = defineProps<{ snapshot: DataSnapshot<QuotesData>; title: string }>()
 const timezone = useDashboardTimezone()
-const updates = computed(() => {
-  const items = props.snapshot.data?.items ?? []
-  const times = items
-    .map((quote) => ({
-      symbol: quote.symbol,
-      at: quote.asOf ?? props.snapshot.observedAt,
-      label: quote.asOf ? '报价于' : '观测于',
-      delayedMinutes: quote.delayedMinutes,
-    }))
-    .filter((time) => time.at || time.delayedMinutes !== null)
-  if (!times.length)
-    return props.snapshot.observedAt
-      ? [{ symbol: '', at: props.snapshot.observedAt, label: '观测于', delayedMinutes: null }]
-      : []
-  const first = times[0]!
-  return times.length === items.length &&
-    times.every(
-      (time) =>
-        time.at === first.at &&
-        time.label === first.label &&
-        time.delayedMinutes === first.delayedMinutes,
-    )
-    ? [{ ...first, symbol: '' }]
-    : times
-})
-function chartPoints(quote: Quote): string | null {
-  // The public DTO strips internal capability metadata; the presence of a validated history
-  // array is the safe server-side signal that this optional field is allowed.
-  if (!Array.isArray(quote.history) || quote.history.length < 2) return null
-  const values = quote.history.map((p) => Number(p.close))
-  if (values.some((v) => !Number.isFinite(v))) return null
-  const min = Math.min(...values)
-  const range = Math.max(...values) - min || 1
-  return values
-    .map((v, i) => `${(i / (values.length - 1)) * 240},${50 - ((v - min) / range) * 42}`)
-    .join(' ')
-}
+const items = computed(() => props.snapshot.data?.items ?? [])
+const home = computed(() => items.value.slice(0, HOME_LIMITS.quotes))
+const updates = computed(() => quoteUpdates(home.value, props.snapshot.observedAt))
+const detailUpdates = computed(() => quoteUpdates(items.value, props.snapshot.observedAt))
 </script>
 <template>
-  <DashboardModuleCard id="quotes" :title="title" :status="snapshot.status">
+  <DashboardModuleCard
+    id="quotes"
+    :title="title"
+    :status="snapshot.status"
+    :has-data="!!items.length"
+    :details="items.length > HOME_LIMITS.quotes || quoteHasDetails(items)"
+  >
     <DashboardDataState
       :configured="snapshot.sourceConfigured"
       :error-code="snapshot.errorCode"
       :status="snapshot.status"
-      :empty="!snapshot.data?.items.length"
-      :last-success-at="snapshot.lastSuccessAt"
+      :has-data="!!items.length"
+      :empty="!items.length"
       compact
     />
-    <div class="quote-list">
-      <article
-        v-for="quote in snapshot.data?.items ?? []"
-        :key="`${quote.market}:${quote.symbol}:${quote.provider}`"
-        class="quote-item"
-      >
-        <div class="quote-title">
-          <h3>{{ quote.symbol }}</h3>
-          <span :title="quote.name" tabindex="0">{{ quote.name }}</span>
-        </div>
-        <div class="quote-price">
-          <strong>{{ decimalText(quote.price) }}</strong
-          ><small>{{ quote.currency ?? '币种未知' }}</small>
-        </div>
-        <p
-          v-if="quote.change !== null || quote.changePercent !== null"
-          class="quote-change"
-          :data-direction="
-            quote.change?.startsWith('-') ? 'down' : quote.change === null ? 'unknown' : 'up'
-          "
-        >
-          {{ signedDecimal(quote.change) }}
-          <span>{{
-            quote.changePercent === null ? '' : `(${signedDecimal(quote.changePercent)}%)`
-          }}</span>
-        </p>
-        <svg
-          v-if="chartPoints(quote)"
-          class="quote-chart"
-          viewBox="0 0 240 56"
-          role="img"
-          :aria-label="`${quote.symbol} 历史报价`"
-        >
-          <polyline
-            :points="chartPoints(quote)!"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          />
-        </svg>
-        <dl
-          v-if="
-            quote.previousClose !== null || quote.amplitudePercent !== null || quote.volume !== null
-          "
-          class="quote-details"
-        >
-          <div v-if="quote.previousClose !== null">
-            <dt>昨收</dt>
-            <dd>{{ decimalText(quote.previousClose) }}</dd>
-          </div>
-          <div v-if="quote.amplitudePercent !== null">
-            <dt>振幅</dt>
-            <dd>
-              {{ decimalText(quote.amplitudePercent)
-              }}{{ quote.amplitudePercent !== null ? '%' : '' }}
-            </dd>
-          </div>
-          <div v-if="quote.volume !== null">
-            <dt>成交</dt>
-            <dd>{{ decimalText(quote.volume) }} {{ quote.volumeUnit }}</dd>
-          </div>
-        </dl>
-      </article>
-    </div>
+    <DashboardQuoteList :items="home" />
+    <template #details>
+      <DashboardDataState :status="snapshot.status" :empty="!items.length" compact />
+      <DashboardQuoteList :items="items" detail />
+      <p class="sync-time" v-for="(update, index) in detailUpdates" :key="index">
+        {{ update.symbol }} {{ update.label }} {{ formatTimestamp(update.at, timezone) }}
+      </p>
+    </template>
     <template v-if="updates.length" #footer>
       <p v-for="(update, index) in updates" :key="index">
         <span v-if="update.symbol">{{ update.symbol }} · </span
-        >{{ update.at ? update.label : '报价时间未知' }}
-        <time v-if="update.at" :datetime="update.at">{{
-          formatTimestamp(update.at, timezone)
-        }}</time>
+        ><DashboardSummaryTime v-if="update.at" :value="update.at" :label="update.label" /><span
+          v-else
+          >报价时间未知</span
+        >
         <span v-if="update.delayedMinutes !== null"> · 延迟 {{ update.delayedMinutes }} 分钟</span>
       </p>
+      <span
+        v-if="
+          snapshot.status === 'error' &&
+          additionalSuccess(
+            snapshot.status,
+            snapshot.lastSuccessAt,
+            updates.length === 1 ? updates[0]?.at : null,
+          )
+        "
+        class="summary-extra-time"
+        ><DashboardSummaryTime :value="snapshot.lastSuccessAt!" label="最近成功"
+      /></span>
     </template>
   </DashboardModuleCard>
 </template>

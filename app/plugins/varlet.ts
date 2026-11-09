@@ -9,6 +9,7 @@ import {
   Popup,
   Input,
   Menu,
+  Tooltip,
 } from '@varlet/ui'
 import '@varlet/ui/es/select/style/index'
 import '@varlet/ui/es/option/style/index'
@@ -20,6 +21,7 @@ import '@varlet/ui/es/chip/style/index'
 import '@varlet/ui/es/progress/style/index'
 import '@varlet/ui/es/switch/style/index'
 import '@varlet/ui/es/menu/style/index'
+import '@varlet/ui/es/tooltip/style/index'
 
 // Use flat filled/tonal actions and tonal menus; keep ripple and focus state layers.
 Button.setPropsDefaults({ elevation: false })
@@ -37,6 +39,7 @@ export default defineNuxtPlugin((nuxt) => {
     VarProgress: Progress,
     VarSwitch: Switch,
     VarMenu: Menu,
+    VarTooltip: Tooltip,
   })) {
     nuxt.vueApp.component(name, component)
   }

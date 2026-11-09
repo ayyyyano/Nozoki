@@ -39,6 +39,7 @@ export const PublicDashboardSchema = z.strictObject({
             errorCode: z.string().max(64).optional(),
             sourceConfigured: z.boolean().optional(),
             partialFailures: z.number().int().min(1).max(10).optional(),
+            homeItems: z.array(z.string().min(1).max(1024)).max(8).optional(),
             collection: z
               .strictObject({
                 status: z.enum(['ok', 'stale', 'error', 'unconfigured', 'unsupported', 'offline']),

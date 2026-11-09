@@ -29,6 +29,12 @@ export async function requireWritableStorage(db: Database): Promise<void> {
   )
     throw new DataLayerError('MIGRATIONS_REQUIRED')
   if (
+    !(await db.prepare('PRAGMA table_info(dashboard_modules)').all()).results.some(
+      (c) => c.name === 'home_services_json',
+    )
+  )
+    throw new DataLayerError('MIGRATIONS_REQUIRED')
+  if (
     storageMode((await db.prepare('PRAGMA table_info(dashboard_modules)').all()).results) !==
     'ready'
   )

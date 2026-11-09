@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { dashboardView } from '../../shared/domain/dashboard-view'
+import { moduleRole } from '../../shared/domain/module-layout'
+import { isSafeLink } from '../../shared/domain/dashboard'
 import {
   createUnconfiguredDashboard,
   defaultModules,
@@ -135,7 +137,14 @@ const DevPreview = import.meta.dev
     <h1 class="sr-only">{{ shared?.site.siteName ?? 'Nozoki' }} 摸鱼看板</h1>
     <p v-if="!shared && !DevPreview" role="alert">共享配置暂时不可用，请稍后刷新。</p>
     <component :is="DevPreview" v-if="DevPreview" v-model:data="data" v-model:modules="modules" />
-    <LayoutDashboardGrid>
+    <LayoutDashboardGrid
+      :business-count="visible.filter((m) => moduleRole(m.id) === 'business').length"
+      :links-visible="
+        visible.some((m) => moduleRole(m.id) === 'navigation') &&
+        !hints.has('links') &&
+        !!data.links.data?.items.some((item) => isSafeLink(item.url))
+      "
+    >
       <template v-for="module in visible" :key="module.id">
         <DashboardModuleCard
           v-if="hints.has(module.id)"

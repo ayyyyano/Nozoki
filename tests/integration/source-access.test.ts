@@ -91,7 +91,20 @@ test(
         if (url.hostname.startsWith('redirect.'))
           return new Response(null, { status: 302, headers: { Location: 'https://127.0.0.1/' } })
         if (url.pathname.endsWith('api/data'))
-          return Response.json({ ...flare, updatedAt: Date.now() / 1000 })
+          return Response.json({
+            ...flare,
+            ...(process.env.NOZOKI_TEST_HOME_SUMMARY === '1'
+              ? {
+                  monitors: Object.fromEntries(
+                    Array.from({ length: 10 }, (_, i) => [
+                      'service-' + i,
+                      { up: i !== 9, latency: i * 10 },
+                    ]),
+                  ),
+                }
+              : {}),
+            updatedAt: Date.now() / 1000,
+          })
         if (url.pathname.includes('api/status-page/heartbeat/')) return Response.json(kumaHearts)
         if (url.pathname.includes('api/status-page/')) return Response.json(kumaMeta)
         assert.equal(request.method, 'GET')
@@ -200,7 +213,10 @@ test(
       process.env.NOZOKI_TEST_DEVICE_COLUMNS === '1' ||
       process.env.NOZOKI_TEST_CARD_METRICS === '1' ||
       process.env.NOZOKI_TEST_ONBOARDING === '1' ||
-      process.env.NOZOKI_TEST_DATA_MANAGEMENT === '1'
+      process.env.NOZOKI_TEST_DATA_MANAGEMENT === '1' ||
+      process.env.NOZOKI_TEST_HOME_SUMMARY === '1' ||
+      process.env.NOZOKI_TEST_UNIFORM_GRID === '1' ||
+      process.env.NOZOKI_TEST_COMPACT_GRID === '1'
     ) {
       const { launch, settle } = await import('../browser/support.ts')
       const { exerciseAdminListHeaders } = await import('../browser/admin-list-headers.ts')
@@ -213,7 +229,25 @@ test(
       const page = await context.newPage()
       await page.goto(origin + '/admin')
       await settle(page)
-      if (process.env.NOZOKI_TEST_DATA_MANAGEMENT === '1') {
+      if (process.env.NOZOKI_TEST_COMPACT_GRID === '1') {
+        const { exerciseCompactGrid } = await import('../browser/compact-grid.ts')
+        await exerciseCompactGrid(page, { origin, evidence })
+      } else if (process.env.NOZOKI_TEST_UNIFORM_GRID === '1') {
+        const { exerciseUniformGrid } = await import('../browser/uniform-grid.ts')
+        await exerciseUniformGrid(page, { origin, input, request, save, db, evidence })
+      } else if (process.env.NOZOKI_TEST_HOME_SUMMARY === '1') {
+        const { exerciseHomeSummary } = await import('../browser/home-summary.ts')
+        await exerciseHomeSummary(page, {
+          origin,
+          input,
+          request,
+          save,
+          db,
+          collector,
+          env,
+          evidence,
+        })
+      } else if (process.env.NOZOKI_TEST_DATA_MANAGEMENT === '1') {
         const { exerciseDataManagement } = await import('../browser/data-management.ts')
         await exerciseDataManagement(page, { input, request, save, evidence })
       } else if (process.env.NOZOKI_TEST_ONBOARDING === '1') {

@@ -86,12 +86,6 @@ watch(scenario, (value) => {
           }}</label
         >
       </div>
-      <VarButton
-        size="small"
-        text
-        @click="modules = modules.toReversed().map((m, i) => ({ ...m, sortOrder: i }))"
-        >反转展示顺序</VarButton
-      >
       <p>本面板仅在 pnpm dev 中存在。此处控制布局，不模拟正式登录或权限。</p>
     </div>
   </details>

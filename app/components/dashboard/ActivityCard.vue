@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ActivityData, DataSnapshot } from '../../../shared/contracts/dashboard'
 import { formatTimestamp } from '../../../shared/domain/format'
+import { additionalSuccess } from '../../../shared/domain/summary-status'
 const props = defineProps<{ snapshot: DataSnapshot<ActivityData>; title: string; now: number }>()
 const { state, view, legacy } = useScheduleEvaluation(
   () => props.snapshot.data?.schedule,
@@ -12,13 +13,11 @@ const { state, view, legacy } = useScheduleEvaluation(
     id="activity"
     :title="title"
     :status="state.valid ? snapshot.status : snapshot.data ? 'error' : snapshot.status"
+    :has-data="state.valid && !!snapshot.data"
+    :details="state.valid && !legacy && (view.periods.length > 3 || !!state.nextPeriod)"
   >
     <template v-if="state.valid && snapshot.data">
-      <DashboardDataState
-        :status="snapshot.status"
-        :last-success-at="snapshot.lastSuccessAt"
-        compact
-      />
+      <DashboardDataState :status="snapshot.status" :has-data="true" compact />
       <div
         class="activity-headline"
         :data-schedule-state="state.state"
@@ -42,19 +41,28 @@ const { state, view, legacy } = useScheduleEvaluation(
         ><span>{{ legacy.end }} {{ legacy.labels?.after ?? '下班' }}</span>
       </div>
       <div v-else class="schedule-times">
-        <span v-for="period in view.periods" :key="period.id" :title="period.text">{{
+        <span v-for="period in view.periods.slice(0, 3)" :key="period.id" :title="period.text">{{
           period.text
         }}</span>
       </div>
-      <p v-if="!legacy && state.nextPeriod" class="scope-note">
+    </template>
+    <DashboardDataState v-else :status="snapshot.data ? 'error' : snapshot.status" empty />
+    <template v-if="state.valid && snapshot.data" #footer>
+      计划状态 · {{ state.timezone
+      }}<span v-if="view.exceptionName"> · {{ view.exceptionName }}</span>
+      <span
+        v-if="additionalSuccess(snapshot.status, snapshot.lastSuccessAt)"
+        class="summary-extra-time"
+        ><DashboardSummaryTime :value="snapshot.lastSuccessAt!" label="最近成功"
+      /></span>
+    </template>
+    <template #details>
+      <p>{{ view.label }} · {{ state.timezone }}</p>
+      <p v-for="period in view.periods" :key="period.id">{{ period.text }}</p>
+      <p v-if="state.nextPeriod">
         下一安排：{{ view.nextPeriodLabel }} ·
         {{ formatTimestamp(state.nextPeriod.startAt, state.timezone) }}
       </p>
-      <p class="scope-note">
-        计划状态 · {{ state.timezone
-        }}<span v-if="view.exceptionName"> · {{ view.exceptionName }}</span>
-      </p>
     </template>
-    <DashboardDataState v-else :status="snapshot.data ? 'error' : snapshot.status" empty />
   </DashboardModuleCard>
 </template>

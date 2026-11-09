@@ -133,6 +133,12 @@ export async function saveConfig(
       return { success: false, code: 'CONFIG_CONFLICT' }
     if (
       actor.data.kind === 'admin' &&
+      config.links.length > 4 &&
+      config.links.some((link) => !current.config.links.some((old) => old.id === link.id))
+    )
+      return { success: false, code: 'VALIDATION_ERROR', fieldErrors: ['links'] }
+    if (
+      actor.data.kind === 'admin' &&
       current.config.integrations.some(
         (old) =>
           !config.integrations.some((next) => next.id === old.id) &&

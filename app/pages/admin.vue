@@ -121,7 +121,7 @@ const resetIssue = computed(() =>
 )
 const resetDescriptions: Record<AdminSection, string> = {
   site: '恢复默认站点名称、主题色和背景。日程与浏览器个人偏好保持当前值。',
-  modules: '恢复各模块的启停、标题、顺序、权限和来源引用。Tailscale 默认关闭。',
+  modules: '恢复各模块的启停、标题、权限和来源引用。模块按默认顺序排列，Tailscale 默认关闭。',
   integrations:
     '恢复腾讯默认来源，移除其他来源及其凭据配置。已有历史记录的来源可能受删除保护限制。',
   schedule: '恢复默认时区、工作时间和休息日规则，移除自定义周计划、模板及日期例外。',
@@ -447,6 +447,7 @@ function addQuote() {
   expandedQuotes.value[quoteKey(draft.value!.quotes.at(-1)!)] = true
 }
 function addLink() {
+  if (!draft.value || draft.value.links.length >= 4) return
   const id = 'link-' + crypto.randomUUID().slice(0, 8)
   expandedLinks.value[id] = true
   draft.value!.links.push({
@@ -727,26 +728,9 @@ onBeforeRouteLeave(() => {
               :status="m.visibility === 'public' ? '公开' : '管理员'"
               :data-edit-module="m.id"
               :icon="MODULE_ICONS[m.id]"
-              class="admin-module-card admin-order-card"
+              class="admin-module-card"
             >
               <template #actions>
-                <VarButton
-                  text
-                  round
-                  :disabled="index === 0"
-                  :aria-label="`上移 ${m.id}`"
-                  :title="`上移 ${m.title}`"
-                  @click="move(draft.modules, index, -1)"
-                  ><CommonAppIcon name="up" :size="20" /></VarButton
-                ><VarButton
-                  text
-                  round
-                  :disabled="index === draft.modules.length - 1"
-                  :aria-label="`下移 ${m.id}`"
-                  :title="`下移 ${m.title}`"
-                  @click="move(draft.modules, index, 1)"
-                  ><CommonAppIcon name="down" :size="20"
-                /></VarButton>
                 <VarSwitch
                   v-model="m.enabled"
                   :aria-label="`启用 ${m.id}`"
@@ -795,6 +779,7 @@ onBeforeRouteLeave(() => {
                 {{ moduleSources(m) }}
               </p>
               <AdminFieldEditor v-model="draft.modules[index]!" />
+              <AdminServiceHomeEditor v-if="m.id === 'services'" v-model="draft.modules[index]!" />
             </AdminEditorItem>
           </fieldset>
           <fieldset v-show="section === 'integrations'" :disabled="readOnly">
@@ -951,7 +936,7 @@ onBeforeRouteLeave(() => {
               class="admin-add-button"
               type="primary"
               tonal
-              :disabled="draft.links.length >= 100"
+              :disabled="draft.links.length >= 4"
               @click="addLink"
               ><CommonAppIcon name="AddRound" :size="20" />添加链接</VarButton
             >

@@ -1,4 +1,5 @@
 import type { Config, ConfigWrite } from './config.ts'
+import { canonicalModules } from '../domain/module-layout.ts'
 export const CONFIG_BODY_LIMIT = 1024 * 1024
 export const AUTH_BODY_LIMIT = 4096
 export const validRequestKey = (key: string) =>
@@ -21,6 +22,7 @@ export function canonical(value: unknown): string {
 export function editableConfig(config: Config): ConfigWrite {
   return {
     ...(JSON.parse(JSON.stringify(config)) as Config),
+    modules: canonicalModules(JSON.parse(JSON.stringify(config.modules))),
     integrations: config.integrations.map(
       ({ credentialState: _state, identityConfigured: _identity, ...i }) => ({
         ...JSON.parse(JSON.stringify(i)),
@@ -32,7 +34,7 @@ export function editableConfig(config: Config): ConfigWrite {
 export function orderedConfig<T extends ConfigWrite>(config: T): T {
   return {
     ...config,
-    modules: config.modules.toSorted((a, b) => a.id.localeCompare(b.id)),
+    modules: canonicalModules(config.modules),
     integrations: config.integrations.toSorted((a, b) => a.id.localeCompare(b.id)),
     links: config.links.toSorted((a, b) => a.id.localeCompare(b.id)),
     quotes: config.quotes.toSorted((a, b) =>

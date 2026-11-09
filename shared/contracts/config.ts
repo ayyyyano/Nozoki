@@ -1,6 +1,7 @@
 import { BACKGROUND_IMAGE_LIMIT, isUploadedBackgroundUrl } from './background-image.ts'
 import { z } from 'zod'
 import { MODULE_IDS } from './dashboard.ts'
+import { canonicalModules } from '../domain/module-layout.ts'
 import { DEFAULT_APPEARANCE } from './appearance.ts'
 import {
   DEFAULT_SCHEDULE,
@@ -120,12 +121,27 @@ export const ModuleSettingsSchema = z
     fields: z.record(FieldPathSchema, FieldPolicySchema),
     ipVisibility: z.enum(['public', 'hidden', 'admin']).optional(),
     guestBlur: z.boolean().optional(),
+    homeServices: z
+      .array(z.strictObject({ sourceId: IdSchema, monitorId: z.string().min(1).max(1024) }))
+      .max(8)
+      .optional(),
     sources: z.record(
       IdSchema,
       z.strictObject({ sourceId: IdSchema, subject: z.string().min(1).max(128) }),
     ),
   })
   .superRefine((value, ctx) => {
+    if (
+      value.homeServices !== undefined &&
+      (value.id !== 'services' ||
+        new Set(value.homeServices.map((s) => JSON.stringify([s.sourceId, s.monitorId]))).size !==
+          value.homeServices.length)
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['homeServices'],
+        message: 'Services selection must contain at most eight distinct stable monitors',
+      })
     if (value.id !== 'deepseek' && value.guestBlur !== undefined)
       ctx.addIssue({
         code: 'custom',
@@ -311,7 +327,7 @@ function validatePackage(
 const common = {
   contractVersion: z.literal(1),
   site: SiteSettingsSchema,
-  modules: z.array(ModuleSettingsSchema).length(MODULE_IDS.length),
+  modules: z.array(ModuleSettingsSchema).length(MODULE_IDS.length).transform(canonicalModules),
   quotes: z.array(QuoteSymbolSchema).max(20),
   links: z.array(LinkSettingsSchema).max(100),
 }
