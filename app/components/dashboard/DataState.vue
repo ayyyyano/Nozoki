@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DataStatus } from '../../../shared/contracts/dashboard'
+import { summaryStatus } from '../../../shared/domain/summary-status'
 withDefaults(
   defineProps<{
     configured?: boolean
@@ -8,6 +9,7 @@ withDefaults(
     empty?: boolean
     loading?: boolean
     compact?: boolean
+    hasData?: boolean
     lastSuccessAt?: string | null
   }>(),
   { empty: false, loading: false, compact: false, lastSuccessAt: null },
@@ -29,7 +31,7 @@ const notes: Partial<Record<DataStatus, string>> = {
 </script>
 <template>
   <div
-    v-if="loading || status !== 'ok' || empty"
+    v-if="loading || ((status !== 'ok' || empty) && !(hasData && summaryStatus(status)))"
     class="data-state"
     :class="{ compact }"
     :data-status="status"

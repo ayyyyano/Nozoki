@@ -33,7 +33,8 @@ test('layout removes disabled modules and stably fills their spaces', () => {
   modules.find((module) => module.id === 'services')!.sortOrder = -1
   const result = layoutModules(modules)
   assert.equal(result.length, 6)
-  assert.equal(result[0]!.id, 'services')
+  assert.equal(result[0]!.id, 'devices')
+  assert.equal(result.at(-1)!.id, 'links')
   assert.equal(
     result.some((m) => m.id === 'deepseek'),
     false,

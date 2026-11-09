@@ -2,6 +2,7 @@
 import type { DataSnapshot, DeepSeekData } from '../../../shared/contracts/dashboard'
 import { decimalText, formatTimestamp } from '../../../shared/domain/format'
 import { balanceDays } from '../../../shared/domain/daily-balances'
+import { additionalSuccess } from '../../../shared/domain/summary-status'
 const props = defineProps<{ snapshot: DataSnapshot<DeepSeekData>; title: string }>()
 const clock = useLocalClock()
 const siteTimezone = useDashboardTimezone()
@@ -34,7 +35,47 @@ const series = computed(() => {
 })
 </script>
 <template>
-  <DashboardModuleCard id="deepseek" :title="title" :status="snapshot.status">
+  <DashboardModuleCard
+    id="deepseek"
+    :title="title"
+    :status="snapshot.status"
+    :has-data="!!series.length || !!snapshot.data?.masked"
+    :details="
+      !snapshot.data?.masked &&
+      !!snapshot.data &&
+      (series.length > 1 ||
+        snapshot.data.balances.some((b) => b.toppedUp !== null || b.granted !== null) ||
+        snapshot.data.dailyBalances.length > 0)
+    "
+  >
+    <template #details>
+      <DashboardDataState :status="snapshot.status" compact />
+      <section v-for="balance in snapshot.data?.balances ?? []" :key="balance.currency">
+        <h3>{{ balance.currency }} 余额组成</h3>
+        <dl class="quote-details">
+          <div v-if="balance.total !== null">
+            <dt>剩余</dt>
+            <dd>{{ decimalText(balance.total) }}</dd>
+          </div>
+          <div v-if="balance.toppedUp !== null">
+            <dt>充值余额</dt>
+            <dd>{{ decimalText(balance.toppedUp) }}</dd>
+          </div>
+          <div v-if="balance.granted !== null">
+            <dt>赠送余额</dt>
+            <dd>{{ decimalText(balance.granted) }}</dd>
+          </div>
+        </dl>
+      </section>
+      <div
+        class="balance-record"
+        v-for="point in snapshot.data?.dailyBalances ?? []"
+        :key="point.day + point.currency"
+      >
+        <strong>{{ point.day }} · {{ decimalText(point.total) }} {{ point.currency }}</strong
+        ><small>采集于 {{ formatTimestamp(point.collectedAt, timezone) }}</small>
+      </div>
+    </template>
     <div v-if="snapshot.data?.masked" class="balance-private" role="status">
       <div class="balance-private-preview" aria-hidden="true">
         <div class="section-heading"><h3>近 7 日剩余余额</h3></div>
@@ -47,11 +88,11 @@ const series = computed(() => {
         :configured="snapshot.sourceConfigured"
         :error-code="snapshot.errorCode"
         :status="snapshot.status"
+        :has-data="!!series.length"
         :empty="!snapshot.data?.balances.length && !snapshot.data?.dailyBalances.length"
-        :last-success-at="snapshot.lastSuccessAt"
         compact
       />
-      <figure v-for="s in series" :key="s.currency" class="balance-history">
+      <figure v-for="s in series.slice(0, 1)" :key="s.currency" class="balance-history">
         <figcaption class="section-heading">
           <h3>近 7 日剩余余额</h3>
           <span>{{ s.currency }}</span>
@@ -91,12 +132,20 @@ const series = computed(() => {
           </div>
         </div>
       </figure>
+      <p v-if="series.length > 1" class="quiet-note">
+        另有 {{ series.length - 1 }} 种币种，可在详情查看。
+      </p>
     </template>
     <template v-if="!snapshot.data?.masked && snapshot.collectedAt" #footer>
-      采集于
-      <time :datetime="snapshot.collectedAt">{{
-        formatTimestamp(snapshot.collectedAt, timezone)
-      }}</time>
+      <DashboardSummaryTime :value="snapshot.collectedAt" label="采集于" :timezone="timezone" />
+      <span
+        v-if="additionalSuccess(snapshot.status, snapshot.lastSuccessAt, snapshot.collectedAt)"
+        class="summary-extra-time"
+        ><DashboardSummaryTime
+          :value="snapshot.lastSuccessAt!"
+          label="最近成功"
+          :timezone="timezone"
+      /></span>
     </template>
   </DashboardModuleCard>
 </template>

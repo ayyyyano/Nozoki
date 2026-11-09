@@ -24,6 +24,8 @@ export interface DataSnapshot<T> {
   errorCode?: string
   sourceConfigured?: boolean
   partialFailures?: number
+  /** Authorized monitor IDs for the home summary; absent means automatic selection. */
+  homeItems?: string[]
   collection?: {
     status: DataStatus
     errorCode: string | null

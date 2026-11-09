@@ -1,5 +1,6 @@
 import type { DashboardSnapshots, DataSnapshot, ModuleConfig } from '../contracts/dashboard.ts'
 import type { LegacySchedule } from '../schedule/types.ts'
+import { canonicalModules, MODULE_DISPLAY_ORDER } from './module-layout.ts'
 
 export const DEFAULT_SCHEDULE: LegacySchedule = {
   timezone: 'Asia/Shanghai',
@@ -98,18 +99,7 @@ export function createUnconfiguredDashboard(): DashboardSnapshots {
   }
 }
 export function defaultModules(): ModuleConfig[] {
-  return (
-    [
-      'deepseek',
-      'devices',
-      'tailscale',
-      'codex',
-      'activity',
-      'quotes',
-      'links',
-      'services',
-    ] as const
-  ).map((id, i) => ({
+  return MODULE_DISPLAY_ORDER.map((id, i) => ({
     id,
     title: {
       deepseek: 'DeepSeek',
@@ -132,9 +122,7 @@ export function defaultModules(): ModuleConfig[] {
 }
 /** Layout only: production role/field authorization must be implemented server-side in phase 03. */
 export function layoutModules(modules: ModuleConfig[]): ModuleConfig[] {
-  return modules
-    .filter((m) => m.enabled)
-    .toSorted((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
+  return canonicalModules(modules).filter((m) => m.enabled)
 }
 export function isSafeLink(value: string): boolean {
   try {

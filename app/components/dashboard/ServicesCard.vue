@@ -1,45 +1,63 @@
 <script setup lang="ts">
-import type { DataSnapshot, Monitor, ServicesData } from '../../../shared/contracts/dashboard'
-import { formatTimestamp } from '../../../shared/domain/format'
-defineProps<{ snapshot: DataSnapshot<ServicesData>; title: string }>()
-const timezone = useDashboardTimezone()
-const states: Record<Monitor['state'], string> = {
-  up: '正常',
-  down: '异常',
-  maintenance: '维护中',
-  pending: '等待检测',
-  unknown: '未知',
-}
+import type { DataSnapshot, ServicesData } from '../../../shared/contracts/dashboard'
+import { serviceSummary } from '../../../shared/domain/home-summary'
+import { additionalSuccess } from '../../../shared/domain/summary-status'
+const props = defineProps<{ snapshot: DataSnapshot<ServicesData>; title: string }>()
+const summary = computed(() => serviceSummary(props.snapshot))
 </script>
 <template>
   <DashboardModuleCard
     id="services"
     :title="title"
     :status="snapshot.status"
-    :observed-at="snapshot.observedAt"
+    :has-data="!!summary.total"
+    :observed-at="snapshot.collectedAt"
+    :last-success-at="snapshot.lastSuccessAt"
+    time-label="采集于"
+    :details="
+      summary.total > summary.items.length ||
+      !!snapshot.data?.monitors.some(
+        (m) => m.checkedAt || m.statusPageUrl || m.uptimePercent !== null,
+      )
+    "
   >
     <DashboardDataState
       :configured="snapshot.sourceConfigured"
       :error-code="snapshot.errorCode"
       :status="snapshot.status"
-      :empty="!snapshot.data?.monitors.length"
-      :last-success-at="snapshot.lastSuccessAt"
+      :has-data="!!summary.total"
+      :empty="!summary.total"
+      compact
     />
     <p v-if="snapshot.partialFailures" class="scope-note" role="status">
-      {{ snapshot.partialFailures }} 个监控来源暂不可用，以下为已获取的监控数据。
+      {{ snapshot.partialFailures }} 个来源暂不可用，采集失败不代表服务离线。
     </p>
-    <div v-if="snapshot.data?.monitors.length" class="monitor-list">
-      <article v-for="monitor in snapshot.data.monitors" :key="monitor.id" class="monitor-row">
-        <span class="monitor-indicator" :data-state="monitor.state" />
-        <div>
-          <h3>{{ monitor.name }}</h3>
-          <p>检测于 {{ formatTimestamp(monitor.checkedAt, timezone) }}</p>
-        </div>
-        <div class="monitor-state">
-          <strong>{{ states[monitor.state] }}</strong
-          ><small>{{ monitor.latencyMs === null ? '延迟未知' : `${monitor.latencyMs} ms` }}</small>
-        </div>
-      </article>
-    </div>
+    <DashboardMonitorList :monitors="summary.items" :snapshot="snapshot" />
+    <p v-if="summary.total && !summary.items.length" class="quiet-note">
+      未选择首页服务，可在详情中查看。
+    </p>
+    <template v-if="snapshot.collectedAt || summary.down || summary.unknown" #footer>
+      <span v-if="summary.down || summary.unknown" role="status">
+        全部监控：<span v-if="summary.down">{{ summary.down }} 项异常</span
+        ><span v-if="summary.down && summary.unknown"> · </span
+        ><span v-if="summary.unknown">{{ summary.unknown }} 项待确认</span>
+        <span v-if="snapshot.collectedAt"> · </span>
+      </span>
+      <DashboardSummaryTime
+        v-if="snapshot.collectedAt"
+        :value="snapshot.collectedAt"
+        label="采集于"
+      />
+      <span
+        v-if="additionalSuccess(snapshot.status, snapshot.lastSuccessAt, snapshot.collectedAt)"
+        class="summary-extra-time"
+        ><DashboardSummaryTime :value="snapshot.lastSuccessAt!" label="最近成功"
+      /></span>
+    </template>
+    <template #details>
+      <DashboardDataState :status="snapshot.status" :empty="!summary.total" compact />
+      <p class="quiet-note">完整可见监控 · {{ summary.total }} 项</p>
+      <DashboardMonitorList :monitors="snapshot.data?.monitors ?? []" :snapshot="snapshot" detail />
+    </template>
   </DashboardModuleCard>
 </template>

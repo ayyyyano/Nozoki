@@ -1,4 +1,5 @@
 import type { Config, ModuleSettings } from '../../shared/contracts/config.ts'
+import { canonicalModules } from '../../shared/domain/module-layout.ts'
 import type { DataSnapshot } from '../../shared/contracts/dashboard.ts'
 import type { ModuleId } from '../../shared/contracts/dashboard.ts'
 import { snapshotSchema, DataSchemas } from '../../shared/contracts/snapshots.ts'
@@ -16,6 +17,7 @@ import { parseFieldPath, pathPrefix } from '../../shared/contracts/field-paths.t
 import { ModuleSettingsSchema } from '../../shared/contracts/config.ts'
 import { DataLayerError } from '../types/database.ts'
 import { withCollectionState } from './collection-dashboard.ts'
+import { monitorHomeIds } from '../../shared/domain/home-summary.ts'
 type Json = null | string | number | boolean | Json[] | { [key: string]: Json }
 export interface GuestModule {
   id: ModuleId
@@ -270,6 +272,7 @@ async function publicVersion(config: Config, modules: GuestModule[]) {
           kind: m.kind,
           sourceConfigured: m.snapshot?.sourceConfigured ?? false,
           publicShape: publicShape(m.snapshot?.data ?? null),
+          ...(m.snapshot?.homeItems !== undefined ? { homeItems: m.snapshot.homeItems } : {}),
           defaults:
             m.id === 'links'
               ? projectValue(
@@ -335,9 +338,7 @@ function publicBackground(config: Config) {
 }
 async function projectDashboard(state: StoredState, now = new Date(), admin = false) {
   const modules: GuestModule[] = []
-  for (const m of state.config.modules.toSorted(
-    (a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id),
-  )) {
+  for (const m of canonicalModules(state.config.modules)) {
     if (!ModuleSettingsSchema.safeParse(m).success)
       throw new DataLayerError('CONFIG_BASELINE_INVALID')
     if (!m.enabled) continue
@@ -373,6 +374,14 @@ async function projectDashboard(state: StoredState, now = new Date(), admin = fa
         ...safe,
         sourceConfigured: Object.keys(m.sources).length > 0,
         data: projected ?? null,
+        ...(m.id === 'services' && m.homeServices !== undefined
+          ? {
+              homeItems: monitorHomeIds(
+                (projected as unknown as { monitors?: { id: string }[] })?.monitors ?? [],
+                m.homeServices,
+              ),
+            }
+          : {}),
       } as Record<string, Json>,
     })
   }

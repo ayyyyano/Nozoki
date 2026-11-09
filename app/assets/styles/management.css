@@ -966,3 +966,46 @@
 .data-import-source .integration-editor {
   min-width: 0;
 }
+
+.service-home-editor {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--color-outline-variant);
+  padding-top: 16px;
+}
+.service-home-choice {
+  min-height: 40px;
+  overflow-wrap: anywhere;
+}
+
+.service-home-choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 12px;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+.service-home-choice input {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  margin: 0;
+}
+.service-home-choice span {
+  color: var(--color-text);
+}
+.service-home-choice:hover,
+.service-home-choice:has(input:focus-visible) {
+  background: var(--color-secondary-container);
+}
+.service-home-choice:has(input:focus-visible) {
+  outline: 2px solid var(--color-primary);
+}
+.service-home-choice:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
