@@ -26,6 +26,8 @@ async function read(value: unknown = credentials()) {
     now,
     identityKey: key,
     transport: responseTransport(s, async (endpoint) => {
+      if (endpoint === 'v8/management/observability/usage/queue?count=50')
+        return new Response(null, { status: 404 })
       assert.equal(endpoint, 'v8/management/credentials')
       return Response.json(value)
     }),
@@ -200,7 +202,10 @@ test('relay authentication rotation preserves account ACL identities; missing st
   const s = cpaSource(),
     firstToken = randomToken(),
     secondToken = randomToken()
-  const wire: typeof fetch = async () => Response.json(credentials())
+  const wire: typeof fetch = async (input) => {
+    assert.ok(String(input).endsWith('/v8/management/credentials'))
+    return Response.json(credentials())
+  }
   await assert.rejects(
     () => createPrivateRelay([{ source: s }], firstToken, wire),
     /STABLE_RELAY_IDENTITY_KEY_REQUIRED/,

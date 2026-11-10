@@ -4,6 +4,7 @@ import type { ModuleId } from '../../shared/contracts/dashboard.ts'
 import { credentialState } from '../services/credentials.ts'
 import type { QuoteSymbolInput } from '../../shared/quotes/yahoo-symbol.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
+import type { UsageDay } from '../adapters/codex-usage.ts'
 export interface CollectionPlan {
   source: IntegrationSettings
   revision: string
@@ -12,6 +13,7 @@ export interface CollectionPlan {
   configVersion: number
   references: { moduleId: ModuleId; subject: string }[]
   quoteSymbols?: readonly QuoteSymbolInput[]
+  codexUsageDays?: readonly UsageDay[]
   timezone?: string
 }
 export function collectionPlans(state: StoredState): CollectionPlan[] {

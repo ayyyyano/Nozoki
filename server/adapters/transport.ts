@@ -9,6 +9,7 @@ import {
   type QuoteSymbolInput,
 } from '../../shared/quotes/yahoo-symbol.ts'
 import { tencentChartEndpoint, isTencentChartEndpoint } from '../../shared/quotes/tencent-symbol.ts'
+import { CODEX_USAGE_QUEUE, isCodexUsageQueueEndpoint } from './codex-usage.ts'
 export const RESPONSE_LIMIT = 131072
 export interface TransportOptions {
   quoteSymbols?: readonly QuoteSymbolInput[]
@@ -32,7 +33,8 @@ export function endpointCatalog(
     case 'sleepy':
       return ['api/meta', 'api/status/query']
     case 'cliproxy-bridge':
-      if (source.protocolVersion === 'cliproxy-v8-accounts') return ['v8/management/credentials']
+      if (source.protocolVersion === 'cliproxy-v8-accounts')
+        return ['v8/management/credentials', CODEX_USAGE_QUEUE]
       return ['v8/management/config/observability/usage/usage-statistics-enabled']
     case 'uptimeflare':
       return ['api/data']
@@ -81,7 +83,8 @@ export function serviceEndpoint(base: string, endpoint: string): string {
   if (
     !/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(endpoint) &&
     !isYahooChartEndpoint(endpoint) &&
-    !isTencentChartEndpoint(endpoint)
+    !isTencentChartEndpoint(endpoint) &&
+    !isCodexUsageQueueEndpoint(endpoint)
   )
     throw new AdapterError('TARGET_NOT_APPROVED')
   const resolved = new URL(endpoint, target),
@@ -193,7 +196,7 @@ export function boundedReadTransport(
             retryDelay(response.headers.get('retry-after'), Date.now()),
           )
         if (response.status === 404) throw new AdapterError('NOT_FOUND')
-        if (!response.ok) throw new AdapterError('UPSTREAM_UNAVAILABLE')
+        if (!response.ok) throw new AdapterError('UPSTREAM_UNAVAILABLE', undefined, response.status)
         if (
           !/^application\/(?:[a-z0-9.-]+\+)?json(?:\s*;|$)/i.test(
             response.headers.get('content-type') ?? '',

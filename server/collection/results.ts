@@ -3,6 +3,7 @@ import type { CollectionClaim, ViewCommit, BalanceCommit } from '../repositories
 import { snapshotSchema } from '../../shared/contracts/snapshots.ts'
 import { expiresAt } from '../../shared/collection/policy.ts'
 import { AdapterError } from '../adapters/types.ts'
+import { UsageDaySchema } from '../adapters/codex-usage.ts'
 export function collectionPayload(c: CollectionClaim, result: AdapterRead, now: string) {
   if (
     result.sourceId !== c.plan.source.id ||
@@ -60,5 +61,18 @@ export function collectionPayload(c: CollectionClaim, result: AdapterRead, now: 
   if (!views.length) throw new AdapterError('UNSUPPORTED_PROTOCOL')
   if (new TextEncoder().encode(JSON.stringify(views)).length > 500000)
     throw new AdapterError('RESPONSE_TOO_LARGE')
-  return { views, balances }
+  const usage = (result.usageDelta ?? []).map((day) => {
+    const parsed = UsageDaySchema.safeParse(day)
+    if (
+      !parsed.success ||
+      c.plan.source.provider !== 'cliproxy-bridge' ||
+      c.plan.source.protocolVersion !== 'cliproxy-v8-accounts' ||
+      !views.some((v) => v.moduleId === 'codex')
+    )
+      throw new AdapterError('INVALID_RESPONSE')
+    return parsed.data
+  })
+  if (usage.length > 50 || new Set(usage.map((d) => d.day)).size !== usage.length)
+    throw new AdapterError('INVALID_RESPONSE')
+  return { views, balances, usage }
 }

@@ -17,6 +17,7 @@ import { AdapterError, type AdapterRead } from '../adapters/types.ts'
 import { meterDatabase } from './metrics.ts'
 import { cleanupRecords } from '../services/retention.ts'
 import { requireWritableStorage } from '../repositories/storage-status.ts'
+import { readCodexUsageDays } from '../repositories/codex-usage.ts'
 export type SourceReader = (
   p: CollectionPlan,
   env: Record<string, unknown>,
@@ -98,6 +99,11 @@ export async function runCollection(
         controller = new AbortController()
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
+        if (
+          plan.source.provider === 'cliproxy-bridge' &&
+          plan.source.protocolVersion === 'cliproxy-v8-accounts'
+        )
+          plan.codexUsageDays = await readCodexUsageDays(db, plan.source.id, clock())
         const timeout = new Promise<never>((_, reject) => {
           timer = setTimeout(
             () => {
@@ -117,11 +123,19 @@ export async function runCollection(
         if (result.code) throw new AdapterError(result.code, result.retryAfterSeconds)
         const finishedAt = clock().toISOString(),
           payload = collectionPayload(claim, result, finishedAt)
-        await commitCollection(db, claim, payload.views, payload.balances, finishedAt, {
-          ...stats,
-          wallMs: Date.now() - sourceStart,
-          status: result.status,
-        })
+        await commitCollection(
+          db,
+          claim,
+          payload.views,
+          payload.balances,
+          finishedAt,
+          {
+            ...stats,
+            wallMs: Date.now() - sourceStart,
+            status: result.status,
+          },
+          payload.usage,
+        )
         report.success++
       } catch (error) {
         const message = error instanceof Error ? error.message : ''

@@ -8,13 +8,16 @@ import type {
 } from '../../shared/contracts/dashboard.ts'
 import type { AdapterCode } from '../../shared/contracts/adapter.ts'
 import type { QuoteSymbolInput } from '../../shared/quotes/yahoo-symbol.ts'
+import type { UsageDay } from './codex-usage.ts'
 export class AdapterError extends Error {
   code: AdapterCode
   retryAfterSeconds?: number
-  constructor(code: AdapterCode, retryAfterSeconds?: number) {
+  upstreamStatus?: number
+  constructor(code: AdapterCode, retryAfterSeconds?: number, upstreamStatus?: number) {
     super(code)
     this.code = code
     this.retryAfterSeconds = retryAfterSeconds
+    this.upstreamStatus = upstreamStatus
   }
 }
 export interface ReadResponse {
@@ -27,6 +30,7 @@ export interface ReadTransport {
 export interface AdapterContext {
   identityKey?: CryptoKey
   quoteSymbols?: readonly QuoteSymbolInput[]
+  codexUsageDays?: readonly UsageDay[]
   source: IntegrationSettings
   transport: ReadTransport
   now: Date
@@ -43,6 +47,8 @@ export interface AdapterRead {
   collectedAt: string
   views: Views
   items: number
+  /** Aggregated deltas only; raw consuming queue records never leave the adapter. */
+  usageDelta?: UsageDay[]
   code?: AdapterCode
   retryAfterSeconds?: number
   /** Recognized source facts have no existing display DTO. Server-only, never logs/probe responses. */

@@ -13,7 +13,7 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 | DeepSeek  | Current balance and a seven-day remaining-balance bar chart, with optional guest masking                  |
 | Devices   | Sleepy status text, identifiable foreground applications, optional battery and external power information |
 | Tailscale | Device names, control-plane connection status and IP visibility based on login                            |
-| Codex     | CLIProxyAPI account status and passive quota observations supplied by the source                          |
+| Codex     | CLIProxyAPI account status, passive quota observations and daily UTC queue usage                          |
 | Activity  | Weekly schedules, multiple periods, templates, date exceptions, countdowns and progress                   |
 | Quotes    | Tencent prices, daily changes, volume and five-day history                                                |
 | Links     | Bookmarks, ordering and Material icons                                                                    |
@@ -21,7 +21,7 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 
 The admin interface controls module availability, ordering, titles and access permissions. The server filters data for the current session. Visitor requests read saved results from the database.
 
-The admin page manages source addresses, protocols, credentials and access approvals. Cloudflare Workers fetch approved public HTTPS sources directly. Node.js uses an embedded connector. QQQM and VOO use the enabled Tencent source by default. Codex displays account status and confirmed passive quota observations.
+The admin page manages source addresses, protocols, credentials and access approvals. Cloudflare Workers fetch approved public HTTPS sources directly. Node.js uses an embedded connector. QQQM and VOO use the enabled Tencent source by default. Codex displays account status, confirmed passive quota observations and daily UTC queue usage received after statistics are enabled.
 
 DeepSeek needs only a balance source. Today's bar updates with collection; historical bars use the last successful sample of each day in the site timezone. Missing days stay empty. The existing scheduler brings collection forward before day end, but outages or upstream failures can prevent a closing sample. Enable guest masking under Dashboard modules → DeepSeek to return placeholder data to guests; authenticated viewers remain subject to field permissions.
 
@@ -271,7 +271,7 @@ The collection environment follows the [Cloudflare deployment version](https://d
 
 An instance's type and protocol are fixed after creation. Changing its address requires approval again and replacement or deletion of credentials bound to the old address. Saved secrets appear as placeholders. Edit opens an empty field for a new value; Delete asks for confirmation and schedules removal for the next save. You can undo deletion before saving. Credentials are encrypted in the database; admin reads return their configuration status. Each configuration supports up to 10 sources.
 
-Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI uses `cliproxy-bridge` / `cliproxy-v8-accounts`, with its Management Key as the Bearer credential. A stable account identity key is generated and stored encrypted. Use a reverse proxy to expose only the protocol's `v8/management/credentials` endpoint. The admin page accepts registered protocols rather than arbitrary endpoint URLs.
+Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI uses `cliproxy-bridge` / `cliproxy-v8-accounts`, with its Management Key as the Bearer credential. A stable account identity key is generated and stored encrypted. A reverse proxy can allow only `GET v8/management/credentials` and `GET v8/management/observability/usage/queue?count=50`; the latter consumes records and is used only during collection. The admin page accepts registered protocols rather than arbitrary endpoint URLs.
 
 ### Public HTTPS access on Cloudflare
 
@@ -292,6 +292,24 @@ The deployment command applies `0019_public_sources.sql`. Legacy DeepSeek, Tence
 Other legacy sources pause collection and retain their settings for review. Check their public instance addresses under Data sources, supply credentials, confirm access and save. An unrecognized old protocol has a read-only editor; create a supported source to replace it. `NOZOKI_PUBLIC_ROUTES`, `NOZOKI_PRIVATE_ROUTES` and relay routes no longer authorize production collection. Remove those variables and relay settings after migration.
 
 Add a CLIProxyAPI source and enter its Management Key. A key previously held only by a relay must be entered in the admin page. If account-specific field permissions exist, open the account permission migration section and import the original `NOZOKI_RELAY_ID_KEY` in the original account identity key field. Saving reads accounts and checks their IDs. A mismatched key, unreachable target or deleted account blocks the save; check the key and account policies. The identity key is encrypted, and admin reads return its configured status. New sources can leave it blank to generate a key automatically.
+
+### Prerequisites for the Codex usage display (CLIProxyAPI side)
+
+Since v6.10.0 CLIProxyAPI no longer ships built-in usage statistics. The only per-request usage source is the in-memory queue `GET /v8/management/observability/usage/queue?count=N`, which pops records as they are read. Before usage can appear, set `observability.usage.usage-statistics-enabled: true` in the CLIProxyAPI `config.yaml` and restart the service.
+
+Queue limits: records live in memory and are lost when CLIProxyAPI restarts; reading consumes them, so this dashboard must remain the queue's only consumer — do not run another usage statistics service (such as CPA Usage Keeper) against the same instance or records will be split between consumers. The success and failed execution counters also live in runtime memory and reset on restart.
+
+Quota windows are passively observed: they appear automatically when CLIProxyAPI attaches quota signals to the credentials response; this dashboard never sends extra quota queries. Cost estimation is not provided.
+
+### Codex usage display: dashboard behavior
+
+Scheduled collection reads credentials, then pops the queue once under the source lease (up to 50 records per run). Saved-source tests, draft tests and save-time checks read credentials only and never consume the queue. Only Codex records whose auth_index matches an existing account through the existing HMAC identity key count toward the totals. Other providers and missing/unmatched account identities are discarded.
+
+Input, output, reasoning, cached and total tokens, requests and failures accumulate by the timestamp's UTC day. Upstream counters are preserved; reasoning and cached counts are not added into total again. Daily aggregates persist across dashboard restarts and retain the latest 400 UTC days. coverageStart is the start of the earliest retained day, not a promise of complete coverage. The card shows the latest day; details show the full daily sequence, subject to existing Codex module and usage-field permissions.
+
+An empty queue preserves previous totals. Queue 400/404 responses mean statistics are unavailable and do not fail account collection. CLIProxyAPI restarts, queue retention/capacity limits and the 50-record-per-run limit can lose or omit unconsumed records. A failed database commit or changed source revision/lease after a pop loses that batch: upstream provides no acknowledgement or replay, and the batch is never retried independently. These are successfully saved observations, not official account-wide usage or quota.
+
+estimatedCost remains unavailable because the queue does not establish actual settlement rates, routing discounts or cache/reasoning billing rules. Model names and token counts alone cannot establish reliable cost. Existing passive quota observations remain independent. Raw queue records never enter storage, logs or public responses.
 
 ### Tailscale devices
 
