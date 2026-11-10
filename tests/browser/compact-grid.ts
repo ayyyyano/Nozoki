@@ -49,7 +49,8 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
   await page.goto(origin)
   await settle(page)
   const report = []
-  async function render(count, mode, links = true) {
+  let fixtureRestore
+  async function render(count, mode, links = true, linkCount = 4) {
     const selected = [
       'deepseek',
       'devices',
@@ -65,6 +66,9 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
     current.modules = current.modules.filter(
       (m) => selected.includes(m.id) || (links && m.id === 'links'),
     )
+    const navigation = current.modules.find((m) => m.id === 'links')
+    if (navigation)
+      navigation.snapshot.data.items = navigation.snapshot.data.items.slice(0, linkCount)
     const response = page.waitForResponse((r) => r.url().endsWith('/api/dashboard'))
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
     await response
@@ -74,10 +78,21 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
     await expect(page.locator('.nozoki-app')).toHaveAttribute('data-background-layout', mode)
     await stable(page)
     if (count > 7) {
-      const plans = [2, 3, 4].map((capacity) => dashboardPlan(count, capacity, links))
-      await page.evaluate(
+      const plans = [
+        dashboardPlan(count, 2, links),
+        dashboardPlan(count, 3, links, 'balanced'),
+        dashboardPlan(count, 3, links),
+        dashboardPlan(count, 4, links),
+      ]
+      fixtureRestore = await page.evaluate(
         ({ count, plans }) => {
           const grid = document.querySelector('.dashboard-grid')
+          const restore = {
+            attributes: [...grid.attributes].map((a) => [a.name, a.value]),
+            styles: [...grid.querySelectorAll('[data-layout-role="business"]')].map((el) =>
+              el.getAttribute('style'),
+            ),
+          }
           const extra = grid.querySelector('[data-module="codex"]').cloneNode(true)
           extra.setAttribute('data-module', 'future-fixture')
           extra.querySelector('h2').textContent = '未来业务模块'
@@ -86,8 +101,18 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
           grid.insertBefore(extra, grid.querySelector('[data-module="links"]'))
           grid.dataset.businessCount = String(count)
           grid.dataset.mediumLinks = plans[0].links
-          grid.dataset.wideLinks = plans[1].links
-          grid.dataset.expandedLinks = plans[2].links
+          grid.dataset.compactWideLinks = plans[1].links
+          grid.dataset.wideLinks = plans[2].links
+          grid.dataset.expandedLinks = plans[3].links
+          for (const [index, key] of ['medium', 'compact-wide', 'wide', 'expanded'].entries()) {
+            grid.style.setProperty(`--${key}-links-span`, String(plans[index].linksSpan))
+            grid
+              .querySelectorAll('[data-layout-role="business"]')
+              .forEach((el, i) =>
+                el.style.setProperty(`--${key}-span`, String(plans[index].businessSpans[i])),
+              )
+          }
+          return restore
         },
         { count, plans },
       )
@@ -145,9 +170,29 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
           text: body.innerText,
         }
       })
-      const columns = getComputedStyle(
-        document.querySelector('.dashboard-grid'),
-      ).gridTemplateColumns.split(' ').length
+      const grid = document.querySelector('.dashboard-grid')
+      const gridStyle = getComputedStyle(grid)
+      const columns = gridStyle.gridTemplateColumns.split(' ').length
+      const navigation = grid.querySelector('[data-layout-role="navigation"]')
+      const linkGrid = navigation?.querySelector('.link-grid')
+      const rowBoundaries = Object.values(
+        [...grid.children].reduce((rows, el) => {
+          const r = box(el),
+            key = Math.round(r.y)
+          const row = (rows[key] ??= {
+            top: r.y,
+            left: r.x,
+            right: r.right,
+            bottom: r.bottom,
+            items: [],
+          })
+          row.left = Math.min(row.left, r.x)
+          row.right = Math.max(row.right, r.right)
+          row.bottom = Math.max(row.bottom, r.bottom)
+          row.items.push({ id: el.dataset.module, ...r })
+          return rows
+        }, {}),
+      )
       return {
         banner: box(document.querySelector('.background-scene.banner')),
         wave: box(document.querySelector('.banner-wave')),
@@ -159,13 +204,21 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
         },
         pageClientHeight: document.documentElement.clientHeight,
         scroll: Math.max(0, document.documentElement.scrollHeight - innerHeight),
-        rows: [
-          ...new Set(
-            [...document.querySelectorAll('.dashboard-grid > [data-module]')].map((el) =>
-              Math.round(el.getBoundingClientRect().y),
-            ),
-          ),
-        ].length,
+        rows: gridStyle.gridTemplateRows.split(' ').filter((n) => parseFloat(n) > 0).length,
+        rowBoundaries,
+        navigation: navigation && {
+          ...box(navigation),
+          start: getComputedStyle(navigation).gridColumnStart,
+          end: getComputedStyle(navigation).gridColumnEnd,
+          align: getComputedStyle(navigation).alignSelf,
+          columns: linkGrid
+            ? getComputedStyle(linkGrid).gridTemplateColumns.split(' ').length
+            : null,
+          leadingSpace: linkGrid?.firstElementChild
+            ? box(linkGrid.firstElementChild).y - box(navigation).y
+            : null,
+          items: linkGrid ? [...linkGrid.children].map(box) : [],
+        },
         minCardWidth: Math.min(...cards.map((c) => c.width)),
         columns,
         rootOverflow: getComputedStyle(document.documentElement).overflowY,
@@ -325,7 +378,14 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
         if (count === 7 && links && mode !== 'off')
           await capture(page, resolve(evidence, `${prefix}-7-${mode}-${width}x${height}.png`))
         if (count > 7)
-          await page.locator('[data-module="future-fixture"]').evaluate((el) => el.remove())
+          await page.evaluate((restore) => {
+            document.querySelector('[data-module="future-fixture"]').remove()
+            const grid = document.querySelector('.dashboard-grid')
+            for (const [key, value] of restore.attributes) grid.setAttribute(key, value)
+            grid
+              .querySelectorAll('[data-layout-role="business"]')
+              .forEach((el, i) => el.setAttribute('style', restore.styles[i]))
+          }, fixtureRestore)
       }
   }
   for (const width of [1440, 768, 320]) {
@@ -333,16 +393,144 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
     for (const count of [0, 1, 2, 3]) {
       await render(count, 'page')
       const result = await inspect(`small-dashboard-${width}-${count}`)
+      if (count === 1) assert.ok(result.grid.width <= 720)
       const capacity = result.grid.width >= 1328 ? 4 : result.grid.width >= 700 ? 2 : 1
       assert.equal(result.columnCount, dashboardPlan(count, capacity, true).columns)
     }
   }
+  for (const [width, expectedColumns, expectedRows] of [
+    [1440, 4, 2],
+    [1280, 3, 3],
+    [1180, 3, 4],
+    [1024, 2, 4],
+    [390, 1, 8],
+  ]) {
+    await page.setViewportSize({ width, height: 900 })
+    for (const count of [1, 2, 3, 4]) {
+      await render(7, 'banner', true, count)
+      const result = await inspect(`navigation-${width}-${count}`)
+      const last = result.cards.at(-1),
+        nav = result.navigation
+      assert.equal(result.columnCount, expectedColumns)
+      assert.equal(result.rows, expectedRows)
+      await expect(page.locator('[data-module="links"] a')).toHaveCount(count)
+      if (expectedColumns === 3 && width !== 1180) {
+        assert.equal(nav.start, 'span 6')
+        assert.equal(nav.align, 'stretch')
+        assert.ok(Math.abs(nav.width - last.width) < 1)
+        assert.ok(Math.abs(nav.x - last.right - result.expectedGap) < 1)
+        assert.ok(Math.abs(nav.y - last.y) < 1)
+        assert.ok(Math.abs(nav.bottom - last.bottom) < 1)
+        assert.equal(nav.leadingSpace, 0)
+        assert.equal(nav.columns, Math.min(2, count))
+      } else if (width === 1180) {
+        assert.equal(nav.start, 'span 12')
+        assert.ok(Math.abs(nav.y - last.bottom - result.expectedGap) < 1)
+        assert.equal(nav.columns, count)
+        assert.equal(nav.height, 64)
+        for (const row of result.rowBoundaries) {
+          assert.ok(Math.abs(row.left - result.grid.x) < 1)
+          assert.ok(Math.abs(row.right - result.grid.right) < 1)
+          const size = row.items.length
+          for (const item of row.items)
+            assert.ok(
+              Math.abs(item.width - (result.grid.width - (size - 1) * result.expectedGap) / size) <
+                1,
+            )
+        }
+      } else if (expectedColumns > 1) {
+        assert.ok(Math.abs(nav.y - last.y) < 1)
+        assert.ok(Math.abs(nav.bottom - last.bottom) < 1)
+        assert.equal(nav.columns, Math.min(count, 2))
+      }
+      if (count === 4) {
+        const name =
+          width === 1180
+            ? 'space-322'
+            : expectedColumns === 3
+              ? 'space-331'
+              : expectedColumns === 4
+                ? 'space-4x2'
+                : `space-${expectedColumns}-columns`
+        await capture(page, resolve(evidence, `${name}.png`))
+        await page.screenshot({
+          path: resolve(evidence, `${name}-full.png`),
+          fullPage: true,
+        })
+      }
+    }
+  }
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await render(7, 'banner', false)
+  const withoutLinks = await inspect('seven-without-navigation')
+  assert.equal(withoutLinks.rows, 3)
+  assert.equal(withoutLinks.navigation, null)
+  const rowSizes = Object.values(
+    withoutLinks.cards.reduce((rows, c) => {
+      const key = Math.round(c.y)
+      rows[key] = (rows[key] ?? 0) + 1
+      return rows
+    }, {}),
+  )
+  assert.deepEqual(rowSizes, [3, 2, 2])
+  for (const row of withoutLinks.rowBoundaries) {
+    assert.ok(Math.abs(row.left - withoutLinks.grid.x) < 1)
+    assert.ok(Math.abs(row.right - withoutLinks.grid.right) < 1)
+  }
+  await capture(page, resolve(evidence, 'fallback-without-links.png'))
+  await page.screenshot({
+    path: resolve(evidence, 'fallback-without-links-full.png'),
+    fullPage: true,
+  })
+  for (const count of [7, 6, 7]) {
+    await render(count, 'page')
+    const result = await inspect('toggle-tailscale-' + count)
+    assert.equal(result.rows, 3)
+    assert.equal(result.navigation.start, count === 7 ? 'span 6' : 'span 12')
+  }
+  // A wide browser can host a narrow dashboard (sidebar or embedded preview).
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await render(7, 'page')
+  const embedded = await page.addStyleTag({
+    content: '.dashboard-grid-container {width:min(100%,1217px); margin-inline:auto} ',
+  })
+  await stable(page)
+  const inset = await inspect('wide-window-narrow-container')
+  assert.equal(inset.columnCount, 3)
+  assert.equal(inset.rows, 3)
+  assert.ok(Math.abs(inset.navigation.bottom - inset.cards.at(-1).bottom) < 1)
+  await embedded.evaluate((el) => el.remove())
+  for (const width of [1440, 1280, 1180, 1024, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await render(7, 'page', true, 0)
+    const result = await inspect('empty-navigation-' + width)
+    await expect(page.locator('[data-module="links"] a')).toHaveCount(0)
+    assert.equal(result.navigation.items.length, 0)
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await render(7, 'page')
+  const boundary = await page.addStyleTag({
+    content: '.dashboard-grid-container {width:1328px; margin-inline:auto}',
+  })
+  for (const width of [699, 700, 1039, 1040, 1159, 1160, 1327, 1328, 1327, 1328]) {
+    await boundary.evaluate(
+      (el, width) =>
+        (el.textContent = `.dashboard-grid-container {width:${width}px; margin-inline:auto}`),
+      width,
+    )
+    await stable(page)
+    const result = await inspect('boundary-' + width)
+    assert.equal(result.columnCount, width >= 1328 ? 4 : width >= 1040 ? 3 : width >= 700 ? 2 : 1)
+    assert.equal(result.rows, width >= 1328 ? 2 : width >= 1160 ? 3 : width >= 700 ? 4 : 8)
+  }
+  await boundary.evaluate((el) => el.remove())
   await page.setViewportSize({ width: 1440, height: 900 })
   for (const options of [
     { empty: true, disabled: [] },
     { guest: true },
     { loginOnly: true },
     { disabled: ['devices', 'tailscale', 'services'] },
+    { customTitles: true, disabled: [] },
   ]) {
     current = await fixture(options)
     const response = page.waitForResponse((r) => r.url().endsWith('/api/dashboard'))
