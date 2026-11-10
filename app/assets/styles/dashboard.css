@@ -234,10 +234,10 @@ p {
 .dashboard-grid {
   --dashboard-gap: 16px;
   --business-card-height: auto;
-  --navigation-height: auto;
   --navigation-span: 1 / -1;
   --navigation-fixed-columns: initial;
   --navigation-last-span: auto;
+  --dashboard-columns: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--dashboard-gap);
@@ -253,8 +253,8 @@ p {
 }
 .dashboard-grid > [data-layout-role='navigation'] {
   grid-column: var(--navigation-span);
-  height: var(--navigation-height);
   min-height: min-content;
+  align-self: stretch;
 }
 .module-card,
 .links-module {
@@ -269,26 +269,50 @@ p {
 @container dashboard (min-width: 700px) {
   .dashboard-grid {
     --business-card-height: clamp(242px, calc(206px + 4svh), 266px);
-    grid-template-columns: repeat(var(--medium-columns), minmax(0, 1fr));
+    --dashboard-columns: var(--medium-columns);
+    --navigation-span: span var(--medium-links-span);
+    grid-template-columns: repeat(12, minmax(0, 1fr));
   }
-  .dashboard-grid[data-medium-links='cell'] {
-    --navigation-height: var(--business-card-height);
-    --navigation-span: auto;
+  .dashboard-grid > [data-layout-role='business'] {
+    grid-column: span var(--medium-span, 6);
+  }
+  .dashboard-grid[data-business-count='1'] {
+    width: 100%;
+    max-width: 720px;
+    margin-inline: auto;
+  }
+  .dashboard-grid:is([data-medium-links='cell'], [data-medium-links='tail']) {
     --navigation-fixed-columns: 2;
     --navigation-last-span: 1 / -1;
   }
 }
 @container dashboard (min-width: 1040px) {
-  .dashboard-grid[data-wide-links] {
-    grid-template-columns: repeat(var(--wide-columns), minmax(0, 1fr));
-    --navigation-height: auto;
-    --navigation-span: 1 / -1;
+  .dashboard-grid[data-compact-wide-links] {
+    --dashboard-columns: var(--compact-wide-columns);
+    --navigation-span: span var(--compact-wide-links-span);
     --navigation-fixed-columns: initial;
     --navigation-last-span: auto;
   }
-  .dashboard-grid[data-wide-links='cell'] {
-    --navigation-height: var(--business-card-height);
-    --navigation-span: auto;
+  .dashboard-grid > [data-layout-role='business'] {
+    grid-column: span var(--compact-wide-span, 4);
+  }
+  .dashboard-grid:is([data-compact-wide-links='cell'], [data-compact-wide-links='tail']) {
+    --navigation-fixed-columns: 2;
+    --navigation-last-span: 1 / -1;
+  }
+}
+/* Wider thirds leave room for the compact summaries; narrower thirds pair the tail rows. */
+@container dashboard (min-width: 1160px) {
+  .dashboard-grid[data-wide-links] {
+    --dashboard-columns: var(--wide-columns);
+    --navigation-span: span var(--wide-links-span);
+    --navigation-fixed-columns: initial;
+    --navigation-last-span: auto;
+  }
+  .dashboard-grid > [data-layout-role='business'] {
+    grid-column: span var(--wide-span, 4);
+  }
+  .dashboard-grid:is([data-wide-links='cell'], [data-wide-links='tail']) {
     --navigation-fixed-columns: 2;
     --navigation-last-span: 1 / -1;
   }
@@ -296,15 +320,15 @@ p {
 /* Four readable 320px cards plus the three gaps. Counts below seven keep their established template. */
 @container dashboard (min-width: 1328px) {
   .dashboard-grid[data-expanded-links] {
-    grid-template-columns: repeat(var(--expanded-columns), minmax(0, 1fr));
-    --navigation-height: auto;
-    --navigation-span: 1 / -1;
+    --dashboard-columns: var(--expanded-columns);
+    --navigation-span: span var(--expanded-links-span);
     --navigation-fixed-columns: initial;
     --navigation-last-span: auto;
   }
-  .dashboard-grid[data-expanded-links='cell'] {
-    --navigation-height: var(--business-card-height);
-    --navigation-span: auto;
+  .dashboard-grid > [data-layout-role='business'] {
+    grid-column: span var(--expanded-span, 3);
+  }
+  .dashboard-grid:is([data-expanded-links='cell'], [data-expanded-links='tail']) {
     --navigation-fixed-columns: 2;
     --navigation-last-span: 1 / -1;
   }

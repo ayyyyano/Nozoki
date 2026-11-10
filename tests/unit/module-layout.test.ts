@@ -24,19 +24,43 @@ test('all grid capacities handle arbitrary counts without reserved business slot
           assert.ok(links && count >= 5)
           assert.equal((count + 1) % plan.columns, 0)
         }
+        if (plan.links === 'tail') {
+          assert.ok(links && count >= 5)
+          assert.equal(plan.businessSpans.at(-1), plan.linksSpan)
+        }
+        assert.equal(plan.businessSpans.length, count)
+        assert.ok(
+          [...plan.businessSpans, plan.linksSpan].every((span) => span > 0 && 12 % span === 0),
+        )
+        if (plan.businessTail) {
+          assert.equal(links, false)
+          assert.equal(plan.columns, 3)
+          assert.equal(count % 3, 1)
+        }
       }
     }
-  assert.deepEqual(dashboardPlan(4, 3, true), { columns: 2, links: 'strip' })
-  assert.deepEqual(dashboardPlan(5, 3, true), { columns: 3, links: 'cell' })
-  assert.deepEqual(dashboardPlan(6, 3, true), { columns: 3, links: 'strip' })
-  assert.deepEqual(dashboardPlan(7, 3, true), { columns: 3, links: 'strip' })
-  assert.deepEqual(dashboardPlan(8, 3, true), { columns: 3, links: 'cell' })
-  assert.deepEqual(dashboardPlan(4, 4, true), { columns: 2, links: 'strip' })
-  assert.deepEqual(dashboardPlan(5, 4, true), { columns: 3, links: 'cell' })
-  assert.deepEqual(dashboardPlan(6, 4, true), { columns: 3, links: 'strip' })
-  assert.deepEqual(dashboardPlan(7, 4, true), { columns: 4, links: 'cell' })
-  assert.deepEqual(dashboardPlan(7, 4, false), { columns: 4, links: 'strip' })
-  assert.deepEqual(dashboardPlan(8, 4, true), { columns: 4, links: 'strip' })
+  const summarize = (p: ReturnType<typeof dashboardPlan>) => [
+    p.columns,
+    p.links,
+    p.businessSpans,
+    p.linksSpan,
+  ]
+  assert.deepEqual(summarize(dashboardPlan(4, 3, true)), [2, 'strip', [6, 6, 6, 6], 12])
+  assert.deepEqual(summarize(dashboardPlan(5, 3, true)), [3, 'cell', [4, 4, 4, 4, 4], 4])
+  assert.deepEqual(summarize(dashboardPlan(6, 3, true)), [3, 'strip', [4, 4, 4, 4, 4, 4], 12])
+  assert.deepEqual(summarize(dashboardPlan(7, 3, true)), [3, 'tail', [4, 4, 4, 4, 4, 4, 6], 6])
+  assert.deepEqual(summarize(dashboardPlan(7, 3, false)), [3, 'strip', [4, 4, 4, 6, 6, 6, 6], 12])
+  assert.deepEqual(summarize(dashboardPlan(7, 3, true, 'balanced')), [
+    3,
+    'strip',
+    [4, 4, 4, 6, 6, 6, 6],
+    12,
+  ])
+  assert.deepEqual(summarize(dashboardPlan(8, 3, true)), [3, 'cell', [4, 4, 4, 4, 4, 4, 4, 4], 4])
+  assert.deepEqual(summarize(dashboardPlan(7, 4, true)), [4, 'cell', [3, 3, 3, 3, 3, 3, 3], 3])
+  assert.deepEqual(summarize(dashboardPlan(7, 4, false)), [4, 'strip', [3, 3, 3, 3, 4, 4, 4], 12])
+  assert.deepEqual(summarize(dashboardPlan(8, 4, true)), [4, 'strip', [3, 3, 3, 3, 3, 3, 3, 3], 12])
+  assert.deepEqual(dashboardPlan(10, 3, true).businessSpans, [4, 4, 4, 4, 4, 4, 4, 4, 4, 6])
 })
 
 test('new business modules and renamed headings never change navigation role or canonical order', () => {

@@ -37,7 +37,8 @@ export async function measure(page) {
       display: getComputedStyle(grid).display,
       align: getComputedStyle(grid).alignItems,
       columns: getComputedStyle(grid).gridTemplateColumns,
-      columnCount: columns.length,
+      columnCount: parseInt(style.getPropertyValue('--dashboard-columns')) || columns.length,
+      trackCount: columns.length,
       columnEnds: columnXs.map((x) =>
         Math.max(...cards.filter((c) => Math.abs(c.x - x) < 1).map((c) => c.bottom)),
       ),

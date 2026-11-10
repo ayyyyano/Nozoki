@@ -112,7 +112,12 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
     const capacity =
       m.grid.width >= 1328 ? 4 : m.grid.width >= 1040 ? 3 : m.grid.width >= 700 ? 2 : 1
     const navItems = current.modules.find((m) => m.id === 'links')?.snapshot.data.items.length ?? 0
-    const plan = dashboardPlan(count, capacity, links && navItems > 0)
+    const plan = dashboardPlan(
+      count,
+      capacity,
+      links && navItems > 0,
+      m.grid.width < 1160 ? 'balanced' : 'fill',
+    )
     assert.equal(m.columnCount, plan.columns, JSON.stringify(m))
     assert.deepEqual(m.domOrder, m.visualOrder)
     assert.deepEqual(m.domOrder, [...enabledIds(count), ...(links ? ['links'] : [])])
@@ -122,7 +127,9 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
       assert.ok(
         plan.links === 'cell'
           ? Math.abs(nav.y - last.y) < 1
-          : nav.y >= Math.max(...m.cards.slice(0, -1).map((c) => c.bottom)) + m.expectedGap - 1,
+          : plan.links === 'tail'
+            ? Math.abs(nav.bottom - last.bottom) < 1
+            : nav.y >= Math.max(...m.cards.slice(0, -1).map((c) => c.bottom)) + m.expectedGap - 1,
         JSON.stringify(m),
       )
     }
@@ -132,7 +139,7 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
         .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)
       assert.equal(
         internal,
-        plan.links === 'cell' || m.grid.width < 500 ? Math.min(2, navItems) : navItems,
+        plan.links !== 'strip' || m.grid.width < 500 ? Math.min(2, navItems) : navItems,
         JSON.stringify({ label, plan, internal }),
       )
     }
@@ -170,19 +177,43 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
     }
     await refresh(7)
     // Eighth business card is fixture DOM only, never a registered module or production DTO.
-    await page.evaluate(() => {
-      const grid = document.querySelector('.dashboard-grid')
-      const extra = grid.querySelector('[data-module="codex"]').cloneNode(true)
-      extra.setAttribute('data-module', 'future-fixture')
-      extra.querySelector('h2').textContent = '未来模块夹具'
-      extra.querySelector('h2').id = 'heading-future-fixture'
-      extra.setAttribute('aria-labelledby', 'heading-future-fixture')
-      grid.insertBefore(extra, grid.querySelector('[data-module="links"]'))
-      grid.dataset.businessCount = '8'
-      grid.dataset.mediumLinks = 'strip'
-      grid.dataset.wideLinks = 'cell'
-      grid.dataset.expandedLinks = 'strip'
-    })
+    const restore = await page.evaluate(
+      (plans) => {
+        const grid = document.querySelector('.dashboard-grid')
+        const restore = {
+          attributes: [...grid.attributes].map((a) => [a.name, a.value]),
+          styles: [...grid.querySelectorAll('[data-layout-role="business"]')].map((el) =>
+            el.getAttribute('style'),
+          ),
+        }
+        const extra = grid.querySelector('[data-module="codex"]').cloneNode(true)
+        extra.setAttribute('data-module', 'future-fixture')
+        extra.querySelector('h2').textContent = '未来模块夹具'
+        extra.querySelector('h2').id = 'heading-future-fixture'
+        extra.setAttribute('aria-labelledby', 'heading-future-fixture')
+        grid.insertBefore(extra, grid.querySelector('[data-module="links"]'))
+        grid.dataset.businessCount = '8'
+        grid.dataset.mediumLinks = 'strip'
+        grid.dataset.compactWideLinks = 'cell'
+        grid.dataset.wideLinks = 'cell'
+        grid.dataset.expandedLinks = 'strip'
+        for (const [index, key] of ['medium', 'compact-wide', 'wide', 'expanded'].entries()) {
+          grid.style.setProperty(`--${key}-links-span`, String(plans[index].linksSpan))
+          grid
+            .querySelectorAll('[data-layout-role="business"]')
+            .forEach((el, i) =>
+              el.style.setProperty(`--${key}-span`, String(plans[index].businessSpans[i])),
+            )
+        }
+        return restore
+      },
+      [
+        dashboardPlan(8, 2, true),
+        dashboardPlan(8, 3, true, 'balanced'),
+        dashboardPlan(8, 3, true),
+        dashboardPlan(8, 4, true),
+      ],
+    )
     await stable(page)
     const future = await measure(page)
     assert.equal(future.cards.length, 9)
@@ -199,13 +230,14 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
     assert.ok(future.pageWidth <= future.clientWidth)
     report.push({ label: `${width}-future-8`, ...future })
     // Refresh drops the fixture node; normal Vue nodes keep their identity.
-    await page.locator('[data-module="future-fixture"]').evaluate((el) => el.remove())
-    await page.evaluate(() => {
+    await page.evaluate((restore) => {
+      document.querySelector('[data-module="future-fixture"]').remove()
       const grid = document.querySelector('.dashboard-grid')
-      grid.dataset.mediumLinks = 'cell'
-      grid.dataset.wideLinks = 'strip'
-      grid.dataset.expandedLinks = 'cell'
-    })
+      for (const [key, value] of restore.attributes) grid.setAttribute(key, value)
+      grid
+        .querySelectorAll('[data-layout-role="business"]')
+        .forEach((el, i) => el.setAttribute('style', restore.styles[i]))
+    }, restore)
   }
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 900 })
