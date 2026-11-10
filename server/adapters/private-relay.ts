@@ -266,7 +266,11 @@ export async function createPrivateRelay(
       )
       const result = await runAdapter(
         { source, transport, now: new Date(), identityKey },
-        match[2] as 'probe' | 'read',
+        // Legacy normalized relay reads have no database lease/aggregate commit path.
+        // Preserve their credentials-only behavior; never pop usage outside the collector.
+        source.provider === 'cliproxy-bridge' && source.protocolVersion === 'cliproxy-v8-accounts'
+          ? 'probe'
+          : (match[2] as 'probe' | 'read'),
       )
       const { facts: _facts, ...safe } = result
       const body = JSON.stringify({

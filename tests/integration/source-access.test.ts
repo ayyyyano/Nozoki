@@ -83,6 +83,8 @@ test(
       bindings: env,
       outboundService: async (request) => {
         const url = new URL(request.url)
+        if (url.pathname.endsWith('/observability/usage/queue'))
+          return new Response(null, { status: 404 })
         if (url.hostname.startsWith('blocked.')) throw new Error('Synthetic network refusal')
         if (url.hostname.startsWith('html.'))
           return new Response('<html>Fixture login</html>', {

@@ -23,12 +23,17 @@ const accountStates = {
     :title="title"
     :status="snapshot.status"
     :observed-at="snapshot.observedAt"
+    :details="!!snapshot.data?.usage?.days.length"
   >
     <DashboardDataState
       :configured="snapshot.sourceConfigured"
       :error-code="snapshot.errorCode"
       :status="snapshot.status"
-      :empty="!snapshot.data?.accounts?.length && !snapshot.data?.quota?.accounts.length"
+      :empty="
+        !snapshot.data?.accounts?.length &&
+        !snapshot.data?.quota?.accounts.length &&
+        !snapshot.data?.usage
+      "
       :last-success-at="snapshot.lastSuccessAt"
       compact
     />
@@ -69,5 +74,10 @@ const accountStates = {
         </div>
       </div></template
     >
+    <DashboardCodexUsage v-if="snapshot.data?.usage" :usage="snapshot.data.usage" />
+    <p v-else-if="snapshot.data?.accounts?.length" class="quiet-note">暂无队列用量</p>
+    <template #details>
+      <DashboardCodexUsage v-if="snapshot.data?.usage" :usage="snapshot.data.usage" detail />
+    </template>
   </DashboardModuleCard>
 </template>

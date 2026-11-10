@@ -8,6 +8,7 @@ import { managedTransport } from '../adapters/managed-transport.ts'
 import { AdapterError } from '../adapters/types.ts'
 import { runAdapter } from '../adapters/registry.ts'
 import type { TransportOptions } from '../adapters/transport.ts'
+import type { UsageDay } from '../adapters/codex-usage.ts'
 export async function readManagedSource(
   source: IntegrationSettings,
   envelope: CredentialEnvelope | null,
@@ -15,7 +16,7 @@ export async function readManagedSource(
   env: Record<string, unknown>,
   now: Date,
   mode: 'read' | 'probe',
-  options: TransportOptions = {},
+  options: TransportOptions & { codexUsageDays?: readonly UsageDay[] } = {},
 ) {
   const access = assertManagedSource(source)
   if (access.mode !== 'public') throw new AdapterError('DESTINATION_BLOCKED')
@@ -54,6 +55,7 @@ export async function readManagedSource(
         now,
         signal: options.signal,
         quoteSymbols: options.quoteSymbols,
+        codexUsageDays: options.codexUsageDays,
         identityKey,
       },
       mode,

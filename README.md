@@ -13,7 +13,7 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 | DeepSeek  | 当前余额与近 7 日剩余余额柱状图，可为访客模糊展示         |
 | Devices   | Sleepy 设备状态文字、可确认的前台应用、可选电量和供电信息 |
 | Tailscale | 设备名称、控制面连接状态及可按登录身份隐藏的 Tailnet IP   |
-| Codex     | CLIProxyAPI 账户状态及来源提供的被动额度观测              |
+| Codex     | CLIProxyAPI 账户状态、被动额度观测与 UTC 按日队列用量     |
 | Activity  | 每周日程、多时段、模板、日期例外、倒计时和进度            |
 | Quotes    | 腾讯行情、日涨跌、成交量与 5 日走势                       |
 | Links     | 常用链接、排序与 Material 图标                            |
@@ -23,7 +23,7 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 
 DeepSeek 自动匹配余额来源。今日余额随采集更新，历史柱取站点时区内当天最后一次成功观测；未采集的日期留空。现有定时任务会在日终前安排一次采集，服务中断或上游失败时无法保证取得日终余额。后台「Dashboard 模块 → DeepSeek」可开启「未登录时模糊展示余额」；访客仅收到占位数据，登录后按字段权限显示真实余额。
 
-后台管理数据源的地址、协议、凭据和访问批准。Cloudflare Workers 直接读取在后台批准的公网 HTTPS 来源。Node.js 部署使用内嵌连接器。QQQM、VOO 默认使用已启用的腾讯来源。Codex 展示账户状态及可确认的被动配额。
+后台管理数据源的地址、协议、凭据和访问批准。Cloudflare Workers 直接读取在后台批准的公网 HTTPS 来源。Node.js 部署使用内嵌连接器。QQQM、VOO 默认使用已启用的腾讯来源。Codex 展示账户状态、可确认的被动配额，以及启用统计后收到的 UTC 按日队列用量。
 
 ## 技术栈
 
@@ -288,7 +288,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 
 来源创建后类型和协议固定。密钥输入区的星号是占位符，点击「编辑」填写新值。点击删除图标并确认后，凭据会在全局保存时清除；保存前可以撤销。每份配置最多 10 个来源。删除来源会自动解除模块匹配，受保护的余额和导入历史仍会阻止删除，此时可停用来源。
 
-Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cliproxy-bridge` / `cliproxy-v8-accounts`，使用 Management Key 作为 Bearer 凭据。账户身份密钥自动生成并加密保存。建议用反向代理仅开放该协议读取的 `v8/management/credentials` 端点。后台不能将任意 URL 当作自定义协议调用。
+Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cliproxy-bridge` / `cliproxy-v8-accounts`，使用 Management Key 作为 Bearer 凭据。账户身份密钥自动生成并加密保存。反向代理可仅放行 `GET v8/management/credentials` 与 `GET v8/management/observability/usage/queue?count=50`；后者读取即消费，仅正式采集使用。后台不能将任意 URL 当作自定义协议调用。
 
 ### Cloudflare 公网 HTTPS 出站
 
@@ -309,6 +309,24 @@ Worker 使用 `fetch` 读取已批准的来源，无需额外服务器、连接�
 其他旧来源会暂停采集，并保留配置供管理员确认。在「数据源」核对公网实例地址、补齐凭据，点击「确认来源访问」并保存。旧协议无法识别时，页面显示只读提示，需要新建受支持的来源。旧 `NOZOKI_PUBLIC_ROUTES`、`NOZOKI_PRIVATE_ROUTES` 与 Relay 路由不再授权生产采集，完成迁移后可清理这些变量及 Relay 配置。
 
 添加 CLIProxyAPI 来源后填写 Management Key。若旧 Relay 存放过 Management Key，需要在后台重新填写。已有按账户 ID 配置的权限时，打开「迁移已有账户权限」，在「原账户身份密钥（迁移时填写）」填入原 `NOZOKI_RELAY_ID_KEY`。保存会只读获取账户并核对 ID；密钥不匹配、目标不可达或原账户已删除时，保存被拒绝，请核实密钥和账户权限。身份密钥加密保存，页面只显示是否已配置。新来源可留空，系统自动生成身份密钥。
+
+### Codex 用量显示的前提（CLIProxyAPI 侧）
+
+CLIProxyAPI 自 v6.10.0 起不再内置用量统计。逐请求用量的唯一出口是内存队列 `GET /v8/management/observability/usage/queue?count=N`，读取即弹出删除。启用用量显示前，需要在 CLIProxyAPI 的 `config.yaml` 设置 `observability.usage.usage-statistics-enabled: true` 并重启服务。
+
+队列限制：记录保存在内存中，CLIProxyAPI 重启会丢失未弹出的记录；读取即消费，本站必须是该队列的唯一消费者——不要再对同一实例运行其他用量统计服务（如 CPA Usage Keeper），否则记录会被分流。执行成功/失败计数同样来自运行内存，服务重启后清零。
+
+配额窗口为被动观测：CLIProxyAPI 在凭据响应附带配额信号时自动显示，本站不发起额外的配额查询。费用估算不提供。
+
+### Codex 用量显示：本站侧
+
+正式采集在来源租约内先读 credentials，再弹出一次用量队列，每轮最多 50 条；保存配置时的测试、已保存来源测试与草稿测试均只读 credentials，不消费队列。只统计 provider 为 Codex、auth_index 能以现有 HMAC 身份键匹配当前账户的记录；其他提供商、缺失或无法匹配账户的记录被丢弃，不计入本站累计。
+
+记录按 timestamp 对应的 UTC 日期累加输入、输出、推理、缓存、总 Token、请求与失败次数。计数沿用上游字段，不将推理或缓存再次加进 total。本站数据库保存最近 400 个 UTC 日的累计，进程重启后继续累加；coverageStart 是最早保留日的起点，不代表该日数据完整。首页显示最近一日，详情保留完整日序列；可见性沿用 Codex 模块和用量字段权限。
+
+队列为空时保留已有累计；端点 400/404 时降级为统计未启用，不影响账户采集。未弹出记录会因 CLIProxyAPI 重启、上游保留时限或容量限制而丢失；采集间隔与每轮 50 条的上限也可能使本站无法覆盖全部请求。弹出后若提交失败，或来源版本/租约变化，整批无法重放，不进行独立重试。这里只展示本站实际收到并成功保存的累计，不视为官方账户总用量或配额。
+
+estimatedCost 不提供：队列没有足以确认实际结算费率、路由折扣及缓存/推理计费规则的账单信息，不能仅按模型名和 Token 数推算可信费用。配额窗口继续使用原有被动观测，与该队列累计相互独立。原始队列记录不写入数据库、日志或公开接口。
 
 ### Tailscale 设备列表
 

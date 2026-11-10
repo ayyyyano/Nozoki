@@ -4,6 +4,7 @@ import type { CollectionPlan } from '../collection/plans.ts'
 import type { CollectionEnvironment } from '../collection/environment.ts'
 import { nextBalanceCollection } from '../../shared/domain/daily-balances.ts'
 import { balanceSeries } from '../services/balance-observations.ts'
+import { usageCutoff, type UsageDay } from '../adapters/codex-usage.ts'
 import {
   COLLECTION_BUDGET,
   failureStatus,
@@ -172,6 +173,7 @@ export async function commitCollection(
   balances: BalanceCommit[],
   now: string,
   metrics: Record<string, unknown>,
+  usage: UsageDay[] = [],
 ) {
   const json = JSON.stringify(views),
     series = await hashToken(
@@ -217,6 +219,26 @@ export async function commitCollection(
         )
         .bind(c.plan.source.id, series, accountSeries, JSON.stringify(balances)),
     )
+  if (usage.length)
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO codex_usage_days(source_id,day,input,output,reasoning,cached,total,requests,failed,updated_at)
+ SELECT ?,json_extract(value,'$.day'),json_extract(value,'$.input'),json_extract(value,'$.output'),json_extract(value,'$.reasoning'),json_extract(value,'$.cached'),json_extract(value,'$.total'),json_extract(value,'$.requests'),json_extract(value,'$.failed'),? FROM json_each(?) WHERE 1
+ ON CONFLICT(source_id,day) DO UPDATE SET input=codex_usage_days.input+excluded.input,output=codex_usage_days.output+excluded.output,reasoning=codex_usage_days.reasoning+excluded.reasoning,cached=codex_usage_days.cached+excluded.cached,total=codex_usage_days.total+excluded.total,requests=codex_usage_days.requests+excluded.requests,failed=codex_usage_days.failed+excluded.failed,updated_at=excluded.updated_at`,
+        )
+        .bind(c.plan.source.id, now, JSON.stringify(usage)),
+    )
+  if (c.plan.source.protocolVersion === 'cliproxy-v8-accounts')
+    statements.push(
+      db
+        .prepare(
+          'DELETE FROM codex_usage_days WHERE rowid IN(SELECT rowid FROM codex_usage_days WHERE source_id=? AND day<? ORDER BY day LIMIT 100)',
+        )
+        .bind(c.plan.source.id, usageCutoff(new Date(now))),
+    )
+  // Queue reads happen under this lease. A rejected/failed atomic commit loses the popped batch:
+  // upstream offers neither acknowledgement nor replay; never retry this batch independently.
   statements.push(
     db
       .prepare(
@@ -310,6 +332,11 @@ export async function cleanupCollection(db: Database, now: string) {
         `DELETE FROM balance_observations WHERE rowid IN(SELECT rowid FROM balance_observations WHERE collected_at<? ORDER BY collected_at LIMIT 100)`,
       )
       .bind(balanceCutoff),
+    db
+      .prepare(
+        'DELETE FROM codex_usage_days WHERE rowid IN(SELECT rowid FROM codex_usage_days WHERE day<? ORDER BY day LIMIT 100)',
+      )
+      .bind(usageCutoff(new Date(now))),
   ])
   return true
 }

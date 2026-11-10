@@ -18,6 +18,7 @@ export async function collectSource(
     return readManagedSource(p.source, p.envelope, p.identityEnvelope, env, now, 'read', {
       signal,
       quoteSymbols: p.quoteSymbols,
+      codexUsageDays: p.codexUsageDays,
       onRead: (bytes) => {
         metrics.responseBytes += bytes
       },

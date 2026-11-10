@@ -195,6 +195,8 @@ test('Codex old identity import proves account ACL matches, encrypts both keys a
       fetch: async (request) => {
         calls++
         const body = await request.json()
+        if (body.endpoint === 'v8/management/observability/usage/queue?count=50')
+          return new Response(null, { status: 404 })
         assert.equal(body.credential, 'SYNTHETIC-MANAGEMENT')
         assert.equal(body.endpoint, 'v8/management/credentials')
         assert.ok(!JSON.stringify(body).includes(identity))

@@ -6,6 +6,7 @@ import { AdapterError } from './types.ts'
 import { stampISO, staleAt } from './common.ts'
 import { passiveWindows } from './codex-observations.ts'
 import { hex, mac } from '../services/auth-crypto.ts'
+import { CODEX_USAGE_QUEUE, aggregateUsage, mergeUsageDays, usageView } from './codex-usage.ts'
 const Cooldown = z.object({
   scope: z.string().max(40),
   reason: z.string().max(80),
@@ -31,7 +32,7 @@ const Credentials = z.object({
     )
     .max(100),
 })
-async function readAccounts(context: AdapterContext) {
+async function readAccounts(context: AdapterContext, consume = true) {
   if (!context.identityKey) throw new AdapterError('CREDENTIAL_UNAVAILABLE')
   const response = await context.transport.get('v8/management/credentials'),
     value = parse(Credentials, response.value)
@@ -119,9 +120,36 @@ async function readAccounts(context: AdapterContext) {
   result.capabilities.executionCounts = cap(hasCounts, hasCounts)
   result.items = accounts.length
   if (invalidQuota) result.capabilities.quota.reason = 'INVALID_QUOTA_OBSERVATION'
+  let usage = context.codexUsageDays?.length
+    ? usageView(mergeUsageDays(context.codexUsageDays, [], context.now))
+    : null
+  if (consume) {
+    try {
+      // Destructive GET: exactly once per leased collection; never called by probes.
+      const queue = await context.transport.get(CODEX_USAGE_QUEUE)
+      result.usageDelta = await aggregateUsage(
+        queue.value,
+        context.identityKey,
+        context.source.id,
+        new Set(accounts.map((a) => a.id)),
+        context.now,
+      )
+      usage = usageView(
+        mergeUsageDays(context.codexUsageDays ?? [], result.usageDelta, context.now),
+      )
+      result.capabilities.usage = cap(true, true)
+    } catch (error) {
+      if (
+        !(error instanceof AdapterError) ||
+        (error.code !== 'NOT_FOUND' && error.upstreamStatus !== 400)
+      )
+        throw error
+      result.capabilities.usage = { ...cap(false), reason: 'USAGE_STATISTICS_DISABLED' }
+    }
+  }
   putView(result, 'codex', {
     accounts,
-    usage: null,
+    usage,
     quota: quotas.length ? { accounts: quotas } : null,
     estimatedCost: null,
     capabilities: result.capabilities,
@@ -155,6 +183,9 @@ export const cliproxy: Adapter = {
   provider: 'cliproxy-bridge',
   versions: ADAPTER_PROTOCOLS['cliproxy-bridge'],
   expectedCapabilities: ['accounts', 'telemetryPublishing', 'usage', 'quota', 'estimatedCost'],
-  probe: read,
+  probe: (context) =>
+    context.source.protocolVersion === 'cliproxy-v8-accounts'
+      ? readAccounts(context, false)
+      : read(context),
   read,
 }
