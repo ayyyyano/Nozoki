@@ -48,6 +48,7 @@ const commands = {
     'tests/self-host/http.test.ts',
     'tests/self-host/schedule-labels.test.ts',
     'tests/integration/codex-usage.test.ts',
+    'tests/integration/dashboard-presentation.test.ts',
     'tests/integration/source-access.test.ts',
     'tests/integration/config-refresh.test.ts',
   ],

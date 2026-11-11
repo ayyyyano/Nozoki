@@ -16,28 +16,31 @@ import { editableConfig, orderedConfig } from '../../shared/contracts/admin.ts'
 test('all grid capacities handle arbitrary counts without reserved business slots', () => {
   for (const capacity of [1, 2, 3, 4] as const)
     for (let count = 0; count <= 30; count++) {
-      for (const links of [false, true]) {
-        const plan = dashboardPlan(count, capacity, links)
-        assert.ok(plan.columns >= 1 && plan.columns <= capacity)
-        assert.ok(plan.columns <= Math.max(1, count))
-        if (plan.links === 'cell') {
-          assert.ok(links && count >= 5)
-          assert.equal((count + 1) % plan.columns, 0)
+      for (const links of [false, true])
+        for (const navigation of ['fill', 'strip-single-tail'] as const) {
+          const plan = dashboardPlan(count, capacity, links, navigation)
+          assert.ok(plan.columns >= 1 && plan.columns <= capacity)
+          assert.ok(plan.columns <= Math.max(1, count))
+          if (plan.links === 'cell') {
+            assert.ok(links && count >= 5)
+            assert.equal((count + 1) % plan.columns, 0)
+          }
+          if (plan.links === 'tail') {
+            assert.ok(links && count >= 5)
+            assert.equal(plan.businessSpans.at(-1), plan.linksSpan)
+          }
+          assert.equal(plan.businessSpans.length, count)
+          assert.ok(
+            [...plan.businessSpans, plan.linksSpan].every((span) => span > 0 && 12 % span === 0),
+          )
+          const remainder = count % plan.columns
+          const fullRows = plan.businessSpans.slice(0, count - remainder)
+          assert.ok(fullRows.every((span) => span === 12 / plan.columns))
+          const tail = plan.businessSpans.slice(count - remainder)
+          if (plan.links !== 'strip') tail.push(plan.linksSpan)
+          if (tail.length) assert.ok(tail.every((span) => span === 12 / tail.length))
+          if (plan.links === 'strip') assert.equal(plan.linksSpan, 12)
         }
-        if (plan.links === 'tail') {
-          assert.ok(links && count >= 5)
-          assert.equal(plan.businessSpans.at(-1), plan.linksSpan)
-        }
-        assert.equal(plan.businessSpans.length, count)
-        assert.ok(
-          [...plan.businessSpans, plan.linksSpan].every((span) => span > 0 && 12 % span === 0),
-        )
-        if (plan.businessTail) {
-          assert.equal(links, false)
-          assert.equal(plan.columns, 3)
-          assert.equal(count % 3, 1)
-        }
-      }
     }
   const summarize = (p: ReturnType<typeof dashboardPlan>) => [
     p.columns,
@@ -49,11 +52,12 @@ test('all grid capacities handle arbitrary counts without reserved business slot
   assert.deepEqual(summarize(dashboardPlan(5, 3, true)), [3, 'cell', [4, 4, 4, 4, 4], 4])
   assert.deepEqual(summarize(dashboardPlan(6, 3, true)), [3, 'strip', [4, 4, 4, 4, 4, 4], 12])
   assert.deepEqual(summarize(dashboardPlan(7, 3, true)), [3, 'tail', [4, 4, 4, 4, 4, 4, 6], 6])
-  assert.deepEqual(summarize(dashboardPlan(7, 3, false)), [3, 'strip', [4, 4, 4, 6, 6, 6, 6], 12])
-  assert.deepEqual(summarize(dashboardPlan(7, 3, true, 'balanced')), [
+  assert.deepEqual(summarize(dashboardPlan(3, 2, false)), [2, 'strip', [6, 6, 12], 12])
+  assert.deepEqual(summarize(dashboardPlan(7, 3, false)), [3, 'strip', [4, 4, 4, 4, 4, 4, 12], 12])
+  assert.deepEqual(summarize(dashboardPlan(7, 3, true, 'strip-single-tail')), [
     3,
     'strip',
-    [4, 4, 4, 6, 6, 6, 6],
+    [4, 4, 4, 4, 4, 4, 12],
     12,
   ])
   assert.deepEqual(summarize(dashboardPlan(8, 3, true)), [3, 'cell', [4, 4, 4, 4, 4, 4, 4, 4], 4])

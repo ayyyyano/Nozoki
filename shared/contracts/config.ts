@@ -14,6 +14,7 @@ import { parseFieldPath, pathPrefix } from './field-paths.ts'
 import { isMaterialLinkIcon } from '../icons/material.ts'
 import { createTencentSource } from '../quotes/defaults.ts'
 import { SourceAccessSchema, managedServiceRoot } from './source-access.ts'
+import { ModulePresentationSchema } from './module-presentation.ts'
 
 export const VisibilitySchema = z.enum(['public', 'admin'])
 export const ModuleIdSchema = z.enum(MODULE_IDS)
@@ -121,6 +122,7 @@ export const ModuleSettingsSchema = z
     fields: z.record(FieldPathSchema, FieldPolicySchema),
     ipVisibility: z.enum(['public', 'hidden', 'admin']).optional(),
     guestBlur: z.boolean().optional(),
+    presentation: ModulePresentationSchema.optional(),
     homeServices: z
       .array(z.strictObject({ sourceId: IdSchema, monitorId: z.string().min(1).max(1024) }))
       .max(8)
@@ -131,6 +133,18 @@ export const ModuleSettingsSchema = z
     ),
   })
   .superRefine((value, ctx) => {
+    const p = value.presentation
+    if (
+      p &&
+      (!['codex', 'tailscale'].includes(value.id) ||
+        (p.codex && value.id !== 'codex') ||
+        ((p.tailnetName || p.tailnetIp) && value.id !== 'tailscale'))
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['presentation'],
+        message: 'Presentation settings do not match the module',
+      })
     if (
       value.homeServices !== undefined &&
       (value.id !== 'services' ||

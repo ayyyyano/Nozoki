@@ -57,7 +57,7 @@ const script = (
 
 test(
   'admin-managed sources: real Worker HTTP, isolated D1, native public fetch fixtures, collector and browser',
-  { timeout: 180000 },
+  { timeout: process.env.NOZOKI_TEST_COMPACT_GRID === '1' ? 600000 : 180000 },
   async (t) => {
     const folder = await mkdtemp(resolve('.wrangler/source-access-test-')),
       evidence = process.env.NOZOKI_SOURCE_UI_EVIDENCE ?? resolve(folder, 'evidence')

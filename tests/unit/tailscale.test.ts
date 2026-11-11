@@ -190,7 +190,7 @@ test('guest projection hides IP on the server, preserves placeholders and respec
   stored.data.devices[0].name = 'Device at 100.64.1.2'
   state.snapshots[0]!.snapshot_json = JSON.stringify(stored)
   assert.ok(!JSON.stringify(await read()).includes(ip))
-  assert.ok(JSON.stringify(await read()).includes('Device at ****'))
+  assert.ok(JSON.stringify(await read()).includes('名称已遮蔽'))
   module.fields['/devices/*/addresses'] = { enabled: false, visibility: 'admin' }
   module.ipVisibility = 'public'
   assert.ok(!JSON.stringify(await read()).includes(ip))

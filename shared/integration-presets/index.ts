@@ -43,6 +43,7 @@ export interface IntegrationPreset {
   capabilities: readonly { key: string; label: string }[]
   note?: string
   identityImport?: boolean
+  maturity?: 'experimental'
 }
 const definitions: IntegrationPreset[] = [
   {
@@ -133,6 +134,7 @@ const definitions: IntegrationPreset[] = [
     provider: 'uptime-kuma',
     protocol: 'kuma-public-2.0.2',
     name: 'Uptime Kuma',
+    maturity: 'experimental',
     icon: 'MonitorHeartRound',
     description: '公开监控状态页，需要实例地址与状态页标识。',
     roots: [],

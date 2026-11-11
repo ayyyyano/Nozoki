@@ -173,6 +173,7 @@ export const DataSchemas = {
                     label: text,
                     remainingPercent: decimal,
                     resetAt: stamp,
+                    windowMinutes: z.number().int().positive().max(525600).optional(),
                     observedAt: stamp.optional(),
                     basis: z.enum(['passive_headers', 'reviewed_plugin']).optional(),
                     status: z.enum(['ok', 'stale']).optional(),

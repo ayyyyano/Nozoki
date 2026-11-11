@@ -812,7 +812,12 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
       ])
       await page.reload()
       await settle(page)
-      await page.locator('[data-module="codex"]').getByText('观测已过期', { exact: true }).waitFor()
+      await page.locator('[data-module="codex"]').getByRole('button', { name: /详情/ }).click()
+      const codexDetails = page.locator('.module-detail-panel:visible')
+      await codexDetails.getByText('原始配额观测', { exact: true }).click()
+      await codexDetails.getByText('观测已过期', { exact: true }).waitFor()
+      assert.ok(!(await codexDetails.innerText()).includes('74.875'))
+      await page.keyboard.press('Escape')
       assert.ok(!(await page.locator('[data-module="codex"]').innerText()).includes('74.875'))
       assert.ok(
         (await page.locator('[data-module="devices"]').innerText()).includes(

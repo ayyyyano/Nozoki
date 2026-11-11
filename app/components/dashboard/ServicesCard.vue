@@ -3,7 +3,8 @@ import type { DataSnapshot, ServicesData } from '../../../shared/contracts/dashb
 import { serviceSummary } from '../../../shared/domain/home-summary'
 import { additionalSuccess } from '../../../shared/domain/summary-status'
 const props = defineProps<{ snapshot: DataSnapshot<ServicesData>; title: string }>()
-const summary = computed(() => serviceSummary(props.snapshot))
+const now = useLocalClock()
+const summary = computed(() => serviceSummary(props.snapshot, now.value))
 </script>
 <template>
   <DashboardModuleCard
@@ -17,7 +18,11 @@ const summary = computed(() => serviceSummary(props.snapshot))
     :details="
       summary.total > summary.items.length ||
       !!snapshot.data?.monitors.some(
-        (m) => m.checkedAt || m.statusPageUrl || m.uptimePercent !== null,
+        (m) =>
+          m.checkedAt ||
+          m.statusPageUrl ||
+          m.uptimePercent !== null ||
+          (m.displayId && m.displayId !== m.name),
       )
     "
   >
@@ -37,10 +42,10 @@ const summary = computed(() => serviceSummary(props.snapshot))
       未选择首页服务，可在详情中查看。
     </p>
     <template v-if="snapshot.collectedAt || summary.down || summary.unknown" #footer>
-      <span v-if="summary.down || summary.unknown" role="status">
-        全部监控：<span v-if="summary.down">{{ summary.down }} 项异常</span
+      <span v-if="summary.down || summary.unknown" role="status" aria-label="全部监控状态">
+        <span v-if="summary.down">异常 {{ summary.down }}</span
         ><span v-if="summary.down && summary.unknown"> · </span
-        ><span v-if="summary.unknown">{{ summary.unknown }} 项待确认</span>
+        ><span v-if="summary.unknown">待确认 {{ summary.unknown }}</span>
         <span v-if="snapshot.collectedAt"> · </span>
       </span>
       <DashboardSummaryTime

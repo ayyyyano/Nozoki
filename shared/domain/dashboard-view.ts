@@ -1,6 +1,7 @@
 import type { DashboardSnapshots, ModuleId } from '../contracts/dashboard.ts'
 import type { PublicDashboard, AdminDashboard } from '../contracts/public-dashboard.ts'
 import { snapshot, unavailableCapability } from './dashboard.ts'
+import { monitorCode, monitorLatency, monitorName } from './home-summary.ts'
 /** UI nulls mean withheld/unknown. Never reconstruct private values or zero financial metrics. */
 export function dashboardView(dto: PublicDashboard | AdminDashboard): DashboardSnapshots {
   const result = Object.fromEntries(
@@ -49,7 +50,7 @@ export function dashboardView(dto: PublicDashboard | AdminDashboard): DashboardS
         data = {
           devices: (raw.devices ?? []).map((v: any, i: number) => ({
             id: `visible-${i}`,
-            name: '设备',
+            name: '节点',
             connectedToControl: null,
             lastSeen: null,
             ...v,
@@ -143,13 +144,14 @@ export function dashboardView(dto: PublicDashboard | AdminDashboard): DashboardS
         data = {
           monitors: (raw.monitors ?? []).map((v: any, i: number) => ({
             id: `visible-${i}`,
-            name: '服务',
             state: 'unknown',
-            latencyMs: null,
             checkedAt: null,
             statusPageUrl: null,
             uptimePercent: null,
             ...v,
+            name: monitorName(v.name, typeof v.id === 'string' ? monitorCode(v.id) : '服务'),
+            latencyMs: monitorLatency(v.latencyMs),
+            displayId: typeof v.id === 'string' ? monitorCode(v.id) : null,
             capabilities: {},
           })),
         }

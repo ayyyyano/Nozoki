@@ -116,7 +116,7 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
       count,
       capacity,
       links && navItems > 0,
-      m.grid.width < 1160 ? 'balanced' : 'fill',
+      m.grid.width < 1160 ? 'strip-single-tail' : 'fill',
     )
     assert.equal(m.columnCount, plan.columns, JSON.stringify(m))
     assert.deepEqual(m.domOrder, m.visualOrder)
@@ -209,7 +209,7 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
       },
       [
         dashboardPlan(8, 2, true),
-        dashboardPlan(8, 3, true, 'balanced'),
+        dashboardPlan(8, 3, true, 'strip-single-tail'),
         dashboardPlan(8, 3, true),
         dashboardPlan(8, 4, true),
       ],
