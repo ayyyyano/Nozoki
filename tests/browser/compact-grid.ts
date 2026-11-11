@@ -51,6 +51,13 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
   const report = []
   let fixtureRestore
   async function render(count, mode, links = true, linkCount = 4) {
+    if (fixtureRestore) {
+      await page.evaluate((original) => {
+        document.querySelector('.dashboard-grid').replaceWith(original)
+      }, fixtureRestore)
+      await fixtureRestore.dispose()
+      fixtureRestore = undefined
+    }
     const selected = [
       'deepseek',
       'devices',
@@ -80,25 +87,27 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
     if (count > 7) {
       const plans = [
         dashboardPlan(count, 2, links),
-        dashboardPlan(count, 3, links, 'balanced'),
+        dashboardPlan(count, 3, links, 'strip-single-tail'),
         dashboardPlan(count, 3, links),
         dashboardPlan(count, 4, links),
       ]
-      fixtureRestore = await page.evaluate(
+      fixtureRestore = await page.evaluateHandle(
         ({ count, plans }) => {
-          const grid = document.querySelector('.dashboard-grid')
-          const restore = {
-            attributes: [...grid.attributes].map((a) => [a.name, a.value]),
-            styles: [...grid.querySelectorAll('[data-layout-role="business"]')].map((el) =>
-              el.getAttribute('style'),
-            ),
+          // Fixture-only modules have no DTO. Use a detached copy so Vue cannot reset its spans.
+          const original = document.querySelector('.dashboard-grid')
+          const grid = original.cloneNode(true)
+          const realCount = grid.querySelectorAll('[data-layout-role="business"]').length
+          const card = grid.querySelector('[data-module="codex"]')
+          const navigation = grid.querySelector('[data-layout-role="navigation"]')
+          for (let i = realCount; i < count; i++) {
+            const extra = card.cloneNode(true)
+            const id = `future-fixture-${i}`
+            extra.setAttribute('data-module', id)
+            extra.querySelector('h2').textContent = '未来业务模块'
+            extra.querySelector('h2').id = `${id}-title`
+            extra.setAttribute('aria-labelledby', `${id}-title`)
+            grid.insertBefore(extra, navigation)
           }
-          const extra = grid.querySelector('[data-module="codex"]').cloneNode(true)
-          extra.setAttribute('data-module', 'future-fixture')
-          extra.querySelector('h2').textContent = '未来业务模块'
-          extra.querySelector('h2').id = 'future-fixture-title'
-          extra.setAttribute('aria-labelledby', 'future-fixture-title')
-          grid.insertBefore(extra, grid.querySelector('[data-module="links"]'))
           grid.dataset.businessCount = String(count)
           grid.dataset.mediumLinks = plans[0].links
           grid.dataset.compactWideLinks = plans[1].links
@@ -112,7 +121,8 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
                 el.style.setProperty(`--${key}-span`, String(plans[index].businessSpans[i])),
               )
           }
-          return restore
+          original.replaceWith(grid)
+          return original
         },
         { count, plans },
       )
@@ -240,6 +250,23 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
     if (!before) {
       assert.ok(m.pageWidth <= m.clientWidth, label)
       assert.deepEqual(m.domOrder, m.visualOrder)
+      for (const [index, row] of details.rowBoundaries.entries()) {
+        const width = (m.grid.width - (row.items.length - 1) * m.expectedGap) / row.items.length
+        assert.ok(Math.abs(row.left - m.grid.x) < 1, `${label}: row ${index + 1} left edge`)
+        assert.ok(Math.abs(row.right - m.grid.right) < 1, `${label}: row ${index + 1} right edge`)
+        if (index > 0)
+          assert.ok(
+            Math.abs(row.top - details.rowBoundaries[index - 1].bottom - m.expectedGap) < 1,
+            `${label}: row ${index + 1} gap`,
+          )
+        for (const [i, item] of row.items.entries()) {
+          assert.ok(Math.abs(item.width - width) < 1, `${label}: ${item.id} width`)
+          assert.ok(
+            Math.abs(item.x - m.grid.x - i * (width + m.expectedGap)) < 1,
+            `${label}: ${item.id} gap`,
+          )
+        }
+      }
       for (const c of details.cards) {
         assert.ok(c.scrollHeight <= c.clientHeight + 1, JSON.stringify(c))
         assert.ok(c.scrollWidth <= c.clientWidth + 1, JSON.stringify(c))
@@ -279,12 +306,16 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
           ).toHaveCount(0)
         }
         await expect(page.locator('[data-module="services"] .monitor-row')).toHaveCount(8)
-        await expect(page.locator('[data-module="services"] footer')).toContainText(
-          '全部监控：4 项异常',
-        )
-        await expect(page.locator('[data-module="services"] .module-body')).not.toContainText(
-          '全部监控',
-        )
+        await expect(
+          page.locator('[data-module="services"] footer').getByRole('status', {
+            name: '全部监控状态',
+          }),
+        ).toContainText('待确认 12')
+        await expect(
+          page.locator('[data-module="services"] .module-body').getByRole('status', {
+            name: '全部监控状态',
+          }),
+        ).toHaveCount(0)
         await expect(page.locator('[data-module="devices"] .device-row')).toHaveCount(4)
         assert.ok(result.quotes.every((q) => q.chartWidth >= 120))
       }
@@ -377,25 +408,38 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
           assert.equal(result.scroll, 0, result.label)
         if (count === 7 && links && mode !== 'off')
           await capture(page, resolve(evidence, `${prefix}-7-${mode}-${width}x${height}.png`))
-        if (count > 7)
-          await page.evaluate((restore) => {
-            document.querySelector('[data-module="future-fixture"]').remove()
-            const grid = document.querySelector('.dashboard-grid')
-            for (const [key, value] of restore.attributes) grid.setAttribute(key, value)
-            grid
-              .querySelectorAll('[data-layout-role="business"]')
-              .forEach((el, i) => el.setAttribute('style', restore.styles[i]))
-          }, fixtureRestore)
       }
   }
-  for (const width of [1440, 768, 320]) {
+  for (const [width, capacity, counts] of [
+    [1440, 4, [0, 1, 2, 3, 5, 6, 7, 9, 10, 11]],
+    [1280, 3, [1, 2, 4, 5, 7, 8]],
+    [1180, 3, [7, 8]],
+    [813, 2, [1, 3, 5, 7]],
+    [320, 1, [0, 1, 3, 7]],
+  ]) {
     await page.setViewportSize({ width, height: 900 })
-    for (const count of [0, 1, 2, 3]) {
-      await render(count, 'page')
-      const result = await inspect(`small-dashboard-${width}-${count}`)
-      if (count === 1) assert.ok(result.grid.width <= 720)
-      const capacity = result.grid.width >= 1328 ? 4 : result.grid.width >= 700 ? 2 : 1
-      assert.equal(result.columnCount, dashboardPlan(count, capacity, true).columns)
+    for (const count of counts) {
+      for (const links of [true, false]) {
+        await render(count, 'page', links)
+        const result = await inspect(`row-fill-${width}-${count}-${links}`)
+        const plan = dashboardPlan(
+          count,
+          capacity,
+          links,
+          width === 1180 ? 'strip-single-tail' : 'fill',
+        )
+        const shared = links && plan.links !== 'strip'
+        const entries = count + Number(shared)
+        const expectedRows = Array.from({ length: Math.ceil(entries / plan.columns) }, (_, i) =>
+          Math.min(plan.columns, entries - i * plan.columns),
+        )
+        if (links && !shared) expectedRows.push(1)
+        assert.equal(result.columnCount, plan.columns)
+        assert.deepEqual(
+          result.rowBoundaries.map((row) => row.items.length),
+          expectedRows,
+        )
+      }
     }
   }
   for (const [width, expectedColumns, expectedRows] of [
@@ -446,7 +490,7 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
       if (count === 4) {
         const name =
           width === 1180
-            ? 'space-322'
+            ? 'space-331-strip'
             : expectedColumns === 3
               ? 'space-331'
               : expectedColumns === 4
@@ -472,7 +516,7 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
       return rows
     }, {}),
   )
-  assert.deepEqual(rowSizes, [3, 2, 2])
+  assert.deepEqual(rowSizes, [3, 3, 1])
   for (const row of withoutLinks.rowBoundaries) {
     assert.ok(Math.abs(row.left - withoutLinks.grid.x) < 1)
     assert.ok(Math.abs(row.right - withoutLinks.grid.right) < 1)

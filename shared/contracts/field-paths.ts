@@ -68,7 +68,16 @@ export const FIELD_MODEL: Record<ModuleId, FieldNode> = {
         {
           id: null,
           windows: array(
-            leaf('id', 'label', 'remainingPercent', 'resetAt', 'observedAt', 'basis', 'status'),
+            leaf(
+              'id',
+              'label',
+              'remainingPercent',
+              'resetAt',
+              'windowMinutes',
+              'observedAt',
+              'basis',
+              'status',
+            ),
             true,
           ),
         },

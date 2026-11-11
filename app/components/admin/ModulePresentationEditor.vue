@@ -1,0 +1,113 @@
+<script setup lang="ts">
+import type { ModuleSettings } from '../../../shared/contracts/config'
+import {
+  CODEX_RINGS,
+  DEFAULT_CODEX_GUEST,
+  DEFAULT_CODEX_SLOTS,
+  RING_LABELS,
+  type CodexRingId,
+  type DisplayPolicy,
+} from '../../../shared/domain/codex-rings'
+const model = defineModel<ModuleSettings>({ required: true })
+const visibility = { full: '完整显示', masked: '遮蔽', hidden: '隐藏' } as const
+const codex = computed(() => model.value.presentation?.codex)
+const slots = computed(() => codex.value?.slots ?? DEFAULT_CODEX_SLOTS)
+const tailnetIp = computed(() =>
+  model.value.ipVisibility === 'hidden'
+    ? 'all-hidden'
+    : (model.value.presentation?.tailnetIp ??
+      (model.value.ipVisibility === 'public' ? 'full' : 'masked')),
+)
+function setSlot(index: 0 | 1, id: CodexRingId) {
+  if (!CODEX_RINGS.includes(id) || slots.value[1 - index] === id) return
+  const next: [CodexRingId, CodexRingId] = [...slots.value]
+  next[index] = id
+  model.value.presentation = {
+    codex: { slots: next, guest: { ...DEFAULT_CODEX_GUEST, ...codex.value?.guest } },
+  }
+}
+function setRingPolicy(id: CodexRingId, policy: DisplayPolicy) {
+  model.value.presentation = {
+    codex: {
+      slots: [...slots.value],
+      guest: { ...DEFAULT_CODEX_GUEST, ...codex.value?.guest, [id]: policy },
+    },
+  }
+}
+function setTailnetIp(policy: DisplayPolicy | 'all-hidden') {
+  model.value.ipVisibility = policy === 'all-hidden' ? 'hidden' : 'admin'
+  model.value.presentation = {
+    ...model.value.presentation,
+    tailnetIp: policy === 'all-hidden' ? 'hidden' : policy,
+  }
+}
+</script>
+<template>
+  <div v-if="model.id === 'tailscale'" class="admin-fields">
+    <VarSelect
+      :model-value="model.presentation?.tailnetName ?? 'full'"
+      aria-label="Tailscale 访客节点名称"
+      placeholder="访客节点名称"
+      variant="outlined"
+      @update:model-value="
+        (value) => (model.presentation = { ...model.presentation, tailnetName: value })
+      "
+    >
+      <VarOption v-for="(label, value) in visibility" :key="value" :label="label" :value="value" />
+    </VarSelect>
+    <VarSelect
+      :model-value="tailnetIp"
+      aria-label="Tailscale IP 显示"
+      placeholder="访客 IP 显示"
+      variant="outlined"
+      @update:model-value="setTailnetIp"
+    >
+      <VarOption label="显示" value="full" />
+      <VarOption label="登录后显示（访客遮蔽）" value="masked" />
+      <VarOption label="访客隐藏" value="hidden" />
+      <VarOption label="所有人隐藏" value="all-hidden" />
+    </VarSelect>
+  </div>
+  <template v-else-if="model.id === 'codex'">
+    <div class="admin-fields">
+      <VarSelect
+        v-for="index in [0, 1] as const"
+        :key="index"
+        :model-value="slots[index]"
+        :aria-label="index === 0 ? 'Codex 左侧圆环' : 'Codex 右侧圆环'"
+        :placeholder="index === 0 ? '左侧圆环' : '右侧圆环'"
+        variant="outlined"
+        @update:model-value="(value) => setSlot(index, value)"
+      >
+        <VarOption
+          v-for="id in CODEX_RINGS"
+          :key="id"
+          :label="RING_LABELS[id]"
+          :value="id"
+          :disabled="slots[1 - index] === id"
+        />
+      </VarSelect>
+    </div>
+    <div class="admin-fields">
+      <VarSelect
+        v-for="id in CODEX_RINGS"
+        :key="id"
+        :model-value="codex?.guest[id] ?? DEFAULT_CODEX_GUEST[id]"
+        :aria-label="`访客：${RING_LABELS[id]}`"
+        :placeholder="`访客：${RING_LABELS[id]}`"
+        variant="outlined"
+        @update:model-value="(value) => setRingPolicy(id, value)"
+      >
+        <VarOption
+          v-for="(label, value) in visibility"
+          :key="value"
+          :label="label"
+          :value="value"
+        />
+      </VarSelect>
+    </div>
+  </template>
+  <p v-if="model.id === 'tailscale' || model.id === 'codex'" class="admin-note">
+    访客设置仅在模块公开时生效，并受下方字段权限限制。
+  </p>
+</template>

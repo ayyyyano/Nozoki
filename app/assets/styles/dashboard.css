@@ -276,11 +276,6 @@ p {
   .dashboard-grid > [data-layout-role='business'] {
     grid-column: span var(--medium-span, 6);
   }
-  .dashboard-grid[data-business-count='1'] {
-    width: 100%;
-    max-width: 720px;
-    margin-inline: auto;
-  }
   .dashboard-grid:is([data-medium-links='cell'], [data-medium-links='tail']) {
     --navigation-fixed-columns: 2;
     --navigation-last-span: 1 / -1;
@@ -301,7 +296,7 @@ p {
     --navigation-last-span: 1 / -1;
   }
 }
-/* Wider thirds leave room for the compact summaries; narrower thirds pair the tail rows. */
+/* Wider thirds allow navigation to share a row with a single remaining business card. */
 @container dashboard (min-width: 1160px) {
   .dashboard-grid[data-wide-links] {
     --dashboard-columns: var(--wide-columns);
@@ -818,21 +813,44 @@ p {
 }
 .tailnet-list {
   display: grid;
-  gap: 14px;
-  margin-top: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
 }
 .tailnet-device {
-  min-width: 0;
-}
-.tailnet-device-heading {
-  display: flex;
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr);
+  gap: 6px;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-.tailnet-device h3 {
-  font-size: 14px;
   min-width: 0;
+}
+.tailnet-device .monitor-indicator {
+  align-self: start;
+  margin-block-start: 5px;
+}
+.tailnet-copy {
+  min-width: 0;
+}
+.tailnet-copy h3,
+.tailnet-address {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tailnet-copy h3 {
+  font-size: 12px;
+  line-height: 1.35;
+}
+.tailnet-list-detail {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.tailnet-list-detail .tailnet-device {
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+}
+.tailnet-list-detail h3,
+.tailnet-list-detail .tailnet-address {
+  overflow: visible;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 .tailnet-connection {
@@ -850,13 +868,70 @@ p {
   color: var(--n-muted);
 }
 .tailnet-address {
-  margin-top: 4px;
-  font-size: 12px;
-  overflow-wrap: anywhere;
+  color: var(--n-muted);
+  font-size: 10px;
+  line-height: 1.35;
   font-variant-numeric: tabular-nums;
 }
 .tailnet-device small {
   font-size: 11px;
+}
+.codex-ring-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+  padding-block: 10px 4px;
+}
+.codex-ring-grid:has(> :only-child),
+.tailnet-list:has(> :only-child) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.codex-ring-detail {
+  padding-block: 0 16px;
+}
+.codex-ring {
+  text-align: center;
+  min-width: 0;
+}
+.codex-ring-meter {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  margin-inline: auto;
+  inline-size: 76px;
+  block-size: 76px;
+  border-radius: 50%;
+}
+.codex-ring-meter:not(:has(.var-progress)) {
+  border: 5px solid var(--n-outline);
+}
+.codex-ring-meter .var-progress,
+.codex-ring-meter strong {
+  grid-area: 1 / 1;
+}
+.codex-ring-meter strong {
+  z-index: 1;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.codex-ring-meter .codex-ring-placeholder {
+  color: var(--n-muted);
+  font-size: 12px;
+}
+.codex-ring-label {
+  margin-block-start: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.codex-ring small {
+  display: block;
+  font-size: 11px;
+  color: var(--n-muted);
+}
+.module-detail-content [aria-label='账户与用量'] > * + * {
+  margin-block-start: 10px;
 }
 .links-module {
   min-width: 0;
@@ -981,6 +1056,23 @@ p {
   display: flex;
   flex-wrap: wrap;
   gap: 0 6px;
+}
+.monitor-list-detail {
+  grid-template-columns: minmax(0, 1fr);
+}
+.monitor-list-detail .monitor-row {
+  align-items: start;
+  padding-block: 6px;
+}
+.monitor-list-detail .monitor-indicator {
+  margin-block-start: 7px;
+}
+.monitor-list-detail .monitor-copy h3 {
+  font-size: 15px;
+}
+.monitor-list-detail .monitor-meta {
+  color: var(--n-muted);
+  overflow-wrap: anywhere;
 }
 .monitor-indicator {
   width: 7px;
@@ -1513,6 +1605,17 @@ p {
 .module-body .monitor-state {
   font-size: 11px;
   line-height: 1.35;
+}
+@container (max-width: 260px) {
+  .module-body .monitor-row {
+    grid-template-columns: 7px minmax(0, 1fr) auto;
+  }
+  .module-body .monitor-state {
+    grid-column: auto;
+    margin-left: auto;
+    text-align: right;
+    max-width: 4em;
+  }
 }
 .module-body .balance-history {
   margin: 4px 0 0;

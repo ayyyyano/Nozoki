@@ -15,7 +15,7 @@
   function dt(t) {
     return ((t = t % 360), t < 0 && (t = t + 360), t)
   }
-  function N(t) {
+  function V(t) {
     return ((t = t % 360), t < 0 && (t = t + 360), t)
   }
   function Dt(t, e) {
@@ -79,13 +79,13 @@
   }
   function xt(t) {
     let e = Zt(t)[1]
-    return 116 * Vt(e / 100) - 16
+    return 116 * Nt(e / 100) - 16
   }
   function _(t) {
     return 100 * Qt((t + 16) / 116)
   }
   function it(t) {
-    return Vt(t / 100) * 116 - 16
+    return Nt(t / 100) * 116 - 16
   }
   function Q(t) {
     let e = t / 255
@@ -102,7 +102,7 @@
   function Lt() {
     return Xt
   }
-  function Vt(t) {
+  function Nt(t) {
     let e = 0.008856451679035631,
       r = 24389 / 27
     return t > e ? Math.pow(t, 1 / 3) : (r * t + 16) / 116
@@ -515,7 +515,7 @@
     }
     static solveToInt(e, r, n) {
       if (r < 1e-4 || n < 1e-4 || n > 99.9999) return Ht(n)
-      e = N(e)
+      e = V(e)
       let o = (e / 180) * Math.PI,
         i = _(n),
         s = t.findResultByJ(o, r, i)
@@ -645,7 +645,7 @@
       return t.from(o.hue, o.chroma, it(n[1]))
     }
   }
-  var V = class t {
+  var N = class t {
     static ratioOfTones(e, r) {
       return ((e = rt(0, 100, e)), (r = rt(0, 100, r)), t.ratioOfYs(_(e), _(r)))
     }
@@ -754,9 +754,9 @@
           C = y.contrastCurve.get(e.contrastLevel),
           T = f.contrastCurve.get(e.contrastLevel),
           M = y.tone(e),
-          x = V.ratioOfTones(u, M) >= C ? M : t.foregroundTone(u, C),
+          x = N.ratioOfTones(u, M) >= C ? M : t.foregroundTone(u, C),
           H = f.tone(e),
-          A = V.ratioOfTones(u, H) >= T ? H : t.foregroundTone(u, T)
+          A = N.ratioOfTones(u, H) >= T ? H : t.foregroundTone(u, T)
         return (
           r && ((x = t.foregroundTone(u, C)), (A = t.foregroundTone(u, T))),
           (A - x) * g >= s ||
@@ -782,20 +782,20 @@
         let o = this.background(e).getTone(e),
           i = this.contrastCurve.get(e.contrastLevel)
         if (
-          (V.ratioOfTones(o, n) >= i || (n = t.foregroundTone(o, i)),
+          (N.ratioOfTones(o, n) >= i || (n = t.foregroundTone(o, i)),
           r && (n = t.foregroundTone(o, i)),
           this.isBackground &&
             50 <= n &&
             n < 60 &&
-            (V.ratioOfTones(49, o) >= i ? (n = 49) : (n = 60)),
+            (N.ratioOfTones(49, o) >= i ? (n = 49) : (n = 60)),
           this.secondBackground)
         ) {
           let [s, c] = [this.background, this.secondBackground],
             [l, h] = [s(e).getTone(e), c(e).getTone(e)],
             [u, d] = [Math.max(l, h), Math.min(l, h)]
-          if (V.ratioOfTones(u, n) >= i && V.ratioOfTones(d, n) >= i) return n
-          let y = V.lighter(u, i),
-            f = V.darker(d, i),
+          if (N.ratioOfTones(u, n) >= i && N.ratioOfTones(d, n) >= i) return n
+          let y = N.lighter(u, i),
+            f = N.darker(d, i),
             b = []
           return (
             y !== -1 && b.push(y),
@@ -815,10 +815,10 @@
       }
     }
     static foregroundTone(e, r) {
-      let n = V.lighterUnsafe(e, r),
-        o = V.darkerUnsafe(e, r),
-        i = V.ratioOfTones(n, e),
-        s = V.ratioOfTones(o, e)
+      let n = N.lighterUnsafe(e, r),
+        o = N.darkerUnsafe(e, r),
+        i = N.ratioOfTones(n, e),
+        s = N.ratioOfTones(o, e)
       if (t.tonePrefersLightForeground(e)) {
         let l = Math.abs(i - s) < 0.1 && i < r && s < r
         return i >= r || i >= s || l ? n : o
@@ -1402,12 +1402,12 @@
       let o = e.hue
       if (r.length !== n.length)
         throw new Error(`mismatch between hue length ${r.length} & rotations ${n.length}`)
-      if (n.length === 1) return N(e.hue + n[0])
+      if (n.length === 1) return V(e.hue + n[0])
       let i = r.length
       for (let s = 0; s <= i - 2; s++) {
         let c = r[s],
           l = r[s + 1]
-        if (c < o && o < l) return N(o + n[s])
+        if (c < o && o < l) return V(o + n[s])
       }
       return o
     }
@@ -1587,7 +1587,7 @@
         variant: B.EXPRESSIVE,
         contrastLevel: n,
         isDark: r,
-        primaryPalette: P.fromHueAndChroma(N(e.hue + 240), 40),
+        primaryPalette: P.fromHueAndChroma(V(e.hue + 240), 40),
         secondaryPalette: P.fromHueAndChroma(O.getRotatedHue(e, t.hues, t.secondaryRotations), 24),
         tertiaryPalette: P.fromHueAndChroma(O.getRotatedHue(e, t.hues, t.tertiaryRotations), 32),
         neutralPalette: P.fromHueAndChroma(e.hue + 15, 8),
@@ -1607,7 +1607,7 @@
         isDark: r,
         primaryPalette: P.fromHueAndChroma(e.hue, 36),
         secondaryPalette: P.fromHueAndChroma(e.hue, 16),
-        tertiaryPalette: P.fromHueAndChroma(N(e.hue + 60), 24),
+        tertiaryPalette: P.fromHueAndChroma(V(e.hue + 60), 24),
         neutralPalette: P.fromHueAndChroma(e.hue, 6),
         neutralVariantPalette: P.fromHueAndChroma(e.hue, 8),
       })

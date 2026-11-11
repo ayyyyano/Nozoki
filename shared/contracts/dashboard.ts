@@ -1,4 +1,5 @@
 import type { DeviceState } from '../device-state/types.ts'
+import type { CodexRingView } from '../domain/codex-rings.ts'
 export const MODULE_IDS = [
   'deepseek',
   'devices',
@@ -67,9 +68,12 @@ export interface TailscaleData {
     lastSeen: string | null
     addresses: string[]
     addressesHidden?: boolean
+    addressLabel?: string
   }[]
 }
 export interface CodexData {
+  /** Present only in dashboard projections, not in stored provider snapshots. */
+  ringView?: CodexRingView
   accounts?: {
     id: string
     provider: 'codex'
@@ -116,6 +120,7 @@ export interface CodexData {
         label: string
         remainingPercent: Decimal | null
         resetAt: string | null
+        windowMinutes?: number
         observedAt?: string | null
         basis?: 'passive_headers' | 'reviewed_plugin'
         status?: 'ok' | 'stale'
@@ -180,6 +185,7 @@ export interface LinksData {
 }
 export interface Monitor {
   id: string
+  displayId?: string | null
   name: string
   state: 'up' | 'down' | 'maintenance' | 'pending' | 'unknown'
   latencyMs: number | null

@@ -17,6 +17,7 @@ export async function measure(page) {
     }))
     const list = document.querySelector('.quote-list')
     const style = getComputedStyle(grid)
+    const scale = grid.getBoundingClientRect().width / parseFloat(style.width)
     const columns = style.gridTemplateColumns
       .split(' ')
       .map(parseFloat)
@@ -42,7 +43,7 @@ export async function measure(page) {
       columnEnds: columnXs.map((x) =>
         Math.max(...cards.filter((c) => Math.abs(c.x - x) < 1).map((c) => c.bottom)),
       ),
-      expectedGap: parseFloat(style.columnGap),
+      expectedGap: parseFloat(style.columnGap) * scale,
       columnGaps,
       topBaseline: cards.slice(0, columns.length).map((c) => c.y),
       bottomPadding: cards.length

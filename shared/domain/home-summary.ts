@@ -1,6 +1,15 @@
 import type { DataSnapshot, Device, Monitor, Quote, ServicesData } from '../contracts/dashboard.ts'
 
 export const HOME_LIMITS = { services: 8, devices: 4, links: 4, quotes: 2 } as const
+export function monitorName(name: unknown, fallback: string) {
+  return typeof name === 'string' && name.length <= 500 ? name.trim() || fallback : fallback
+}
+export function monitorCode(id: string) {
+  return id.slice(id.indexOf('/') + 1)
+}
+export function monitorLatency(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
 export type ServiceSelection = { sourceId: string; monitorId: string }
 export function monitorHomeIds(monitors: Pick<Monitor, 'id'>[], selected?: ServiceSelection[]) {
   if (selected === undefined) return undefined
@@ -9,9 +18,12 @@ export function monitorHomeIds(monitors: Pick<Monitor, 'id'>[], selected?: Servi
     .filter((s) => s.monitorId.startsWith(s.sourceId + '/') && visible.has(s.monitorId))
     .map((s) => s.monitorId)
 }
-export function serviceSummary(snapshot: DataSnapshot<ServicesData>) {
+export function serviceSummary(snapshot: DataSnapshot<ServicesData>, now?: number) {
   const all = snapshot.data?.monitors ?? []
   const byId = new Map(all.map((m) => [m.id, m]))
+  const states = all.map((m) =>
+    now === undefined ? m.state : monitorDisplayState(m, snapshot, now),
+  )
   return {
     items:
       snapshot.homeItems === undefined
@@ -20,19 +32,32 @@ export function serviceSummary(snapshot: DataSnapshot<ServicesData>) {
             .flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []))
             .slice(0, HOME_LIMITS.services),
     total: all.length,
-    down: all.filter((m) => m.state === 'down').length,
-    unknown: all.filter((m) => m.state === 'unknown' || m.state === 'pending').length,
+    down: states.filter((state) => state === 'down').length,
+    unknown: states.filter((state) => ['unknown', 'pending', 'stale'].includes(state)).length,
   }
 }
 export function staleTime(at: string | null | undefined, now: number, lifetime: number) {
   return !!at && Number.isFinite(Date.parse(at)) && now - Date.parse(at) > lifetime
 }
-export function monitorStale(monitor: Monitor, snapshot: DataSnapshot<ServicesData>, now: number) {
+type MonitorSnapshot = Pick<
+  DataSnapshot<ServicesData>,
+  'status' | 'expiresAt' | 'collectedAt' | 'partialFailures'
+>
+export function monitorStale(monitor: Monitor, snapshot: MonitorSnapshot, now: number) {
   const lifetime =
     snapshot.expiresAt && snapshot.collectedAt
       ? Date.parse(snapshot.expiresAt) - Date.parse(snapshot.collectedAt)
       : 600000
   return staleTime(monitor.checkedAt, now, Math.max(60000, lifetime))
+}
+export function monitorDisplayState(
+  monitor: Monitor,
+  snapshot: MonitorSnapshot,
+  now: number,
+): Monitor['state'] | 'stale' {
+  if (snapshot.status === 'stale' || monitorStale(monitor, snapshot, now)) return 'stale'
+  if (snapshot.status !== 'ok' && !snapshot.partialFailures) return 'unknown'
+  return monitor.state ?? 'unknown'
 }
 export function deviceSummary(devices: Device[]) {
   return devices.slice(0, HOME_LIMITS.devices)

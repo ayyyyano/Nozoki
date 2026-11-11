@@ -22,21 +22,12 @@ export function storageMode(columns: Record<string, unknown>[]): StorageMode {
 }
 
 export async function requireWritableStorage(db: Database): Promise<void> {
+  const modules = (await db.prepare('PRAGMA table_info(dashboard_modules)').all()).results
   if (
-    !(await db.prepare('PRAGMA table_info(dashboard_modules)').all()).results.some(
-      (c) => c.name === 'guest_blur',
+    storageMode(modules) !== 'ready' ||
+    !['guest_blur', 'home_services_json', 'presentation_json'].every((name) =>
+      modules.some((c) => c.name === name),
     )
-  )
-    throw new DataLayerError('MIGRATIONS_REQUIRED')
-  if (
-    !(await db.prepare('PRAGMA table_info(dashboard_modules)').all()).results.some(
-      (c) => c.name === 'home_services_json',
-    )
-  )
-    throw new DataLayerError('MIGRATIONS_REQUIRED')
-  if (
-    storageMode((await db.prepare('PRAGMA table_info(dashboard_modules)').all()).results) !==
-    'ready'
   )
     throw new DataLayerError('MIGRATIONS_REQUIRED')
   const columns = (await db.prepare('PRAGMA table_info(integrations)').all()).results

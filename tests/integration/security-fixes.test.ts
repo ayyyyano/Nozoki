@@ -523,7 +523,7 @@ test('phase 02 security fixes on isolated real workerd D1', async (t) => {
         (await db.prepare('SELECT count(*) n FROM integration_snapshot_views').first()).n,
         3,
       )
-      const result = await readGuestDashboard(db),
+      const result = await readGuestDashboard(db, new Date(now)),
         wire = JSON.stringify(result)
       for (const marker of [
         'private.account',
@@ -534,7 +534,10 @@ test('phase 02 security fixes on isolated real workerd D1', async (t) => {
         'private.monitor',
       ])
         assert.ok(!wire.includes(marker), marker)
-      assert.ok(wire.includes('PUBLIC_WINDOW'))
+      // Guests receive only the aggregated ring projection; no raw quota field survives the wire.
+      assert.ok(!wire.includes('PUBLIC_WINDOW'))
+      assert.ok(!wire.includes('remainingPercent'))
+      assert.ok(wire.includes('"ringView"'))
       assert.deepEqual(result.summary, { services: { up: 1, down: 0 } })
       assert.ok(result.modules.find((m) => m.id === 'devices').snapshot.data.devices.length)
       const before = await allRows()

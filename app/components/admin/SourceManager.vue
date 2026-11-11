@@ -228,11 +228,14 @@ defineExpose({
           @click="choose(preset)"
         >
           <CommonAppIcon :name="preset.icon" :size="24" /><span
-            ><strong>{{ preset.name }}</strong
+            ><strong
+              >{{ preset.name }}{{ preset.maturity === 'experimental' ? ' · 实验性' : '' }}</strong
             ><small>{{
               presetAlreadyAdded(preset, model)
                 ? '已添加，可在列表中启用或停用'
-                : preset.description
+                : preset.maturity === 'experimental'
+                  ? '尚未完成真实实例兼容性验证。'
+                  : preset.description
             }}</small></span
           ><CommonAppIcon v-if="presetAlreadyAdded(preset, model)" name="check" :size="18" />
         </button>

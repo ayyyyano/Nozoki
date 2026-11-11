@@ -763,18 +763,10 @@ onBeforeRouteLeave(() => {
                   aria-label="DeepSeek 未登录时模糊展示"
                 />未登录时模糊展示余额（保留卡片）
               </label>
-              <VarSelect
-                v-if="m.id === 'tailscale'"
-                v-model="m.ipVisibility"
-                aria-label="Tailscale IP 显示"
-                placeholder="IP 显示"
-                variant="outlined"
-              >
-                <VarOption label="显示" value="public" /><VarOption
-                  label="不显示"
-                  value="hidden"
-                /><VarOption label="登录后显示" value="admin" />
-              </VarSelect>
+              <AdminModulePresentationEditor
+                v-if="m.id === 'tailscale' || m.id === 'codex'"
+                v-model="draft.modules[index]!"
+              />
               <p v-if="Object.values(SOURCE_MODULES).includes(m.id)" class="admin-note">
                 {{ moduleSources(m) }}
               </p>

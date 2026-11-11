@@ -32,36 +32,25 @@ export function dashboardPlan(
   businessCount: number,
   capacity: 1 | 2 | 3 | 4,
   linksVisible: boolean,
-  preference: 'fill' | 'balanced' = 'fill',
+  navigation: 'fill' | 'strip-single-tail' = 'fill',
 ) {
   const count = Math.max(0, Math.trunc(businessCount))
   const columns = Math.min(capacity, Math.max(1, count), count === 4 ? 2 : count < 7 ? 3 : capacity)
   const remainder = count % columns
-  const pairedTail =
-    columns === 3 && count >= 7 && remainder === 1 && (!linksVisible || preference === 'balanced')
-  const links =
-    linksVisible && !pairedTail && count >= 5 && columns > 1 && remainder
-      ? remainder === columns - 1
-        ? ('cell' as const)
-        : ('tail' as const)
-      : ('strip' as const)
+  const compactStrip = columns === 3 && remainder === 1 && navigation === 'strip-single-tail'
+  const sharesRow = linksVisible && count >= 5 && remainder > 0 && !compactStrip
+  const links = sharesRow
+    ? remainder === columns - 1
+      ? ('cell' as const)
+      : ('tail' as const)
+    : ('strip' as const)
   const businessSpans = Array<number>(count).fill(12 / columns)
-  let linksSpan = 12
-  if (pairedTail) {
-    businessSpans.fill(6, count - 4)
-  } else if (remainder) {
-    if (links !== 'strip') {
-      linksSpan = 12 / (remainder + 1)
-      businessSpans.fill(linksSpan, count - remainder)
-    } else if (remainder > 1) {
-      businessSpans.fill(12 / remainder, count - remainder)
-    }
-  }
+  const tailSpan = remainder ? 12 / (remainder + Number(sharesRow)) : 12
+  if (remainder) businessSpans.fill(tailSpan, count - remainder)
   return {
     columns,
     links,
-    linksSpan,
+    linksSpan: sharesRow ? tailSpan : 12,
     businessSpans,
-    ...(pairedTail ? { businessTail: 'pairs' as const } : {}),
   }
 }

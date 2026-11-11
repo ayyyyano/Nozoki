@@ -4,7 +4,7 @@ const props = defineProps<{ businessCount: number; linksVisible: boolean }>()
 const medium = computed(() => dashboardPlan(props.businessCount, 2, props.linksVisible))
 const wide = computed(() => dashboardPlan(props.businessCount, 3, props.linksVisible))
 const compactWide = computed(() =>
-  dashboardPlan(props.businessCount, 3, props.linksVisible, 'balanced'),
+  dashboardPlan(props.businessCount, 3, props.linksVisible, 'strip-single-tail'),
 )
 const expanded = computed(() => dashboardPlan(props.businessCount, 4, props.linksVisible))
 function businessStyle(index: number) {
@@ -26,7 +26,6 @@ function businessStyle(index: number) {
       :data-wide-links="wide.links"
       :data-compact-wide-links="compactWide.links"
       :data-expanded-links="expanded.links"
-      :data-wide-business-tail="wide.businessTail"
       :style="{
         '--medium-columns': medium.columns,
         '--wide-columns': wide.columns,

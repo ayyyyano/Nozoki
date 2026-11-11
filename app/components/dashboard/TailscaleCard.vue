@@ -1,59 +1,31 @@
 <script setup lang="ts">
 import type { DataSnapshot, TailscaleData } from '../../../shared/contracts/dashboard'
-import { tailscaleConnectionLabel } from '../../../shared/tailscale'
-import { formatTimestamp } from '../../../shared/domain/format'
+import { tailnetSummary } from '../../../shared/domain/tailnet-presentation'
 const props = defineProps<{ snapshot: DataSnapshot<TailscaleData>; title: string }>()
-const timezone = useDashboardTimezone()
-const now = useLocalClock()
-const stale = computed(
-  () =>
-    props.snapshot.status !== 'ok' ||
-    (props.snapshot.expiresAt !== null && Date.parse(props.snapshot.expiresAt) <= now.value),
-)
+const nodes = computed(() => props.snapshot.data?.devices ?? [])
+const summary = computed(() => tailnetSummary(nodes.value))
 </script>
 <template>
-  <DashboardModuleCard id="tailscale" :title="title" :status="snapshot.status">
+  <DashboardModuleCard
+    id="tailscale"
+    :title="title"
+    :status="snapshot.status"
+    :has-data="nodes.length > 0"
+    :observed-at="nodes.length ? snapshot.collectedAt : null"
+    time-label="采集于"
+    :details="nodes.length > 0"
+  >
     <DashboardDataState
       :configured="snapshot.sourceConfigured"
       :error-code="snapshot.errorCode"
       :status="snapshot.status"
-      :empty="!snapshot.data?.devices.length"
-      :last-success-at="snapshot.lastSuccessAt"
+      :has-data="nodes.length > 0"
+      :empty="!nodes.length"
       compact
     />
-    <div class="tailnet-list">
-      <article
-        v-for="device in snapshot.data?.devices ?? []"
-        :key="device.id"
-        class="tailnet-device"
-      >
-        <div class="tailnet-device-heading">
-          <h3 :title="device.name">{{ device.name }}</h3>
-          <span
-            class="tailnet-connection"
-            :data-state="
-              stale
-                ? 'stale'
-                : device.connectedToControl === true
-                  ? 'up'
-                  : device.connectedToControl === false
-                    ? 'down'
-                    : 'unknown'
-            "
-          >
-            {{ tailscaleConnectionLabel(device.connectedToControl, stale) }}
-          </span>
-        </div>
-        <p class="tailnet-address">
-          IP：<span v-if="device.addressesHidden" aria-label="IP 已隐藏">****</span
-          ><span v-else>{{
-            device.addresses.length ? device.addresses.join(' · ') : '未提供'
-          }}</span>
-        </p>
-        <small v-if="device.connectedToControl !== true && device.lastSeen"
-          >最后出现 {{ formatTimestamp(device.lastSeen, timezone) }}</small
-        >
-      </article>
-    </div>
+    <DashboardTailnetNodes :nodes="summary" :snapshot="snapshot" />
+    <template #details>
+      <DashboardTailnetNodes :nodes="nodes" :snapshot="snapshot" detail />
+    </template>
   </DashboardModuleCard>
 </template>

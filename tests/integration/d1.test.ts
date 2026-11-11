@@ -505,11 +505,22 @@ test('phase 02 uses real local workerd D1, not an SQLite mock', async (t) => {
         sourceId: 'sleepy-test',
         subject: 'services',
         moduleId: 'services',
-        snapshot: snapshot('stale', { monitors }, 'sleepy-test'),
+        snapshot: snapshot('ok', { monitors }, 'sleepy-test'),
         updatedAt: now,
       })
       let result = await readGuestDashboard(db, new Date(now))
       assert.deepEqual(result.summary, { services: { up: 1, down: 0 } })
+      assert.ok(!JSON.stringify(result).includes('PRIVATE_MONITOR'))
+      // A stale snapshot must not present services as healthy.
+      await upsertSnapshot(db, {
+        sourceId: 'sleepy-test',
+        subject: 'services',
+        moduleId: 'services',
+        snapshot: snapshot('stale', { monitors }, 'sleepy-test'),
+        updatedAt: now,
+      })
+      result = await readGuestDashboard(db, new Date(now))
+      assert.deepEqual(result.summary, { services: { up: 0, down: 0 } })
       assert.ok(!JSON.stringify(result).includes('PRIVATE_MONITOR'))
       await upsertSnapshot(db, {
         sourceId: 'sleepy-test',
@@ -664,8 +675,10 @@ test('phase 02 uses real local workerd D1, not an SQLite mock', async (t) => {
       const wire = JSON.stringify(await readGuestDashboard(db, new Date(now)))
       for (const s of ['PRIVATE_SCOPE', 'PRIVATE_WINDOW', 'PRIVATE_ACCOUNT', 'PRIVATE_BASIS'])
         assert.ok(!wire.includes(s))
-      assert.ok(wire.includes('Visible Window'))
-      assert.ok(wire.includes('72.00'))
+      // Guests receive only the aggregated ring projection; the raw quota tree never reaches the wire.
+      assert.ok(!wire.includes('Visible Window'))
+      assert.ok(!wire.includes('remainingPercent'))
+      assert.ok(wire.includes('"ringView"'))
     },
   )
   await check(

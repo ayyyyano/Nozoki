@@ -29,6 +29,7 @@ async function fresh(legacy = false) {
     // This fixture isolates the 0019 source-grant migration; display schema is current.
     db.connection.exec(await readFile('migrations/0020_balance_display.sql', 'utf8'))
     db.connection.exec(await readFile('migrations/0022_home_services.sql', 'utf8'))
+    db.connection.exec(await readFile('migrations/0024_module_presentation.sql', 'utf8'))
   } else await migrateDatabase(db, 'migrations', resolve(folder, 'backups'))
   return db
 }

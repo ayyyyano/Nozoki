@@ -1,6 +1,6 @@
 import type { Config, ModuleSettings } from '../../shared/contracts/config.ts'
 import { canonicalModules } from '../../shared/domain/module-layout.ts'
-import type { DataSnapshot } from '../../shared/contracts/dashboard.ts'
+import type { CodexData, DataSnapshot, Monitor } from '../../shared/contracts/dashboard.ts'
 import type { ModuleId } from '../../shared/contracts/dashboard.ts'
 import { snapshotSchema, DataSchemas } from '../../shared/contracts/snapshots.ts'
 import {
@@ -17,7 +17,8 @@ import { parseFieldPath, pathPrefix } from '../../shared/contracts/field-paths.t
 import { ModuleSettingsSchema } from '../../shared/contracts/config.ts'
 import { DataLayerError } from '../types/database.ts'
 import { withCollectionState } from './collection-dashboard.ts'
-import { monitorHomeIds } from '../../shared/domain/home-summary.ts'
+import { monitorHomeIds, monitorDisplayState } from '../../shared/domain/home-summary.ts'
+import { codexRingProjection, tailnetNodeProjection } from './dashboard-presentation.ts'
 type Json = null | string | number | boolean | Json[] | { [key: string]: Json }
 export interface GuestModule {
   id: ModuleId
@@ -73,12 +74,6 @@ function projectValue(
   rules = fieldRules(module),
 ): Json | undefined {
   if (!allowed(module, path, admin, rules)) return undefined
-  if (
-    module.id === 'tailscale' &&
-    path.includes('addresses') &&
-    (module.ipVisibility === 'hidden' || (module.ipVisibility !== 'public' && !admin))
-  )
-    return undefined
   const g = group(module, path)
   if (g && !allowed(module, [g], admin, rules)) return undefined
   if (module.id === 'deepseek' && path[0] === 'dailyBalances') {
@@ -117,13 +112,8 @@ function projectValue(
       const next = projectValue(v, module, [...path, key], admin, rules)
       if (next !== undefined) out[key] = next
     }
-    if (module.id === 'tailscale' && path[0] === 'devices' && path.length === 2) {
-      out.addressesHidden = !Array.isArray(out.addresses)
-      // A hostname can itself contain an IP. Do not leak a hidden address via its tooltip.
-      if (out.addressesHidden && typeof out.name === 'string' && Array.isArray(value.addresses))
-        for (const address of value.addresses)
-          if (typeof address === 'string') out.name = out.name.replaceAll(address, '****')
-    }
+    if (module.id === 'tailscale' && path[0] === 'devices' && path.length === 2)
+      return tailnetNodeProjection(out, value, admin, module)
     return out
   }
   return value
@@ -272,6 +262,11 @@ async function publicVersion(config: Config, modules: GuestModule[]) {
           kind: m.kind,
           sourceConfigured: m.snapshot?.sourceConfigured ?? false,
           publicShape: publicShape(m.snapshot?.data ?? null),
+          ...(m.id === 'codex'
+            ? {
+                codexHome: (m.snapshot?.data as Partial<CodexData> | null)?.ringView?.home ?? [],
+              }
+            : {}),
           ...(m.snapshot?.homeItems !== undefined ? { homeItems: m.snapshot.homeItems } : {}),
           defaults:
             m.id === 'links'
@@ -364,7 +359,21 @@ async function projectDashboard(state: StoredState, now = new Date(), admin = fa
     const { sourceId: _sourceId, ...safe } = raw
     if (safe.expiresAt && safe.expiresAt < now.toISOString() && safe.status === 'ok')
       safe.status = 'stale'
-    const projected = projectValue(safe.data as Json, m, [], admin)
+    let projected = projectValue(safe.data as Json, m, [], admin)
+    if (m.id === 'codex') {
+      const data = (projected ?? {}) as Partial<CodexData>
+      const ringView = codexRingProjection(
+        data,
+        safe,
+        m,
+        now.getTime(),
+        admin,
+        state.config.integrations.find((i) => i.id === m.sources.main?.sourceId)?.refreshInterval,
+      )
+      // The raw quota tree would re-expose values denied by a ring's independent guest policy.
+      if (!admin) delete data.quota
+      projected = { ...data, ringView } as unknown as Json
+    }
     modules.push({
       id: m.id,
       title: m.title,
@@ -385,13 +394,22 @@ async function projectDashboard(state: StoredState, now = new Date(), admin = fa
       } as Record<string, Json>,
     })
   }
-  const services = modules.find((m) => m.id === 'services' && m.kind === 'data')?.snapshot?.data as
-    { monitors?: { state?: string }[] } | null | undefined
+  const serviceSnapshot = modules.find((m) => m.id === 'services' && m.kind === 'data')?.snapshot
+  const services = serviceSnapshot?.data as { monitors?: Monitor[] } | null | undefined
+  const serviceStates = services?.monitors?.map((monitor) =>
+    monitorDisplayState(
+      monitor,
+      serviceSnapshot as unknown as DataSnapshot<
+        import('../../shared/contracts/dashboard.ts').ServicesData
+      >,
+      now.getTime(),
+    ),
+  )
   const summary = services?.monitors
     ? {
         services: {
-          up: services.monitors.filter((m) => m.state === 'up').length,
-          down: services.monitors.filter((m) => m.state === 'down').length,
+          up: serviceStates!.filter((state) => state === 'up').length,
+          down: serviceStates!.filter((state) => state === 'down').length,
         },
       }
     : {}

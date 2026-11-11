@@ -29,6 +29,8 @@ export function passiveWindows(value: unknown, context: AdapterContext): Window[
     if (used === undefined) continue
     if (!/^(?:0|[1-9]\d?)(?:\.\d{1,12})?$|^100(?:\.0{1,12})?$/.test(used)) continue
     const reset = signals[`x-codex-${kind}-reset-at`]
+    const minutes = signals[`x-codex-${kind}-window-minutes`]
+    const windowMinutes = minutes && /^[1-9]\d{0,5}$/.test(minutes) ? Number(minutes) : 0
     let resetAt: string | null = null
     if (reset !== undefined && /^[1-9]\d{0,11}$/.test(reset)) {
       try {
@@ -42,6 +44,7 @@ export function passiveWindows(value: unknown, context: AdapterContext): Window[
       label: kind === 'primary' ? '主窗口' : '次窗口',
       remainingPercent: decimalDifference('100', used),
       resetAt,
+      ...(windowMinutes > 0 && windowMinutes <= 525600 ? { windowMinutes } : {}),
       observedAt,
       basis: 'passive_headers',
       status:

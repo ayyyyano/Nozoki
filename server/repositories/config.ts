@@ -50,6 +50,7 @@ export async function readStoredState(
       moduleMode === 'ready' &&
       results[5]!.results.some((c) => c.name === 'guest_blur') &&
       results[5]!.results.some((c) => c.name === 'home_services_json') &&
+      results[5]!.results.some((c) => c.name === 'presentation_json') &&
       ['access_json', 'identity_envelope_json'].every((name) =>
         results[6]!.results.some((c) => c.name === name),
       )
@@ -127,6 +128,7 @@ export async function readStoredState(
         sources: parseJson(m.sources_json),
         ...(m.id === 'tailscale' ? { ipVisibility: m.ip_visibility } : {}),
         ...(m.id === 'deepseek' ? { guestBlur: m.guest_blur === 1 } : {}),
+        ...(m.presentation_json == null ? {} : { presentation: parseJson(m.presentation_json) }),
         ...(m.id === 'services' && m.home_services_json != null
           ? { homeServices: parseJson(m.home_services_json) }
           : {}),
@@ -284,8 +286,8 @@ export async function commitConfig(
     statements.push(
       db
         .prepare(
-          `INSERT INTO dashboard_modules(id,enabled,title,sort_order,visibility,guest_behavior,fields_json,sources_json,ip_visibility,guest_blur,home_services_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,title=excluded.title,sort_order=excluded.sort_order,visibility=excluded.visibility,guest_behavior=excluded.guest_behavior,fields_json=excluded.fields_json,sources_json=excluded.sources_json,ip_visibility=excluded.ip_visibility,guest_blur=excluded.guest_blur,home_services_json=excluded.home_services_json`,
+          `INSERT INTO dashboard_modules(id,enabled,title,sort_order,visibility,guest_behavior,fields_json,sources_json,ip_visibility,guest_blur,home_services_json,presentation_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,title=excluded.title,sort_order=excluded.sort_order,visibility=excluded.visibility,guest_behavior=excluded.guest_behavior,fields_json=excluded.fields_json,sources_json=excluded.sources_json,ip_visibility=excluded.ip_visibility,guest_blur=excluded.guest_blur,home_services_json=excluded.home_services_json,presentation_json=excluded.presentation_json`,
         )
         .bind(
           m.id,
@@ -299,6 +301,7 @@ export async function commitConfig(
           m.ipVisibility ?? 'admin',
           Number(m.guestBlur ?? false),
           m.homeServices === undefined ? null : JSON.stringify(m.homeServices),
+          m.presentation === undefined ? null : JSON.stringify(m.presentation),
         ),
     )
   const quoteIds = input.quotes.map((q) => JSON.stringify([q.market, q.symbol, q.provider]))
