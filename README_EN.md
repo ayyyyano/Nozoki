@@ -13,7 +13,7 @@ The interface uses Varlet Material 3 and xicons Material. It supports generated 
 | DeepSeek  | Current balance and a seven-day remaining-balance bar chart, with optional guest masking                  |
 | Devices   | Sleepy status text, identifiable foreground applications, optional battery and external power information |
 | Tailscale | Device names, control-plane connection status and IP visibility based on login                            |
-| Codex     | CLIProxyAPI account status, passive quota observations and daily UTC queue usage                          |
+| Codex     | CLIProxyAPI account status, scheduled quota reads and daily UTC queue usage                               |
 | Activity  | Weekly schedules, multiple periods, templates, date exceptions, countdowns and progress                   |
 | Quotes    | Tencent prices, daily changes, volume and five-day history                                                |
 | Links     | Bookmarks, ordering and Material icons                                                                    |
@@ -271,7 +271,7 @@ The collection environment follows the [Cloudflare deployment version](https://d
 
 An instance's type and protocol are fixed after creation. Changing its address requires approval again and replacement or deletion of credentials bound to the old address. Saved secrets appear as placeholders. Edit opens an empty field for a new value; Delete asks for confirmation and schedules removal for the next save. You can undo deletion before saving. Credentials are encrypted in the database; admin reads return their configuration status. Each configuration supports up to 10 sources.
 
-Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI uses `cliproxy-bridge` / `cliproxy-v8-accounts`, with its Management Key as the Bearer credential. A stable account identity key is generated and stored encrypted. A reverse proxy can allow only `GET v8/management/credentials` and `GET v8/management/observability/usage/queue?count=50`; the latter consumes records and is used only during collection. The admin page accepts registered protocols rather than arbitrary endpoint URLs.
+Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI uses `cliproxy-bridge` / `cliproxy-v8-accounts`, with its Management Key as the Bearer credential. A stable account identity key is generated and stored encrypted. Allow `GET /v8/management/credentials` and `GET /v8/management/observability/usage/queue?count=50` on your reverse proxy. Reading the queue consumes its records and happens during collection. Scheduled quota reads on Workers also need `POST /v8/management/requests/api-call`. This management route can make arbitrary upstream requests, so restrict it at the reverse proxy to Nozoki's fixed method and destination, `GET https://chatgpt.com/backend-api/wham/usage`.
 
 ### Public HTTPS access on Cloudflare
 
@@ -295,11 +295,30 @@ Add a CLIProxyAPI source and enter its Management Key. A key previously held onl
 
 ### Prerequisites for the Codex usage display (CLIProxyAPI side)
 
-Since v6.10.0 CLIProxyAPI no longer ships built-in usage statistics. The only per-request usage source is the in-memory queue `GET /v8/management/observability/usage/queue?count=N`, which pops records as they are read. Before usage can appear, set `observability.usage.usage-statistics-enabled: true` in the CLIProxyAPI `config.yaml` and restart the service.
+Since v6.10.0 CLIProxyAPI no longer ships built-in usage statistics. The only per-request usage source is the in-memory queue `GET /v8/management/observability/usage/queue?count=N`, which pops records as they are read. Before usage can appear, enable statistics and widen the queue retention window in the CLIProxyAPI `config.yaml` `observability.usage` section, then restart the service:
+
+```yaml
+observability:
+  usage:
+    usage-statistics-enabled: true
+    redis-usage-queue-retention-seconds: 3600
+```
+
+Both keys are required: `usage-statistics-enabled` turns on enqueueing; `redis-usage-queue-retention-seconds` keeps each record queued for that many seconds (default 60, maximum 3600). The dashboard waits for its next scheduled run before popping the queue (roughly every 10 minutes at default settings), so with the 60-second default records are pruned before they can ever be read — calls still pass through the proxy and execution counters grow, yet usage stays empty. The retention window must exceed the collection interval; 3600 is recommended.
+
+To change it, add the line inside the `usage:` section with the same 4-space indent as `usage-statistics-enabled` (`observability:` at column 0 → `usage:` indented 2 → keys indented 4), using any editor (e.g. `sudo nano /opt/cli-proxy-api/config.yaml`), or apply it with one command and restart:
+
+```bash
+sudo sed -i 's/^    usage-statistics-enabled: true$/    usage-statistics-enabled: true\n    redis-usage-queue-retention-seconds: 3600/' /opt/cli-proxy-api/config.yaml && sudo systemctl restart cliproxyapi.service
+```
+
+Adjust the path and service name to the actual installation. Restarting clears the in-memory queue and resets the execution counters; a fresh Codex call is needed afterwards to produce collectable records.
 
 Queue limits: records live in memory and are lost when CLIProxyAPI restarts; reading consumes them, so this dashboard must remain the queue's only consumer — do not run another usage statistics service (such as CPA Usage Keeper) against the same instance or records will be split between consumers. The success and failed execution counters also live in runtime memory and reset on restart.
 
-Quota windows are passively observed: they appear automatically when CLIProxyAPI attaches quota signals to the credentials response; this dashboard never sends extra quota queries. Cost estimation is not provided.
+When the CLIProxyAPI source is due, the Worker uses the `auth_index` of one available Codex account to read its ChatGPT quota. CLIProxyAPI keeps and applies the account credential. The source refresh interval and the five-minute Worker Cron determine the polling cadence. Quota changes from direct Codex activity appear in the rings after the next successful read. Daily usage still comes from the CLIProxyAPI queue. Cost estimates are unavailable.
+
+The upstream service may return only some windows. Administrators can see the last recorded value and its original timestamp after it expires. Missing windows wait for upstream data, and quota signals from ordinary model responses can supplement scheduled reads.
 
 ### Codex usage display: dashboard behavior
 

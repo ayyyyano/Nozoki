@@ -13,7 +13,7 @@ Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板�
 | DeepSeek  | 当前余额与近 7 日剩余余额柱状图，可为访客模糊展示         |
 | Devices   | Sleepy 设备状态文字、可确认的前台应用、可选电量和供电信息 |
 | Tailscale | 设备名称、控制面连接状态及可按登录身份隐藏的 Tailnet IP   |
-| Codex     | CLIProxyAPI 账户状态、被动额度观测与 UTC 按日队列用量     |
+| Codex     | CLIProxyAPI 账户状态、定时额度查询与 UTC 按日队列用量     |
 | Activity  | 每周日程、多时段、模板、日期例外、倒计时和进度            |
 | Quotes    | 腾讯行情、日涨跌、成交量与 5 日走势                       |
 | Links     | 常用链接、排序与 Material 图标                            |
@@ -271,14 +271,14 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 
 测试凭证有效期为 10 分钟，绑定当前登录会话、配置版本、来源类型、地址、认证方式、连接参数和凭据。修改地址或凭据后需要重新测试；过期后也需重测。配置被其他窗口更新时，先读取最新版本再处理草稿。更换地址会清除草稿中的旧批准，新目标通过测试并保存后生效。已保存的密钥仅在来源身份、协议、地址和认证方式一致时复用。
 
-| 来源类型                 | 自动匹配模块                                                     |
-| ------------------------ | ---------------------------------------------------------------- |
-| DeepSeek                 | DeepSeek                                                         |
-| Sleepy                   | 设备                                                             |
-| Tailscale                | Tailscale                                                        |
-| CLIProxyAPI              | Codex                                                            |
-| Uptime Kuma、UptimeFlare  | 服务状态，两个来源可同时展示                                     |
-| 腾讯、Yahoo | 自选行情，已启用的腾讯优先；腾讯未配置或停用时选择 Yahoo |
+| 来源类型                 | 自动匹配模块                                             |
+| ------------------------ | -------------------------------------------------------- |
+| DeepSeek                 | DeepSeek                                                 |
+| Sleepy                   | 设备                                                     |
+| Tailscale                | Tailscale                                                |
+| CLIProxyAPI              | Codex                                                    |
+| Uptime Kuma、UptimeFlare | 服务状态，两个来源可同时展示                             |
+| 腾讯、Yahoo              | 自选行情，已启用的腾讯优先；腾讯未配置或停用时选择 Yahoo |
 
 日程安排和常用链接使用本站配置。行情标的跟随当前行情来源；来源发生临时限流或请求失败时保持当前选择。监控来源分别采集，合并时使用各条目的稳定 ID；部分来源失败时显示不可用提示及已经取得的数据。
 
@@ -288,7 +288,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 
 来源创建后类型和协议固定。密钥输入区的星号是占位符，点击「编辑」填写新值。点击删除图标并确认后，凭据会在全局保存时清除；保存前可以撤销。每份配置最多 10 个来源。删除来源会自动解除模块匹配，受保护的余额和导入历史仍会阻止删除，此时可停用来源。
 
-Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cliproxy-bridge` / `cliproxy-v8-accounts`，使用 Management Key 作为 Bearer 凭据。账户身份密钥自动生成并加密保存。反向代理可仅放行 `GET v8/management/credentials` 与 `GET v8/management/observability/usage/queue?count=50`；后者读取即消费，仅正式采集使用。后台不能将任意 URL 当作自定义协议调用。
+Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cliproxy-bridge` / `cliproxy-v8-accounts`，使用 Management Key 作为 Bearer 凭据。账户身份密钥自动生成并加密保存。反向代理应放行 `GET /v8/management/credentials` 和 `GET /v8/management/observability/usage/queue?count=50`。用量队列读取即消费，仅正式采集使用。Worker 上的定时额度查询还需要放行 `POST /v8/management/requests/api-call`。此管理接口可发起任意上游请求，建议在反代处将该路由限制到 Nozoki 发出的固定目标与方法 `GET https://chatgpt.com/backend-api/wham/usage`。
 
 ### Cloudflare 公网 HTTPS 出站
 
@@ -312,11 +312,30 @@ Worker 使用 `fetch` 读取已批准的来源，无需额外服务器、连接�
 
 ### Codex 用量显示的前提（CLIProxyAPI 侧）
 
-CLIProxyAPI 自 v6.10.0 起不再内置用量统计。逐请求用量的唯一出口是内存队列 `GET /v8/management/observability/usage/queue?count=N`，读取即弹出删除。启用用量显示前，需要在 CLIProxyAPI 的 `config.yaml` 设置 `observability.usage.usage-statistics-enabled: true` 并重启服务。
+CLIProxyAPI 自 v6.10.0 起不再内置用量统计。逐请求用量的唯一出口是内存队列 `GET /v8/management/observability/usage/queue?count=N`，读取即弹出删除。启用用量显示前，需要在 CLIProxyAPI 的 `config.yaml` `observability.usage` 段开启统计并调大队列保留时限，然后重启服务：
+
+```yaml
+observability:
+  usage:
+    usage-statistics-enabled: true
+    redis-usage-queue-retention-seconds: 3600
+```
+
+两项缺一不可：`usage-statistics-enabled` 控制记录入队；`redis-usage-queue-retention-seconds` 是记录在队列中的保留秒数，默认仅 60 秒、上限 3600 秒。本站要等下一个采集轮次（默认配置实际约 10 分钟）才弹出队列，默认 60 秒的记录在弹出前就已被清理——表现为调用正常经过代理、执行计数增长，但用量始终为空。保留时限必须大于采集间隔，建议直接取上限 3600。
+
+修改方法：用任意编辑器（如 `sudo nano /opt/cli-proxy-api/config.yaml`）在 `usage:` 段内追加该行，保持与 `usage-statistics-enabled` 相同的 4 格缩进（`observability:` 顶格 → `usage:` 2 格 → 键 4 格）；或一行命令完成并重启：
+
+```bash
+sudo sed -i 's/^    usage-statistics-enabled: true$/    usage-statistics-enabled: true\n    redis-usage-queue-retention-seconds: 3600/' /opt/cli-proxy-api/config.yaml && sudo systemctl restart cliproxyapi.service
+```
+
+路径与服务名按实际安装调整。重启会清空内存队列并使执行计数清零，重启后需发起一次新的 Codex 调用才会产生可采集的记录。
 
 队列限制：记录保存在内存中，CLIProxyAPI 重启会丢失未弹出的记录；读取即消费，本站必须是该队列的唯一消费者——不要再对同一实例运行其他用量统计服务（如 CPA Usage Keeper），否则记录会被分流。执行成功/失败计数同样来自运行内存，服务重启后清零。
 
-配额窗口为被动观测：CLIProxyAPI 在凭据响应附带配额信号时自动显示，本站不发起额外的配额查询。费用估算不提供。
+Worker 在 CLIProxyAPI 来源到期时，用一个可用 Codex 账户的 `auth_index` 定向读取 ChatGPT 额度。查询走管理接口，由 CLIProxyAPI 持有并使用账户凭据。采集频率取决于数据源的刷新间隔和 Worker 的 5 分钟 Cron。直接在 Codex 中产生的额度变化会在下一次成功查询后反映到四环。日用量仍来自 CLIProxyAPI 队列，费用估算仍不可用。
+
+上游可能只返回部分窗口。已有观测会保留原时间，过期时管理员仍可查看上次的数值。缺失的窗口等待上游返回，普通业务响应附带的配额信号仍可用作补充。
 
 ### Codex 用量显示：本站侧
 
@@ -365,7 +384,7 @@ Tailscale 与 Sleepy 是独立模块。Tailscale 默认关闭，默认排序在 
 | 登录提示“暂时无法登录”            | `AUTH_ORIGIN` 与地址栏是否一致、两个登录 Secret 是否添加在运行时设置中                                              |
 | 绑定自定义域名后无法登录          | `AUTH_ORIGIN` 是否已改为自定义域名并重新部署；改前通过 `workers.dev` 地址之外的自定义域名访问时，任何密码都会被拒绝 |
 | 登录提示“邮箱或密码错误”          | 登录邮箱是否与 `ADMIN_EMAIL` 相同，密码是否与 Secret 中设置的值相同                                                 |
-| 数据源显示未配置或目标未批准      | 测试是否通过并保存、凭据是否完整；旧接入需按当前公网 HTTPS 流程重新测试                                                         |
+| 数据源显示未配置或目标未批准      | 测试是否通过并保存、凭据是否完整；旧接入需按当前公网 HTTPS 流程重新测试                                             |
 
 控制台操作参考 Cloudflare 的 [Git 仓库部署](https://developers.cloudflare.com/workers/ci-cd/builds/)、[D1 数据库](https://developers.cloudflare.com/d1/get-started/) 和 [Secret 设置](https://developers.cloudflare.com/workers/configuration/secrets/) 文档。
 
