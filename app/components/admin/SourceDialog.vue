@@ -1,16 +1,22 @@
 <script setup lang="ts">
 const show = defineModel<boolean>('show', { required: true })
-defineProps<{
+const props = defineProps<{
   title: string
   confirm?: string
   danger?: boolean
   busy?: boolean
   blocked?: boolean
+  back?: boolean
 }>()
-const emit = defineEmits<{ confirm: []; closed: [] }>()
+const emit = defineEmits<{ confirm: []; closed: []; back: [] }>()
 const titleId = useId(),
   panel = useTemplateRef<HTMLElement>('panel')
 const focus = useModalFocus(show, panel)
+function dismiss() {
+  if (props.busy) return
+  if (props.back) emit('back')
+  else show.value = false
+}
 function closed() {
   focus.restoreFocus()
   emit('closed')
@@ -21,8 +27,8 @@ function closed() {
     v-model:show="show"
     position="center"
     :default-style="false"
-    :close-on-key-escape="!busy"
-    :close-on-click-overlay="!busy"
+    :close-on-key-escape="!busy && !back"
+    :close-on-click-overlay="!busy && !back"
     @closed="closed"
   >
     <section
@@ -32,19 +38,22 @@ function closed() {
       aria-modal="true"
       :aria-labelledby="titleId"
       tabindex="-1"
-      @keydown.esc="!busy && (show = false)"
+      @keydown.esc="dismiss"
     >
       <header class="source-dialog-heading">
         <h2 :id="titleId">{{ title }}</h2>
-        <VarButton
-          text
-          round
-          class="edge-icon-action edge-icon-action--small"
-          :disabled="busy"
-          aria-label="关闭对话框"
-          @click="show = false"
-          ><CommonAppIcon name="close" :size="20"
-        /></VarButton>
+        <div class="source-dialog-heading-actions">
+          <slot name="headerActions" />
+          <VarButton
+            text
+            round
+            class="edge-icon-action edge-icon-action--small"
+            :disabled="busy"
+            :aria-label="back ? '返回来源配置' : '关闭对话框'"
+            @click="dismiss"
+            ><CommonAppIcon name="close" :size="20"
+          /></VarButton>
+        </div>
       </header>
       <slot />
       <div v-if="confirm" class="admin-actions source-dialog-actions">

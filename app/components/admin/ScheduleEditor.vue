@@ -16,7 +16,6 @@ import {
   type SchedulePeriod,
   type Weekday,
   type WeeklySchedule,
-  type ScheduleLabels,
 } from '../../../shared/schedule'
 import { activityScheduleView, scheduleIssueText } from '../../../shared/domain/schedule-view'
 import { formatTimestamp } from '../../../shared/domain/format'
@@ -43,22 +42,7 @@ const weekdays = [
   ['7', '周日'],
 ] as const
 const custom = computed(() => ('version' in model.value ? model.value : null))
-const labelFields: { key: keyof ScheduleLabels; label: string }[] = [
-  { key: 'active', label: '活动状态文字' },
-  { key: 'break', label: '休息时段状态文字' },
-  { key: 'before', label: '开始前状态文字' },
-  { key: 'after', label: '结束后状态文字' },
-  { key: 'rest', label: '休息日状态文字' },
-  { key: 'free', label: '自由时间状态文字' },
-  { key: 'empty', label: '无安排状态文字' },
-]
-function setLabel(key: keyof ScheduleLabels, text: string) {
-  const labels = { ...model.value.labels }
-  if (text) labels[key] = text
-  else delete labels[key]
-  if (Object.keys(labels).length) model.value.labels = labels
-  else delete model.value.labels
-}
+const id = useId()
 const basic = computed<LegacySchedule>({
   get: () => model.value as LegacySchedule,
   set: (value) => (model.value = value),
@@ -224,6 +208,10 @@ const resolved = computed(() => {
     return null
   }
 })
+const previewPeriods = computed(() => [
+  ...(resolved.value?.carryIn ?? []),
+  ...(resolved.value?.periods ?? []),
+])
 const overrideEnabled = computed({
   get: () => !!custom.value?.override,
   set: (value: boolean) => {
@@ -262,42 +250,40 @@ const overrideEnd = computed({
       ><AdminText v-model="model.timezone" label="IANA 时区" :max="100" />
     </div>
     <p v-if="error" role="alert" class="schedule-error">{{ error }}</p>
-    <details class="admin-details">
-      <summary>状态文字</summary>
-      <div class="admin-fields">
-        <AdminText
-          v-for="field in labelFields"
-          :key="field.key"
-          :model-value="model.labels?.[field.key] ?? ''"
-          :label="field.label"
-          :max="120"
-          @update:model-value="setLabel(field.key, $event)"
-        />
-      </div>
-      <p class="admin-note">留空沿用原有文案；自定义时段单独设置的状态文字优先。</p>
-    </details>
     <template v-if="!custom">
-      <div class="admin-fields">
-        <AdminText v-model="basic.start" label="上班时间 HH:mm" :max="5" /><AdminText
-          v-model="basic.end"
-          label="下班时间 HH:mm"
-          :max="5"
-        /><AdminText v-model="basic.lunchStart" label="午休开始 HH:mm" :max="5" /><AdminText
-          v-model="basic.lunchEnd"
-          label="午休结束 HH:mm"
-          :max="5"
-        /><VarSelect
-          v-model="basic.restMode"
-          aria-label="休息日规则"
-          placeholder="休息日规则"
-          variant="outlined"
-          ><VarOption label="双休" value="double" /><VarOption label="单休" value="single"
-        /></VarSelect>
-      </div>
-      <AdminCalendarEditor v-model="basic" />
-      <p v-if="basic.end < basic.start" class="admin-note">
-        跨日基础日程：结束时间及早于开始时间的午休按次日计算。
-      </p>
+      <section class="schedule-section" :aria-labelledby="`${id}-hours`">
+        <h3 :id="`${id}-hours`">作息时间</h3>
+        <div class="schedule-hours">
+          <fieldset class="schedule-hour-group">
+            <legend>活动时段</legend>
+            <AdminScheduleTimeField v-model="basic.start" label="上班时间" />
+            <AdminScheduleTimeField v-model="basic.end" label="下班时间" />
+          </fieldset>
+          <fieldset class="schedule-hour-group">
+            <legend>休息时段</legend>
+            <AdminScheduleTimeField v-model="basic.lunchStart" label="午休开始" />
+            <AdminScheduleTimeField v-model="basic.lunchEnd" label="午休结束" />
+          </fieldset>
+        </div>
+        <p v-if="basic.end < basic.start" class="admin-note">
+          跨日作息的结束时间和早于上班时间的午休按次日计算。
+        </p>
+      </section>
+      <section class="schedule-section" :aria-labelledby="`${id}-rest`">
+        <h3 :id="`${id}-rest`">休息日</h3>
+        <div class="admin-fields">
+          <VarSelect
+            v-model="basic.restMode"
+            aria-label="休息日规则"
+            placeholder="休息日规则"
+            variant="outlined"
+          >
+            <VarOption label="双休 · 周六、周日" value="double" />
+            <VarOption label="单休 · 周日" value="single" />
+          </VarSelect>
+        </div>
+      </section>
+      <AdminCalendarEditor v-model="basic" :reset-token="resetToken" />
     </template>
     <template v-else>
       <div class="schedule-weekdays" role="group" aria-label="选择星期">
@@ -467,36 +453,45 @@ const overrideEnd = computed({
         {{ issue.path }}：{{ scheduleIssueText(issue) }}
       </li>
     </ul>
-    <section class="schedule-preview" aria-label="日程预览">
-      <div class="admin-fields">
-        <AdminText v-model="previewDate" label="预览日期 YYYY-MM-DD" :max="10" /><AdminText
-          v-model="previewTime"
-          label="预览时间 HH:mm"
-          :max="5"
-        />
-      </div>
-      <VarButton text @click="previewDateValue = ''">当前时刻</VarButton>
-      <template v-if="preview.valid"
-        ><strong data-schedule-preview-state>{{ previewView.label }}</strong>
-        <p>
-          下一变化：{{
+    <section class="schedule-section schedule-preview" aria-label="日程预览">
+      <header class="schedule-section-heading">
+        <h3>实际效果预览</h3>
+        <VarButton v-if="previewDateValue" text type="primary" @click="previewDateValue = ''">
+          返回当前时刻
+        </VarButton>
+      </header>
+      <div v-if="preview.valid" class="schedule-preview-result">
+        <strong data-schedule-preview-state>{{ previewView.label }}</strong>
+        <p class="admin-note">
+          {{
             preview.nextChange
-              ? formatTimestamp(preview.nextChange.at, model.timezone)
-              : '查找范围内暂无安排'
+              ? `下一次变化于 ${formatTimestamp(preview.nextChange.at, model.timezone)}`
+              : '查找范围内暂无下一次变化'
           }}
         </p>
+      </div>
+      <p v-else role="alert">日程预览不可用：{{ scheduleIssueText(preview.issues[0]) }}</p>
+      <div class="admin-fields">
+        <label class="schedule-native-field">
+          预览日期
+          <input v-model="previewDate" type="date" aria-label="预览日期 YYYY-MM-DD" />
+        </label>
+        <AdminScheduleTimeField v-model="previewTime" label="预览时间" />
+      </div>
+      <details
+        v-if="preview.valid && previewPeriods.length"
+        class="admin-details schedule-preview-periods"
+      >
+        <summary>查看完整时段</summary>
         <ul>
-          <li
-            v-for="p in [...(resolved?.carryIn ?? []), ...(resolved?.periods ?? [])]"
-            :key="p.originDate + p.id"
-          >
+          <li v-for="p in previewPeriods" :key="p.originDate + p.id">
             {{ p.originDate !== previewDate ? '前一日跨日 · ' : ''
             }}{{ p.startDayOffset ? '次日 ' : '' }}{{ p.start }}–{{ p.endDayOffset ? '次日 ' : ''
             }}{{ p.end }} {{ p.name }}
           </li>
-        </ul></template
-      >
-      <p v-else role="alert">日程预览不可用：{{ scheduleIssueText(preview.issues[0]) }}</p>
+        </ul>
+      </details>
     </section>
+    <AdminScheduleLabelsEditor v-model="model.labels" :reset-token="resetToken" />
   </div>
 </template>

@@ -94,6 +94,17 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   await expect(page.getByRole('button', { name: '添加来源', exact: true })).toBeFocused()
   assert.deepEqual((await input()).config.integrations, initial.config.integrations)
 
+  const collapsedDeep = card(deepId)
+  const deepGuide = collapsedDeep.getByRole('button', { name: '查看 DeepSeek 配置说明' })
+  await deepGuide.click()
+  await expect(page.getByRole('dialog', { name: 'DeepSeek 配置说明' })).toContainText('创建密钥')
+  await expect(collapsedDeep.locator('.admin-item-toggle')).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  await page.keyboard.press('Escape')
+  await expect(deepGuide).toBeFocused()
+
   const first = await expand('fixture')
   await first.getByRole('switch').click()
   await expect(first.getByRole('switch')).not.toBeChecked()

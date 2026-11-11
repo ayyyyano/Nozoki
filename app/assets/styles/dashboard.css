@@ -107,7 +107,7 @@ p {
   width: 44px;
   height: 44px;
   color: var(--n-text);
-  background: color-mix(in srgb, var(--n-surface) 88%, transparent);
+  background: var(--n-surface);
   border: 1px solid var(--n-outline);
   border-radius: 16px;
 }
@@ -1265,23 +1265,29 @@ p {
     display: flex;
   }
 }
-.nozoki-app[data-background-layout='page'] :is(.module-card, .link-grid a) {
+.nozoki-app[data-background-layout='page']
+  :is(.module-card, .link-grid a, .page-actions .var-button) {
   background: color-mix(in srgb, var(--n-surface) var(--card-alpha, 50%), transparent);
   backdrop-filter: var(--card-blur, none);
 }
 /* Separate the legacy declaration: Lightning CSS 1.33 can discard the standard
    declaration when both variable-valued aliases occur in the same rule. */
 @supports (-webkit-backdrop-filter: blur(1px)) {
-  .nozoki-app[data-background-layout='page'] :is(.module-card, .link-grid a) {
+  .nozoki-app[data-background-layout='page']
+    :is(.module-card, .link-grid a, .page-actions .var-button) {
     -webkit-backdrop-filter: var(--card-blur, none);
   }
 }
-.nozoki-app[data-background-layout='page'] .link-grid a:hover {
+.nozoki-app[data-background-layout='page'] :is(.link-grid a, .page-actions .var-button):hover {
   background: color-mix(in srgb, var(--n-surface-high) var(--card-alpha, 50%), transparent);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .nozoki-app[data-background-layout='page'] :is(.module-card, .link-grid a) {
+  .nozoki-app[data-background-layout='page']
+    :is(.module-card, .link-grid a, .page-actions .var-button) {
     background: var(--n-surface);
+  }
+  .nozoki-app[data-background-layout='page'] :is(.link-grid a, .page-actions .var-button):hover {
+    background: var(--n-surface-high);
   }
 }
 .appearance-popup.var-popup__content {

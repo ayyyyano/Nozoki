@@ -57,6 +57,33 @@ export async function exerciseSourceOnboarding(
     assert.equal(result.connectionProof, undefined)
   }
   await section('数据源')
+  const addSource = page.getByRole('button', { name: '添加来源', exact: true })
+  const picker = page.getByRole('dialog', { name: '选择数据源类型' })
+  for (const [provider, field, value, hint] of [
+    ['Tailscale', 'OAuth Client ID', 'synthetic-client-id', 'devices:core:read'],
+    ['CLIProxyAPI', '实例 HTTPS 地址', 'https://proxy.example.com/', 'Management Key'],
+    ['DeepSeek', 'API Key', 'synthetic-key', 'DeepSeek 开放平台'],
+  ]) {
+    await addSource.click()
+    await expect(picker.getByRole('button').filter({ hasText: 'Uptime Kuma' })).not.toContainText(
+      '尚未完成真实实例兼容性验证',
+    )
+    await picker.getByRole('button').filter({ hasText: provider }).click()
+    const configure = page.getByRole('dialog', { name: '配置 ' + provider, exact: true })
+    const inputField = configure.getByLabel(field, { exact: true }).and(configure.locator('input'))
+    await inputField.fill(value)
+    const guideButton = configure.getByRole('button', { name: `查看 ${provider} 配置说明` })
+    await guideButton.click()
+    const guide = page.getByRole('dialog', { name: provider + ' 配置说明', exact: true })
+    await expect(guide).toContainText(hint)
+    await expect(guide.getByRole('link')).toHaveAttribute('target', '_blank')
+    await page.keyboard.press('Escape')
+    await expect(inputField).toHaveValue(value)
+    await expect(guideButton).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(configure).toBeHidden()
+  }
+  assert.deepEqual(await input(), initial)
   await page.getByRole('button', { name: '添加来源', exact: true }).click()
   await page
     .getByRole('dialog', { name: '选择数据源类型' })
@@ -121,7 +148,6 @@ export async function exerciseSourceOnboarding(
   assert.equal((await (await save(changed)).json()).reason, 'SOURCE_TEST_REQUIRED')
   await section('数据源')
   await page.getByRole('button', { name: '添加来源', exact: true }).click()
-  const picker = page.getByRole('dialog', { name: '选择数据源类型' })
   await expect(picker.getByRole('button').filter({ hasText: 'Sleepy' })).toBeDisabled()
   await expect(picker).toContainText('已添加')
   await page.keyboard.press('Escape')

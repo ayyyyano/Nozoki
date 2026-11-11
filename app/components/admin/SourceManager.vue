@@ -10,6 +10,7 @@ import {
   type IntegrationDraft,
   type IntegrationPreset,
 } from '../../../shared/integration-presets'
+import { sourceGuides, type SourceGuide } from './source-guides'
 const model = defineModel<IntegrationDraft[]>({ required: true })
 const props = defineProps<{
   saved: IntegrationSettings[]
@@ -29,6 +30,32 @@ function tested(id: string, result: ProbeResult | null, draft = false) {
 }
 const candidate = ref<IntegrationDraft | null>(null)
 const adding = ref(false)
+const candidateGuideOpen = ref(false)
+const savedGuideOpen = ref(false)
+const savedGuide = shallowRef<SourceGuide>()
+const guideContent = useTemplateRef<HTMLElement>('guideContent')
+let guideTrigger: HTMLElement | undefined
+function guideFor(source: IntegrationDraft) {
+  const id = integrationPreset(source)?.id
+  return id === 'deepseek' || id === 'tailscale' || id === 'cliproxy' ? sourceGuides[id] : undefined
+}
+const candidateGuide = computed(() => candidate.value && guideFor(candidate.value))
+async function openCandidateGuide(event: Event) {
+  guideTrigger = event.currentTarget as HTMLElement
+  candidateGuideOpen.value = true
+  await nextTick()
+  guideContent.value?.focus()
+}
+async function closeCandidateGuide() {
+  candidateGuideOpen.value = false
+  await nextTick()
+  guideTrigger?.focus()
+  guideTrigger = undefined
+}
+function openSavedGuide(source: IntegrationDraft) {
+  savedGuide.value = guideFor(source)
+  savedGuideOpen.value = !!savedGuide.value
+}
 const clock = useLocalClock()
 const canAdd = computed(
   () =>
@@ -56,6 +83,8 @@ function cancelCandidate() {
     delete candidate.value.identityCredential
   }
   candidate.value = null
+  candidateGuideOpen.value = false
+  guideTrigger = undefined
 }
 const picker = ref(false),
   pickerError = ref('')
@@ -186,6 +215,18 @@ defineExpose({
       :description="hint(source)"
       :icon="integrationPreset(source)?.icon ?? 'server'"
     >
+      <template v-if="guideFor(source)" #beforeToggle>
+        <VarButton
+          text
+          round
+          class="source-guide-button"
+          aria-haspopup="dialog"
+          :aria-label="`查看 ${title(source)} 配置说明`"
+          title="配置说明"
+          @click="openSavedGuide(source)"
+          ><CommonAppIcon name="HelpOutlineRound" :size="20"
+        /></VarButton>
+      </template>
       <template #actions
         ><div class="source-enable">
           <VarSwitch
@@ -233,9 +274,7 @@ defineExpose({
             ><small>{{
               presetAlreadyAdded(preset, model)
                 ? '已添加，可在列表中启用或停用'
-                : preset.maturity === 'experimental'
-                  ? '尚未完成真实实例兼容性验证。'
-                  : preset.description
+                : preset.description
             }}</small></span
           ><CommonAppIcon v-if="presetAlreadyAdded(preset, model)" name="check" :size="18" />
         </button>
@@ -244,13 +283,34 @@ defineExpose({
     </AdminSourceDialog>
     <AdminSourceDialog
       v-model:show="adding"
-      :title="`配置 ${candidate ? title(candidate) : '数据源'}`"
-      confirm="添加来源"
+      :title="
+        candidateGuideOpen && candidateGuide
+          ? candidateGuide.title
+          : `配置 ${candidate ? title(candidate) : '数据源'}`
+      "
+      :confirm="candidateGuideOpen ? undefined : '添加来源'"
+      :back="candidateGuideOpen"
       :blocked="!canAdd"
       @confirm="addCandidate"
       @closed="candidateClosed"
+      @back="closeCandidateGuide"
     >
-      <template v-if="candidate">
+      <template v-if="candidateGuide" #headerActions>
+        <VarButton
+          v-show="!candidateGuideOpen"
+          text
+          round
+          class="source-guide-button"
+          :aria-label="`查看 ${candidateGuide.title}`"
+          title="配置说明"
+          @click="openCandidateGuide"
+          ><CommonAppIcon name="HelpOutlineRound" :size="20"
+        /></VarButton>
+      </template>
+      <div v-if="candidateGuideOpen && candidateGuide" ref="guideContent" tabindex="-1">
+        <AdminSourceGuide :guide="candidateGuide" />
+      </div>
+      <div v-if="candidate" v-show="!candidateGuideOpen" class="source-candidate-fields">
         <AdminIntegrationEditor
           v-model="candidate"
           :timezone="timezone"
@@ -258,7 +318,10 @@ defineExpose({
           :quote-symbols="testSymbols(candidate)"
         />
         <p class="admin-note">测试通过后可添加到草稿，点击顶部“保存配置”后生效。</p>
-      </template>
+      </div>
+    </AdminSourceDialog>
+    <AdminSourceDialog v-model:show="savedGuideOpen" :title="savedGuide?.title ?? '配置说明'">
+      <AdminSourceGuide v-if="savedGuide" :guide="savedGuide" />
     </AdminSourceDialog>
     <AdminSourceDialog
       v-model:show="removing"
