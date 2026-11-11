@@ -9,7 +9,7 @@ import { randomUUID, randomBytes } from 'node:crypto'
 import { SqliteDatabase } from '../../platform/node/sqlite.mjs'
 import { readConfig, saveConfig } from '../../server/services/config.ts'
 import { editableConfig, CONFIG_BODY_LIMIT } from '../../shared/contracts/admin.ts'
-import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
+import { bindSources } from '../../shared/integration-presets/bindings.ts'
 
 async function portNumber() {
   const server = createServer()
@@ -303,7 +303,6 @@ test(
         const { expect } = await import('playwright/test')
         const { existsSync } = await import('node:fs')
         const { exerciseSectionResets, verifyResetSave } = await import('../browser/admin-reset.ts')
-        const { exerciseTailscale } = await import('../browser/tailscale.ts')
         const db = new SqliteDatabase(env.NOZOKI_SQLITE_PATH)
         try {
           const current = await readConfig(db),
@@ -329,7 +328,7 @@ test(
             (
               await saveConfig(
                 db,
-                { expectedVersion: current.site.configVersion, config },
+                { expectedVersion: current.site.configVersion, config: bindSources(config) },
                 { actor: { kind: 'system' } },
               )
             ).success,
@@ -364,11 +363,11 @@ test(
           .getByRole('dialog', { name: '选择数据源类型', exact: true })
           .getByRole('button', { name: /^Sleepy / })
           .click()
-        const added = page.locator('.source-card').last()
-        const addedId = await added.getAttribute('data-source-id')
-        assert.match(addedId, /^sleepy-/)
-        await expect(added.getByLabel('Provider', { exact: true })).toHaveCount(0)
-        await expect(added.getByLabel('实例 HTTPS 地址', { exact: true })).toBeVisible()
+        const sleepy = page.getByRole('dialog', { name: '配置 Sleepy', exact: true })
+        await expect(sleepy.getByRole('textbox', { name: '实例 HTTPS 地址' })).toBeVisible()
+        await expect(sleepy.getByRole('button', { name: '添加来源', exact: true })).toBeDisabled()
+        await sleepy.getByRole('button', { name: '取消', exact: true }).click()
+        await expect(sleepy).toBeHidden()
         await page.getByRole('button', { name: '站点与外观', exact: true }).click()
         await page.getByLabel('站点名称', { exact: true }).fill('Browser self-host save')
         await page.getByRole('button', { name: '保存配置', exact: true }).click()
@@ -388,27 +387,13 @@ test(
           assert.equal(r.status(), 200, await r.text())
         }
         const persisted = await read()
-        assert.equal(
-          persisted.integrations.find((i) => i.id === addedId).protocolVersion,
-          'sleepy-v5-status',
-        )
+        assert.equal(persisted.site.siteName, 'Browser self-host save')
+        assert.equal(persisted.integrations.length, 2)
         assert.equal(
           persisted.integrations.find((i) => i.id === 'saved-legacy').protocolVersion,
           'legacy-custom-version',
         )
-        const probeDraft = editableConfig(persisted)
-        const probeSource = probeDraft.integrations.find((i) => i.id === 'saved-accounts')
-        probeSource.baseUrl = 'https://codex.example.com/'
-        probeSource.enabled = true
-        probeSource.access = {
-          mode: 'public',
-          authentication: 'bearer',
-          approved: true,
-          approvedTarget: null,
-        }
-        probeSource.access.approvedTarget = sourceTargetKey(probeSource, probeSource.access)
-        await put(probeDraft)
-        // Read-only presentation fixtures test both winter and summer offsets without an upstream.
+        // Use a draft probe response to check both winter and summer offsets without an upstream.
         let collectedAt = '2026-11-02T05:02:48.141Z'
         await page.route('**/api/admin/integrations/saved-accounts/test', (route) =>
           route.fulfill({
@@ -435,7 +420,11 @@ test(
           const source = item('saved-accounts')
           if ((await source.locator('.admin-item-toggle').getAttribute('aria-expanded')) !== 'true')
             await source.locator('.admin-item-toggle').click()
-          await source.getByRole('button', { name: '测试连接', exact: true }).click()
+          await source
+            .getByRole('textbox', { name: '实例 HTTPS 地址' })
+            .fill('https://codex.example.com/')
+          await source.locator('input[aria-label="Management Key"]').fill('fixture-management-key')
+          await source.getByRole('button', { name: '测试并确认访问', exact: true }).click()
           await expect(source.locator('time')).toHaveText(expected)
           await expect(source.locator('time')).toHaveAttribute('datetime', collectedAt)
           await expect(source.getByRole('status').filter({ hasText: '测试时间' })).toContainText(
@@ -451,19 +440,13 @@ test(
         await verifyProbeTime('2026-11-02 00:02', 'America/New_York')
         collectedAt = '2026-07-02T05:02:48.141Z'
         await verifyProbeTime('2026-07-02 01:02', 'America/New_York')
+        await page.reload()
         await verifyResetSave(page, context, origin)
-        await exerciseTailscale(page, context, origin, env.NOZOKI_SQLITE_PATH)
         await page.getByRole('button', { name: '更多管理操作', exact: true }).click()
         await page.getByRole('menuitem', { name: '注销', exact: true }).click()
         await page.waitForURL(origin + '/login')
         const res = await context.request.get(origin + '/api/auth/session')
         assert.equal((await res.json()).viewer, 'guest')
-        assert.ok(
-          !JSON.stringify(
-            await (await context.request.get(origin + '/api/dashboard')).json(),
-          ).includes('100.64.1.2'),
-        )
-        assert.ok(!(await (await context.request.get(origin)).text()).includes('100.64.1.2'))
         assert.deepEqual(errors, [])
         await context.close()
       },

@@ -81,10 +81,17 @@ test(
         .getByRole('button', { name: '日程安排', exact: true })
         .click()
     const field = (label) => page.getByLabel(label, { exact: true }).last()
-    const labels = () =>
-      page
-        .locator('.schedule-editor details')
-        .filter({ has: page.locator('summary').getByText('状态文字', { exact: true }) })
+    const labelsButton = page.getByRole('button', { name: '自定义状态文案', exact: true })
+    const labelsDialog = page.getByRole('dialog', { name: '自定义状态文案', exact: true })
+    const labelField = (name) => labelsDialog.getByRole('textbox', { name, exact: true })
+    const openLabels = async () => {
+      await labelsButton.click()
+      await expect(labelsDialog).toBeVisible()
+    }
+    const closeLabels = async (name) => {
+      await labelsDialog.getByRole('button', { name, exact: true }).click()
+      await expect(labelsDialog).toBeHidden()
+    }
     const save = async () => {
       const response = page.waitForResponse(
         (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
@@ -95,24 +102,30 @@ test(
     }
     const preview = page.locator('[data-schedule-preview-state]')
     await section()
-    await labels().locator('summary').click()
-    await field('活动状态文字').fill('专注中')
-    await field('休息时段状态文字').fill('午间休息')
-    await field('开始前状态文字').fill('准备中')
+    await openLabels()
+    await labelField('活动状态文字').fill('专注中')
+    await labelField('休息时段状态文字').fill('午间休息')
+    await labelField('开始前状态文字').fill('准备中')
+    await closeLabels('应用')
     await field('预览日期 YYYY-MM-DD').fill('2026-10-26')
     await field('预览时间 HH:mm').fill('09:00')
     await expect(preview).toHaveText('专注中')
     await field('预览时间 HH:mm').fill('12:00')
     await expect(preview).toHaveText('午间休息')
     await select(page, '日程编辑模式', '自定义周计划')
-    await expect(field('活动状态文字')).toHaveValue('专注中')
+    await openLabels()
+    await expect(labelField('活动状态文字')).toHaveValue('专注中')
+    await closeLabels('取消')
     await select(page, '日程编辑模式', '基础模式')
-    await expect(field('休息时段状态文字')).toHaveValue('午间休息')
+    await openLabels()
+    await expect(labelField('休息时段状态文字')).toHaveValue('午间休息')
+    await closeLabels('取消')
     await save()
     await page.reload()
     await section()
-    await labels().locator('summary').click()
-    await expect(field('活动状态文字')).toHaveValue('专注中')
+    await openLabels()
+    await expect(labelField('活动状态文字')).toHaveValue('专注中')
+    await closeLabels('取消')
     await page.goto(origin + '/')
     await settle(page)
     await expect(page.locator('.activity-headline strong')).toHaveText('专注中')
@@ -139,12 +152,16 @@ test(
     await expect(page.locator('.activity-headline strong')).toHaveText('读书中')
     await page.goto(origin + '/admin')
     await section()
-    await labels().locator('summary').click()
+    await openLabels()
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 844 })
-      await field('活动状态文字').fill('窄屏编辑中')
+      await labelField('活动状态文字').fill('窄屏编辑中')
+      const bounds = await labelsDialog.boundingBox()
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width)
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     }
+    await page.keyboard.press('Escape')
+    await expect(labelsButton).toBeFocused()
     assert.deepEqual(errors, [])
     await context.close()
   },
