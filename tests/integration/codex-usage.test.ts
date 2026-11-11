@@ -63,11 +63,42 @@ test(
         usageRecord(usageTimestamp),
       ],
       pops = 0,
-      disabled = 0
+      disabled = 0,
+      quotaReads = 0,
+      quotaUsed = 18,
+      quotaFailure = false
     const wire = async (request) => {
       const url = new URL(request.url)
-      assert.equal(request.method, 'GET')
       assert.equal(request.headers.get('authorization'), 'Bearer SYNTHETIC-MANAGEMENT-ONLY')
+      if (url.pathname === '/v8/management/requests/api-call') {
+        assert.equal(request.method, 'POST')
+        assert.equal(url.search, '')
+        assert.deepEqual(await request.json(), {
+          auth_index: 'a1',
+          method: 'GET',
+          url: 'https://chatgpt.com/backend-api/wham/usage',
+          header: { Authorization: 'Bearer $TOKEN$', Accept: 'application/json' },
+        })
+        quotaReads++
+        return Response.json({
+          status_code: quotaFailure ? 503 : 200,
+          body: JSON.stringify({
+            rate_limit: {
+              primary_window: {
+                used_percent: quotaUsed,
+                limit_window_seconds: 18000,
+                reset_at: Math.floor(at / 1000) + 3600,
+              },
+              secondary_window: {
+                used_percent: 10,
+                limit_window_seconds: 604800,
+                reset_at: Math.floor(at / 1000) + 86400,
+              },
+            },
+          }),
+        })
+      }
+      assert.equal(request.method, 'GET')
       if (url.pathname.endsWith('/usage/queue')) {
         assert.equal(url.search, '?count=50')
         const lease = await db
@@ -159,6 +190,7 @@ test(
     )
     assert.equal(await (await worker.fetch('https://harness.invalid/draft?at=' + at)).json(), true)
     assert.equal(pops, 0)
+    assert.equal(quotaReads, 0)
     const collect = async () => {
       const report = await (await worker.fetch('https://harness.invalid/collect?at=' + at)).json()
       assert.equal(report.success, 1)
@@ -245,8 +277,8 @@ test(
           ),
         )
         await page.goto(env.AUTH_ORIGIN + '/login')
-        await page.getByLabel('邮箱', { exact: true }).fill(env.ADMIN_EMAIL)
-        await page.getByLabel('密码', { exact: true }).fill(env.ADMIN_PASSWORD)
+        await page.locator('input[aria-label="邮箱"]').fill(env.ADMIN_EMAIL)
+        await page.locator('input[aria-label="密码"]').fill(env.ADMIN_PASSWORD)
         await page.getByRole('button', { name: '登录', exact: true }).click()
         await page.waitForURL('**/admin')
         await page.goto(env.AUTH_ORIGIN)
@@ -299,5 +331,59 @@ test(
     assert.deepEqual(await readCodexUsageDays(db, 'usage-fixture', new Date(at)), days)
     assert.deepEqual(await snapshotRow(), snapshotBeforeFailure)
     await db.prepare('DROP TRIGGER reject_usage_fixture').run()
+    assert.equal(quotaReads, 0)
+    const scheduledQuota = async () => {
+      at += 1800000
+      const report = await (
+        await worker.fetch('https://harness.invalid/collect?quota&at=' + at)
+      ).json()
+      assert.equal(report.success, 1)
+      assert.equal(report.requests, 3)
+      return JSON.parse((await snapshotRow()).snapshot_json).data.quota.accounts[0].windows
+    }
+    const first = await scheduledQuota()
+    assert.equal(first[0].remainingPercent, '82')
+    assert.equal(first[1].remainingPercent, '90')
+    quotaUsed = 53
+    const changed = await scheduledQuota()
+    assert.equal(changed[0].remainingPercent, '47')
+    assert.ok(changed[0].observedAt > first[0].observedAt)
+    quotaFailure = true
+    assert.deepEqual(
+      await scheduledQuota(),
+      changed.map((w) => ({ ...w, status: 'stale' })),
+    )
+    assert.equal(quotaReads, 3)
+    assert.deepEqual(await readCodexUsageDays(db, 'usage-fixture', new Date(at)), days)
+    const stale = await readAdminDashboard(db, new Date(at))
+    const rings = stale.modules[0].snapshot.data.ringView.rings
+    assert.equal(rings[0].state, 'stale')
+    assert.equal(rings[0].last.percent, 47)
+    const publicStale = await readGuestDashboard(db, new Date(at))
+    assert.deepEqual(publicStale.modules[0].snapshot.data.ringView.rings[0], {
+      id: 'fiveHourRemaining',
+      state: 'masked',
+    })
+    if (browserTest) {
+      const { launch, settle } = await import('../browser/support.ts')
+      const { expect } = await import('playwright/test')
+      const browser = await launch()
+      try {
+        const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
+        await page.clock.setFixedTime(new Date(at))
+        await page.route('**/api/dashboard', (route) => route.fulfill({ json: stale }))
+        await page.goto(env.AUTH_ORIGIN)
+        await settle(page)
+        const response = page.waitForResponse((r) => r.url().endsWith('/api/dashboard'))
+        await page.evaluate(() => dispatchEvent(new Event('focus')))
+        await response
+        const ring = page.locator('[data-ring="fiveHourRemaining"]')
+        await expect(ring).toHaveAttribute('data-state', 'stale')
+        await expect(ring.getByText('47%', { exact: true })).toBeVisible()
+        await expect(ring.getByText(/已过期/)).toBeVisible()
+      } finally {
+        await browser.close()
+      }
+    }
   },
 )

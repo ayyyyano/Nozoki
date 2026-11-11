@@ -120,7 +120,7 @@ test('ring policies redact entire values and time intervals independently, witho
   )
   for (const status of ['unconfigured', 'unsupported', 'stale', 'error'] as const) {
     const r = codexRingProjection(codex.data, { ...codex, status }, module, +now, true).rings[0]
-    assert.equal(r.state, status === 'error' ? 'unknown' : status)
+    assert.equal(r.state, status === 'error' ? 'stale' : status)
   }
 })
 

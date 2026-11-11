@@ -252,7 +252,10 @@ export async function commitCollection(
               c.plan.source.refreshInterval,
               c.plan.timezone ?? 'UTC',
             )
-          : successfulSchedule(Date.parse(now), c.plan.source.refreshInterval),
+          : successfulSchedule(
+              Date.parse(c.plan.scheduledCodexQuota ? c.scheduledAt : now),
+              c.plan.source.refreshInterval,
+            ),
         c.plan.source.id,
       ),
     db

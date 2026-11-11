@@ -18,6 +18,7 @@ import { meterDatabase } from './metrics.ts'
 import { cleanupRecords } from '../services/retention.ts'
 import { requireWritableStorage } from '../repositories/storage-status.ts'
 import { readCodexUsageDays } from '../repositories/codex-usage.ts'
+import { readPriorCodexQuota } from '../repositories/telemetry.ts'
 export type SourceReader = (
   p: CollectionPlan,
   env: Record<string, unknown>,
@@ -35,6 +36,7 @@ export async function runCollection(
     reader?: SourceReader
     sourceIds?: readonly string[]
     wallBudgetMs?: number
+    scheduledCodexQuota?: boolean
   } = {},
 ) {
   const clock = options.clock ?? (() => new Date()),
@@ -102,8 +104,13 @@ export async function runCollection(
         if (
           plan.source.provider === 'cliproxy-bridge' &&
           plan.source.protocolVersion === 'cliproxy-v8-accounts'
-        )
+        ) {
           plan.codexUsageDays = await readCodexUsageDays(db, plan.source.id, clock())
+          plan.previousCodexQuota = await readPriorCodexQuota(db, claim)
+          plan.scheduledCodexQuota =
+            options.scheduledCodexQuota === true &&
+            report.requests + 3 <= COLLECTION_BUDGET.maxRequests
+        }
         const timeout = new Promise<never>((_, reject) => {
           timer = setTimeout(
             () => {

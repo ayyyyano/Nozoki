@@ -17,6 +17,11 @@ import {
 } from '../../server/adapters/transport.ts'
 import { cpaSource, credentials } from '../fixtures/core051.ts'
 import { usageRecord } from '../fixtures/codex-usage.ts'
+import {
+  CODEX_QUOTA_CALL,
+  quotaRequestBody,
+  quotaWindows,
+} from '../../server/adapters/codex-quota.ts'
 
 const now = new Date('2026-11-10T12:00:00.000Z')
 const identityKey = await hmacKey('synthetic-usage-identity')
@@ -24,6 +29,40 @@ const source = cpaSource()
 const account = hex(await mac(identityKey, ['nozoki-codex-account-v1', source.id, 'a1']))
 const aggregate = (records: unknown) =>
   aggregateUsage(records, identityKey, source.id, new Set([account]), now)
+
+test('quota reads use a fixed upstream GET and classify only reported window lengths', () => {
+  assert.equal(endpointCatalog(source).includes(CODEX_QUOTA_CALL), false)
+  assert.throws(() => quotaRequestBody('a1\r\nInjected'))
+  const body = {
+    account_id: 'fixture-account',
+    rate_limit: {
+      primary_window: { used_percent: 0, limit_window_seconds: 604800 },
+      secondary_window: {
+        used_percent: 12.5,
+        limit_window_seconds: 18000,
+        reset_after_seconds: 60,
+      },
+    },
+  }
+  const response = { value: { status_code: 200, body: JSON.stringify(body) }, ageSeconds: null }
+  assert.deepEqual(
+    quotaWindows(response, now, 'fixture-account').map((w) => [
+      w.id,
+      w.remainingPercent,
+      w.resetAt,
+    ]),
+    [
+      ['weekly', '100', null],
+      ['five-hour', '87.5', new Date(+now + 60_000).toISOString()],
+    ],
+  )
+  assert.throws(() => quotaWindows(response, now, 'other-account'), { code: 'INVALID_RESPONSE' })
+  assert.throws(() => quotaWindows({ ...response, ageSeconds: 1 }, now), {
+    code: 'INVALID_RESPONSE',
+  })
+  body.rate_limit.secondary_window.limit_window_seconds = 2592000
+  assert.equal(quotaWindows({ ...response, value: { status_code: 200, body } }, now).length, 1)
+})
 
 test('queue schema rejects missing fields, wrong counters, null tokens and unknown fields', () => {
   assert.equal(UsageQueueSchema.safeParse([usageRecord()]).success, true)

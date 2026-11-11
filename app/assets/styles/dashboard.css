@@ -1378,10 +1378,20 @@ p {
   scroll-behavior: auto !important;
 }
 
+.edge-icon-action.var-button,
 .module-detail-button.var-button {
   width: 44px;
   height: 44px;
   flex-shrink: 0;
+}
+.edge-icon-action.var-button {
+  /* Align the glyph with the content inset while keeping the full hit area. */
+  margin-inline-end: calc(
+    (var(--edge-icon-size, 24px) - 44px) / 2 + var(--edge-icon-optical-inset, 0px)
+  );
+}
+.edge-icon-action--small {
+  --edge-icon-size: 20px;
 }
 .module-detail-button:hover {
   background: var(--n-surface-high);
@@ -1413,11 +1423,6 @@ p {
   flex: 1;
   overflow-wrap: anywhere;
   font-size: 20px;
-}
-.module-detail-heading .var-button {
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
 }
 .module-detail-content {
   min-height: 0;

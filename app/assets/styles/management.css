@@ -456,9 +456,6 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.source-dialog-heading .var-button {
-  flex-shrink: 0;
-}
 .source-dialog-actions {
   justify-content: flex-end;
 }
@@ -746,7 +743,7 @@
   display: grid;
   gap: 24px;
   width: min(100%, 400px);
-  padding: 32px;
+  padding: 32px var(--auth-card-inline-padding, 32px);
   border-radius: 24px;
   border: 1px solid var(--color-outline-variant);
   background: var(--color-surface);
@@ -783,11 +780,11 @@
   flex: 1;
   min-width: 0;
 }
-.password-field .var-button {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+.var-input .edge-icon-action {
   margin-block: -10px;
+}
+.password-field .edge-icon-action {
+  --edge-icon-optical-inset: 2px;
 }
 .auth-card .var-form-details {
   display: none;
@@ -898,7 +895,10 @@
     gap: 20px;
   }
   .auth-card {
-    padding: 28px 20px;
+    padding: 28px var(--auth-card-inline-padding, 20px);
+  }
+  .account-dialog {
+    --auth-card-inline-padding: 20px;
   }
   .auth-heading h1 {
     font-size: 20px;

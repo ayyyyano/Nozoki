@@ -175,7 +175,7 @@ export const DataSchemas = {
                     resetAt: stamp,
                     windowMinutes: z.number().int().positive().max(525600).optional(),
                     observedAt: stamp.optional(),
-                    basis: z.enum(['passive_headers', 'reviewed_plugin']).optional(),
+                    basis: z.enum(['passive_headers', 'reviewed_plugin', 'quota_read']).optional(),
                     status: z.enum(['ok', 'stale']).optional(),
                   }),
                 )

@@ -1,9 +1,15 @@
 import type { IntegrationSettings } from '../../shared/contracts/config.ts'
 import { managedServiceRoot } from '../../shared/contracts/source-access.ts'
 import { assertManagedSource, connectorReady, connectorTransport } from './source-connector.ts'
-import { responseTransport, serviceEndpoint, type TransportOptions } from './transport.ts'
+import {
+  boundedReadTransport,
+  responseTransport,
+  serviceEndpoint,
+  type TransportOptions,
+} from './transport.ts'
 import { AdapterError } from './types.ts'
 import { tailscaleTransport } from './tailscale-transport.ts'
+import { CODEX_QUOTA_CALL, quotaRequestBody } from './codex-quota.ts'
 
 // Runtime detection is independent of source configuration and deployment variables.
 export function workerPublicEgress(): boolean {
@@ -16,6 +22,58 @@ export function managedEgressStatus(env: Record<string, unknown>) {
     configured: worker || connectorReady(env),
     publicMode: worker ? 'worker' : connectorReady(env) ? 'connector' : 'unavailable',
     privateConfigured: !worker && connectorReady(env),
+  }
+}
+
+/** Only the scheduled Worker can relay this fixed upstream GET via the management POST. */
+export function managedCodexQuotaReader(
+  source: IntegrationSettings,
+  credential: string | undefined,
+  options: TransportOptions,
+) {
+  if (
+    !workerPublicEgress() ||
+    source.provider !== 'cliproxy-bridge' ||
+    source.protocolVersion !== 'cliproxy-v8-accounts'
+  )
+    return undefined
+  const access = assertManagedSource(source)
+  if (
+    access.mode !== 'public' ||
+    access.authentication !== 'bearer' ||
+    !source.baseUrl ||
+    !credential ||
+    /[\r\n\u0000]/.test(credential)
+  )
+    return undefined
+  const url = serviceEndpoint(managedServiceRoot(source.baseUrl, 'public'), CODEX_QUOTA_CALL)
+  const wire = options.fetch ?? fetch
+  let attempted = false
+  return async (authIndex: string, accountId?: string) => {
+    if (attempted) throw new AdapterError('REQUEST_BUDGET')
+    attempted = true
+    const body = quotaRequestBody(authIndex, accountId)
+    return boundedReadTransport(
+      [CODEX_QUOTA_CALL],
+      (_endpoint, signal) => {
+        options.onRequest?.()
+        return wire(url, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + credential,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body,
+          signal,
+          redirect: 'manual',
+          credentials: 'omit',
+          cache: 'no-store',
+        })
+      },
+      { ...options, timeoutMs: 2500 },
+      1,
+    ).get(CODEX_QUOTA_CALL)
   }
 }
 

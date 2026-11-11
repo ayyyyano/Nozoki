@@ -10,7 +10,9 @@ export async function scheduledCollection(
   env: CollectionRuntime,
 ) {
   if (!env.DB || typeof env.DB.prepare !== 'function') throw new Error('DB_BINDING_MISSING')
-  const metrics = await runCollection(env.DB, env, controller.scheduledTime)
+  const metrics = await runCollection(env.DB, env, controller.scheduledTime, {
+    scheduledCodexQuota: true,
+  })
   console.log(JSON.stringify({ kind: 'nozoki-collection', ...metrics }))
   if (metrics.fatal) throw new Error(metrics.fatal)
 }

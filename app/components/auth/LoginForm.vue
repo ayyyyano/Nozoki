@@ -101,6 +101,7 @@ onBeforeUnmount(() => {
             native-type="button"
             text
             round
+            class="edge-icon-action"
             :aria-label="show ? '隐藏密码' : '显示密码'"
             :aria-pressed="show"
             @click="show = !show"

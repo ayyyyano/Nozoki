@@ -87,7 +87,12 @@ defineExpose({ open })
           <h2 id="appearance-title">外观偏好</h2>
           <p>仅保存在当前浏览器</p>
         </div>
-        <VarButton text round aria-label="关闭外观偏好" @click="show = false"
+        <VarButton
+          text
+          round
+          class="edge-icon-action"
+          aria-label="关闭外观偏好"
+          @click="show = false"
           ><CommonAppIcon name="close"
         /></VarButton>
       </header>

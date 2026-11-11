@@ -12,15 +12,18 @@ export default class Harness extends WorkerEntrypoint<Record<string, unknown> & 
     const url = new URL(request.url)
     return Response.json(
       url.pathname === '/collect'
-        ? JSON.parse(await this.collect(Number(url.searchParams.get('at'))))
+        ? JSON.parse(
+            await this.collect(Number(url.searchParams.get('at')), url.searchParams.has('quota')),
+          )
         : await this.probe(Number(url.searchParams.get('at')), url.pathname === '/draft'),
     )
   }
-  async collect(at: number) {
+  async collect(at: number, scheduledCodexQuota = false) {
     return JSON.stringify(
       await runCollection(this.env.DB, this.env, at, {
         clock: () => new Date(at),
         sourceIds: ['usage-fixture'],
+        scheduledCodexQuota,
       }),
     )
   }

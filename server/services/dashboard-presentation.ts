@@ -4,6 +4,7 @@ import {
   CODEX_RINGS,
   DEFAULT_CODEX_GUEST,
   DEFAULT_CODEX_SLOTS,
+  queriedQuotaLifetime,
   resetRing,
   ringMinutes,
   type CodexRing,
@@ -70,7 +71,7 @@ export function codexRingProjection(
   const lifetime = Math.max(600, refreshInterval * 2) * 1000
   function evidence(w: Window) {
     if (
-      w.basis !== 'passive_headers' ||
+      (w.basis !== 'passive_headers' && w.basis !== 'quota_read') ||
       !w.status ||
       !w.windowMinutes ||
       !w.observedAt ||
@@ -96,13 +97,72 @@ export function codexRingProjection(
   }
   const classified = (w: Window) => w.windowMinutes === 300 || w.windowMinutes === 10080
   const accounts = data?.quota?.accounts ?? []
-  // Pick one account in stable source order: prefer the first with a fresh, classified window.
+  const lastQuery = (windows: Window[]) =>
+    windows.reduce(
+      (latest, w) =>
+        classified(w) && w.basis === 'quota_read'
+          ? Math.max(latest, Date.parse(w.observedAt ?? '') || 0)
+          : latest,
+      0,
+    )
+  const queried = accounts.filter((a) => lastQuery(a.windows ?? []) > 0)
   const account =
+    queried.toSorted((a, b) => lastQuery(b.windows) - lastQuery(a.windows))[0] ??
     accounts.find((a) =>
       a.windows?.some(
         (w) => classified(w) && w.status === 'ok' && (evidence(w)?.validUntil ?? 0) > now,
       ),
-    ) ?? accounts.find((a) => a.windows?.some(classified))
+    ) ??
+    accounts.find((a) => a.windows?.some(classified))
+
+  function observedRing(id: CodexRingId, w: Window): CodexRing {
+    const queried = w.basis === 'quota_read'
+    const observedAt = Date.parse(w.observedAt ?? '')
+    const resetAt = Date.parse(w.resetAt ?? '')
+    const timing = evidence(w)
+    const validUntil = queried
+      ? Math.min(
+          Number.isFinite(resetAt) ? resetAt : Infinity,
+          observedAt + queriedQuotaLifetime(refreshInterval),
+        )
+      : (timing?.validUntil ?? Infinity)
+    const isStale =
+      snapshot.status === 'error' ||
+      snapshot.status === 'offline' ||
+      (!queried && snapshot.status === 'stale') ||
+      w.status === 'stale' ||
+      validUntil <= now
+    let percent = NaN
+    if (w.status && Number.isFinite(observedAt) && observedAt <= now) {
+      if (resetRing(id) && timing)
+        percent = ((observedAt - timing.startAt) / (timing.resetAt - timing.startAt)) * 100
+      else if (!resetRing(id) && (timing || queried) && typeof w.remainingPercent === 'string')
+        percent = Number(w.remainingPercent)
+    }
+    const last =
+      admin && Number.isFinite(percent) && percent >= 0 && percent <= 100
+        ? { percent, observedAt }
+        : undefined
+    if (isStale) return last ? { id, state: 'stale', last } : { id, state: 'stale' }
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) return { id, state: 'unknown' }
+    if (resetRing(id) && timing)
+      return {
+        id,
+        state: 'progress',
+        startAt: timing.startAt,
+        resetAt: timing.resetAt,
+        validUntil,
+        ...(last ? { last } : {}),
+      }
+    if (!admin && validUntil < now + guestLifetime) return { id, state: 'unknown' }
+    return {
+      id,
+      state: 'remaining',
+      percent,
+      validUntil: admin ? validUntil : now + guestLifetime,
+      ...(last ? { last } : {}),
+    }
+  }
 
   function ring(id: CodexRingId): CodexRing[] {
     const policy = admin ? 'full' : (settings?.guest[id] ?? DEFAULT_CODEX_GUEST[id])
@@ -110,35 +170,14 @@ export function codexRingProjection(
     if (policy === 'masked') return [{ id, state: 'masked' }]
     if (snapshot.status === 'unconfigured' || snapshot.status === 'unsupported')
       return [{ id, state: snapshot.status }]
-    if (snapshot.status === 'stale') return [{ id, state: 'stale' }]
-    if (snapshot.status !== 'ok') return [{ id, state: 'unknown' }]
     const candidates = account?.windows?.filter((w) => w.windowMinutes === ringMinutes(id)) ?? []
-    if (candidates.length !== 1) return [{ id, state: 'unknown' }]
-    const w = candidates[0]!
-    const timing = evidence(w)
-    if (w.status === 'stale' || (timing && timing.validUntil <= now))
-      return [{ id, state: 'stale' }]
-    if (!timing) return [{ id, state: 'unknown' }]
-    if (resetRing(id)) return [{ id, state: 'progress', ...timing }]
-    const percent = Number(w.remainingPercent)
     if (
-      typeof w.remainingPercent !== 'string' ||
-      !Number.isFinite(percent) ||
-      percent < 0 ||
-      percent > 100
+      candidates.length === 1 &&
+      (candidates[0]!.basis === 'quota_read' || candidates[0]!.basis === 'passive_headers')
     )
-      return [{ id, state: 'unknown' }]
-    // A public allowance does not authorize its reset timestamp. Use a constant expiry
-    // horizon for guests and withhold any observation that cannot stay valid throughout it.
-    if (!admin && timing.validUntil < now + guestLifetime) return [{ id, state: 'unknown' }]
-    return [
-      {
-        id,
-        state: 'remaining',
-        percent,
-        validUntil: admin ? timing.validUntil : now + guestLifetime,
-      },
-    ]
+      return [observedRing(id, candidates[0]!)]
+    if (snapshot.status === 'stale') return [{ id, state: 'stale' }]
+    return [{ id, state: 'unknown' }]
   }
   const rings = CODEX_RINGS.flatMap(ring)
   return {

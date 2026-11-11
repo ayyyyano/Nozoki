@@ -7,6 +7,14 @@ import { stampISO, staleAt } from './common.ts'
 import { passiveWindows } from './codex-observations.ts'
 import { hex, mac } from '../services/auth-crypto.ts'
 import { CODEX_USAGE_QUEUE, aggregateUsage, mergeUsageDays, usageView } from './codex-usage.ts'
+import {
+  QuotaAccountId,
+  QuotaAuthIndex,
+  mergeQuotaWindows,
+  quotaWindows,
+  type CodexQuotaAccount,
+} from './codex-quota.ts'
+const AccountMetadata = z.object({ chatgpt_account_id: QuotaAccountId.optional() })
 const Cooldown = z.object({
   scope: z.string().max(40),
   reason: z.string().max(80),
@@ -28,6 +36,8 @@ const Credentials = z.object({
         failed: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
         cooldowns: z.array(Cooldown).max(200).nullable().optional(),
         quota: z.unknown().optional(),
+        id_token: z.unknown().optional(),
+        chatgpt_account_id: z.unknown().optional(),
       }),
     )
     .max(100),
@@ -46,7 +56,8 @@ async function readAccounts(context: AdapterContext, consume = true) {
   result.observedAt = value.observed_at ? stampISO(value.observed_at) : null
   if (staleAt(result.observedAt, context, response.ageSeconds)) result.status = 'stale'
   const accounts = [],
-    quotas = []
+    quotas: CodexQuotaAccount[] = [],
+    targets: { id: string; authIndex: string; accountId?: string; ready: boolean }[] = []
   let invalidQuota = false
   for (const file of value.files) {
     if (file.provider.toLowerCase() !== 'codex') continue
@@ -106,20 +117,62 @@ async function readAccounts(context: AdapterContext, consume = true) {
             }
           : null,
     })
+    const previous = context.previousCodexQuota?.find((a) => a.id === id)?.windows ?? []
+    let passive: CodexQuotaAccount['windows'] = []
     try {
-      const windows = passiveWindows(file.quota, context)
-      if (windows.length) quotas.push({ id, windows })
+      passive = passiveWindows(file.quota, context)
     } catch {
       invalidQuota = true
+    }
+    const windows = mergeQuotaWindows(previous, passive).map((w) =>
+      state === 'disabled' || state === 'auth_error' ? { ...w, status: 'stale' as const } : w,
+    )
+    if (windows.length) quotas.push({ id, windows })
+    const index = QuotaAuthIndex.safeParse(file.auth_index)
+    if (index.success && state !== 'disabled' && state !== 'auth_error') {
+      const idToken = AccountMetadata.safeParse(file.id_token)
+      const accountId =
+        QuotaAccountId.safeParse(file.chatgpt_account_id).data ?? idToken.data?.chatgpt_account_id
+      targets.push({ id, authIndex: index.data, accountId, ready: state === 'ready' })
     }
   }
   if (new Set(accounts.map((a) => a.id)).size !== accounts.length)
     throw new AdapterError('INVALID_RESPONSE')
-  result.capabilities.quota = cap(quotas.length > 0, quotas.length > 0)
+  let quotaFailure: string | undefined = invalidQuota ? 'INVALID_QUOTA_OBSERVATION' : undefined
+  const target = targets.toSorted(
+    (a, b) => Number(b.ready) - Number(a.ready) || a.id.localeCompare(b.id),
+  )[0]
+  if (consume && target && context.readCodexQuota) {
+    try {
+      const response = await context.readCodexQuota(target.authIndex, target.accountId)
+      const observed = quotaWindows(response, context.now, target.accountId)
+      if (!observed.length) throw new AdapterError('INVALID_RESPONSE')
+      const existing = quotas.find((a) => a.id === target.id)
+      if (existing) {
+        existing.windows = mergeQuotaWindows(existing.windows, observed).map((w) =>
+          w.basis === 'quota_read' &&
+          !observed.some((item) => item.windowMinutes === w.windowMinutes)
+            ? { ...w, status: 'stale' }
+            : w,
+        )
+      } else quotas.push({ id: target.id, windows: observed })
+      quotaFailure = undefined
+    } catch {
+      quotaFailure = 'QUOTA_READ_UNAVAILABLE'
+      const existing = quotas.find((a) => a.id === target.id)
+      if (existing)
+        existing.windows = existing.windows.map((w) =>
+          w.basis === 'quota_read' ? { ...w, status: 'stale' } : w,
+        )
+    }
+  }
+  result.capabilities.quota = {
+    ...cap(quotas.length > 0, quotas.length > 0),
+    ...(quotaFailure ? { reason: quotaFailure } : {}),
+  }
   const hasCounts = accounts.some((a) => a.executionCounts !== null)
   result.capabilities.executionCounts = cap(hasCounts, hasCounts)
   result.items = accounts.length
-  if (invalidQuota) result.capabilities.quota.reason = 'INVALID_QUOTA_OBSERVATION'
   let usage = context.codexUsageDays?.length
     ? usageView(mergeUsageDays(context.codexUsageDays, [], context.now))
     : null
@@ -139,12 +192,14 @@ async function readAccounts(context: AdapterContext, consume = true) {
       )
       result.capabilities.usage = cap(true, true)
     } catch (error) {
-      if (
-        !(error instanceof AdapterError) ||
-        (error.code !== 'NOT_FOUND' && error.upstreamStatus !== 400)
-      )
-        throw error
-      result.capabilities.usage = { ...cap(false), reason: 'USAGE_STATISTICS_DISABLED' }
+      const disabled =
+        error instanceof AdapterError &&
+        (error.code === 'NOT_FOUND' || error.upstreamStatus === 400)
+      if (!disabled && !context.readCodexQuota) throw error
+      result.capabilities.usage = {
+        ...cap(false),
+        reason: disabled ? 'USAGE_STATISTICS_DISABLED' : 'USAGE_QUEUE_UNAVAILABLE',
+      }
     }
   }
   putView(result, 'codex', {

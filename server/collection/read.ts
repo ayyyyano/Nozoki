@@ -19,6 +19,8 @@ export async function collectSource(
       signal,
       quoteSymbols: p.quoteSymbols,
       codexUsageDays: p.codexUsageDays,
+      previousCodexQuota: p.previousCodexQuota,
+      scheduledCodexQuota: p.scheduledCodexQuota,
       onRead: (bytes) => {
         metrics.responseBytes += bytes
       },

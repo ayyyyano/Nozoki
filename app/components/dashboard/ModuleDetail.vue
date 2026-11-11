@@ -24,7 +24,13 @@ const focus = useModalFocus(show, panel)
     >
       <header class="module-detail-heading">
         <h2 :id="titleId">{{ title }}</h2>
-        <VarButton text round aria-label="关闭详情" title="关闭详情" @click="show = false"
+        <VarButton
+          text
+          round
+          class="edge-icon-action"
+          aria-label="关闭详情"
+          title="关闭详情"
+          @click="show = false"
           ><CommonAppIcon name="close"
         /></VarButton>
       </header>

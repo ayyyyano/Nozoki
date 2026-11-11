@@ -36,7 +36,13 @@ function closed() {
     >
       <header class="source-dialog-heading">
         <h2 :id="titleId">{{ title }}</h2>
-        <VarButton text round :disabled="busy" aria-label="关闭对话框" @click="show = false"
+        <VarButton
+          text
+          round
+          class="edge-icon-action edge-icon-action--small"
+          :disabled="busy"
+          aria-label="关闭对话框"
+          @click="show = false"
           ><CommonAppIcon name="close" :size="20"
         /></VarButton>
       </header>

@@ -122,7 +122,7 @@ export interface CodexData {
         resetAt: string | null
         windowMinutes?: number
         observedAt?: string | null
-        basis?: 'passive_headers' | 'reviewed_plugin'
+        basis?: 'passive_headers' | 'reviewed_plugin' | 'quota_read'
         status?: 'ok' | 'stale'
       }[]
     }[]
