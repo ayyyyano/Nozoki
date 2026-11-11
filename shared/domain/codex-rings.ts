@@ -21,10 +21,20 @@ export const DEFAULT_CODEX_GUEST = {
   weeklyResetProgress: 'masked',
 } as const
 type RingStatus = 'masked' | 'unknown' | 'stale' | 'unconfigured' | 'unsupported'
+interface LastObservation {
+  percent: number
+  observedAt: number
+}
 export type CodexRing = { id: CodexRingId } & (
-  | { state: RingStatus }
-  | { state: 'remaining'; percent: number; validUntil: number }
-  | { state: 'progress'; startAt: number; resetAt: number; validUntil: number }
+  | { state: RingStatus; last?: LastObservation }
+  | { state: 'remaining'; percent: number; validUntil: number; last?: LastObservation }
+  | {
+      state: 'progress'
+      startAt: number
+      resetAt: number
+      validUntil: number
+      last?: LastObservation
+    }
 )
 export interface CodexRingView {
   home: CodexRingId[]
@@ -36,21 +46,38 @@ export function ringMinutes(id: CodexRingId) {
 export function resetRing(id: CodexRingId) {
   return id.endsWith('ResetProgress')
 }
+export function queriedQuotaLifetime(refreshInterval: number) {
+  // One extra Cron tick plus time for collection and the dashboard poll.
+  return (Math.max(300, refreshInterval) + 360) * 1000
+}
 
 export function presentRing(ring: CodexRing, now: number) {
   if (ring.state !== 'remaining' && ring.state !== 'progress')
-    return { state: ring.state, percent: null, resetIn: null, resetAt: null }
+    return { state: ring.state, percent: null, resetIn: null, resetAt: null, last: ring.last }
   if (now >= ring.validUntil)
-    return { state: 'stale' as const, percent: null, resetIn: null, resetAt: null }
+    return { state: 'stale' as const, percent: null, resetIn: null, resetAt: null, last: ring.last }
   if (ring.state === 'remaining')
-    return { state: ring.state, percent: ring.percent, resetIn: null, resetAt: null }
+    return {
+      state: ring.state,
+      percent: ring.percent,
+      resetIn: null,
+      resetAt: null,
+      last: undefined,
+    }
   if (now < ring.startAt || now >= ring.resetAt)
-    return { state: 'unknown' as const, percent: null, resetIn: null, resetAt: null }
+    return {
+      state: 'unknown' as const,
+      percent: null,
+      resetIn: null,
+      resetAt: null,
+      last: undefined,
+    }
   return {
     state: ring.state,
     percent: ((now - ring.startAt) / (ring.resetAt - ring.startAt)) * 100,
     resetIn: ring.resetAt - now,
     resetAt: ring.resetAt,
+    last: undefined,
   }
 }
 

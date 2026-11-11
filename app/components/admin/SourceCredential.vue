@@ -92,6 +92,7 @@ function clear() {
             ><VarButton
               text
               round
+              class="edge-icon-action edge-icon-action--small"
               :aria-label="`${visible ? '隐藏' : '显示'}新${field.label}`"
               :aria-pressed="visible"
               @click="visible = !visible"

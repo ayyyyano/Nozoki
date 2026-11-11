@@ -4,11 +4,12 @@ import { decryptCredential } from '../services/credentials.ts'
 import { credentialKeys } from '../services/credential-keys.ts'
 import { hmacKey } from '../services/auth-crypto.ts'
 import { assertManagedSource } from '../adapters/source-connector.ts'
-import { managedTransport } from '../adapters/managed-transport.ts'
+import { managedCodexQuotaReader, managedTransport } from '../adapters/managed-transport.ts'
 import { AdapterError } from '../adapters/types.ts'
 import { runAdapter } from '../adapters/registry.ts'
 import type { TransportOptions } from '../adapters/transport.ts'
 import type { UsageDay } from '../adapters/codex-usage.ts'
+import type { CodexQuotaAccount } from '../adapters/codex-quota.ts'
 export async function readManagedSource(
   source: IntegrationSettings,
   envelope: CredentialEnvelope | null,
@@ -16,7 +17,11 @@ export async function readManagedSource(
   env: Record<string, unknown>,
   now: Date,
   mode: 'read' | 'probe',
-  options: TransportOptions & { codexUsageDays?: readonly UsageDay[] } = {},
+  options: TransportOptions & {
+    codexUsageDays?: readonly UsageDay[]
+    previousCodexQuota?: readonly CodexQuotaAccount[]
+    scheduledCodexQuota?: boolean
+  } = {},
 ) {
   const access = assertManagedSource(source)
   if (access.mode !== 'public') throw new AdapterError('DESTINATION_BLOCKED')
@@ -56,6 +61,11 @@ export async function readManagedSource(
         signal: options.signal,
         quoteSymbols: options.quoteSymbols,
         codexUsageDays: options.codexUsageDays,
+        previousCodexQuota: options.previousCodexQuota,
+        readCodexQuota:
+          mode === 'read' && options.scheduledCodexQuota
+            ? managedCodexQuotaReader(source, credential, options)
+            : undefined,
         identityKey,
       },
       mode,

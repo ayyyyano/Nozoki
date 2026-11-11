@@ -26,6 +26,12 @@ const accountStates = {
 </script>
 <template>
   <section aria-label="账户与用量">
+    <p
+      v-if="snapshot.data?.capabilities?.quota?.reason === 'QUOTA_READ_UNAVAILABLE'"
+      class="quiet-note"
+    >
+      本轮额度查询未成功，下轮定时采集会重试。
+    </p>
     <div v-if="snapshot.data?.accounts?.length" aria-label="Codex 账户状态">
       <div v-for="(account, index) in snapshot.data.accounts" :key="account.id" class="quota-row">
         <span>账户 {{ index + 1 }}</span
@@ -44,10 +50,11 @@ const accountStates = {
         <div v-for="window in account.windows" :key="window.id" class="quota-row">
           <span>{{ window.label }}</span
           ><strong
-            >{{ expired(window) ? '—' : decimalText(window.remainingPercent)
-            }}{{ !expired(window) && window.remainingPercent !== null ? '%' : '' }}</strong
+            >{{ decimalText(window.remainingPercent)
+            }}{{ window.remainingPercent !== null ? '%' : '' }}</strong
           >
           <small v-if="window.basis === 'passive_headers'">既往响应观测</small>
+          <small v-if="window.basis === 'quota_read'">定时额度查询</small>
           <small v-if="expired(window)">观测已过期</small>
           <small v-if="window.observedAt">{{ formatTimestamp(window.observedAt, timezone) }}</small>
           <small

@@ -665,7 +665,7 @@ onBeforeRouteLeave(() => {
               text
               round
               v-if="section !== 'data'"
-              class="admin-icon-button"
+              class="admin-icon-button edge-icon-action"
               :disabled="busy || readOnly"
               :aria-label="`重置${currentSection.label}为默认设置`"
               title="重置为默认设置"

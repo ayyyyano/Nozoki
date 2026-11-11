@@ -11,7 +11,7 @@ const props = defineProps<{ rings: CodexRing[]; now: number; detail?: boolean }>
 const timezone = useDashboardTimezone()
 const labels = {
   masked: '已遮蔽',
-  unknown: '未知',
+  unknown: '待同步',
   stale: '已过期',
   unsupported: '不支持',
   unconfigured: '未配置',
@@ -27,10 +27,15 @@ const items = computed(() =>
     return {
       id: ring.id,
       ...value,
+      lastTime: value.last
+        ? formatTimestamp(new Date(value.last.observedAt).toISOString(), timezone.value)
+        : null,
       progress: resetRing(ring.id),
       text:
         value.percent === null
-          ? labels[value.state as keyof typeof labels]
+          ? value.last
+            ? percentage(value.last.percent)
+            : labels[value.state as keyof typeof labels]
           : percentage(value.percent),
     }
   }),
@@ -61,6 +66,9 @@ const items = computed(() =>
         }}</strong>
       </div>
       <div class="codex-ring-label">{{ RING_LABELS[item.id] }}</div>
+      <small v-if="item.lastTime" :title="item.lastTime">
+        {{ item.lastTime.slice(5) }} · 已过期
+      </small>
       <small v-if="item.resetIn !== null">距重置 {{ resetCountdown(item.resetIn) }}</small>
       <small v-if="detail && item.resetAt !== null">{{
         formatTimestamp(new Date(item.resetAt).toISOString(), timezone)

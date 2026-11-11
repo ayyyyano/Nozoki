@@ -9,6 +9,28 @@ import {
 } from '../../shared/contracts/config.ts'
 import { snapshotSchema } from '../../shared/contracts/snapshots.ts'
 import type { Database } from '../types/database.ts'
+import type { CollectionClaim } from './collection.ts'
+import type { CodexData } from '../../shared/contracts/dashboard.ts'
+
+export async function readPriorCodexQuota(db: Database, claim: CollectionClaim) {
+  const row = await db
+    .prepare(
+      `SELECT snapshot_json FROM integration_snapshot_views
+     WHERE source_id=? AND module_id='codex' AND source_revision=? AND environment_epoch=?
+     ORDER BY collected_at DESC LIMIT 1`,
+    )
+    .bind(claim.plan.source.id, claim.plan.revision, claim.environment.epoch)
+    .first<{ snapshot_json: string }>()
+  if (!row) return []
+  try {
+    const parsed = snapshotSchema('codex').safeParse(JSON.parse(row.snapshot_json))
+    if (parsed.success && parsed.data.sourceId === claim.plan.source.id)
+      return (parsed.data.data as CodexData | null)?.quota?.accounts ?? []
+  } catch {
+    // A damaged cache must not block a new observation.
+  }
+  return []
+}
 export const SnapshotWriteSchema = z
   .strictObject({
     sourceId: IdSchema,

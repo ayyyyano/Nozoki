@@ -9,6 +9,7 @@ import type {
 import type { AdapterCode } from '../../shared/contracts/adapter.ts'
 import type { QuoteSymbolInput } from '../../shared/quotes/yahoo-symbol.ts'
 import type { UsageDay } from './codex-usage.ts'
+import type { CodexQuotaAccount } from './codex-quota.ts'
 export class AdapterError extends Error {
   code: AdapterCode
   retryAfterSeconds?: number
@@ -31,6 +32,8 @@ export interface AdapterContext {
   identityKey?: CryptoKey
   quoteSymbols?: readonly QuoteSymbolInput[]
   codexUsageDays?: readonly UsageDay[]
+  previousCodexQuota?: readonly CodexQuotaAccount[]
+  readCodexQuota?: (authIndex: string, accountId?: string) => Promise<ReadResponse>
   source: IntegrationSettings
   transport: ReadTransport
   now: Date

@@ -99,7 +99,7 @@ defineExpose({ open })
     >
       <VarButton
         v-if="checking || !session || session.viewer === 'admin'"
-        class="account-close"
+        class="account-close edge-icon-action"
         native-type="button"
         text
         round
@@ -133,7 +133,7 @@ defineExpose({ open })
       >
         <template #heading-action>
           <VarButton
-            class="account-inline-close"
+            class="account-inline-close edge-icon-action"
             native-type="button"
             text
             round
@@ -164,22 +164,15 @@ defineExpose({ open })
 .account-dialog .account-close {
   position: absolute;
   top: 12px;
-  right: 12px;
+  inset-inline-end: var(--auth-card-inline-padding, 32px);
   z-index: 1;
-  width: 44px;
-  height: 44px;
 }
 .account-dialog .auth-heading {
-  padding-right: 28px;
+  padding-inline-end: 28px;
 }
 .account-dialog .auth-login-form .auth-heading {
   justify-content: space-between;
-  padding-right: 0;
-}
-.account-dialog .account-inline-close {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  padding-inline-end: 0;
 }
 .account-dialog h2 {
   margin: 0;

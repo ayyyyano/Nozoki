@@ -47,7 +47,7 @@ defineProps<{
         <VarButton
           text
           round
-          class="module-detail-button"
+          class="module-detail-button edge-icon-action edge-icon-action--small"
           :aria-label="`查看${title}详情`"
           :title="`查看${title}详情`"
           aria-haspopup="dialog"
