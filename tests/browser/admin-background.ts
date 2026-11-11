@@ -4,6 +4,7 @@ import { expect } from 'playwright/test'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { backgroundFixture } from '../fixtures/background.ts'
+import { select, settings } from './support.ts'
 import {
   backgroundImageHash,
   decodeBackgroundImage,
@@ -23,6 +24,9 @@ export async function exerciseSharedBackground(
   upload.backgroundUpload = backgroundFixture
   upload.config.site.background.source = 'uploaded'
   upload.config.site.background.url = path
+  upload.config.site.background.layout = 'page'
+  upload.config.site.background.cardOpacity = 42
+  upload.config.site.background.cardBlur = 11
   assert.equal(
     (
       await request('/api/admin/config', 'PUT', upload, {
@@ -101,6 +105,31 @@ export async function exerciseSharedBackground(
   await visitor.goto(origin)
   await expect(visitor.locator('.background-scene img')).toHaveAttribute('src', savedUrl)
   await expect(visitor.locator('.background-scene')).toHaveAttribute('data-background', 'loaded')
+  const actions = visitor.locator('.page-actions button')
+  const action = actions.first()
+  const card = visitor.locator('.dashboard-grid .module-card').first()
+  const app = visitor.locator('.nozoki-app')
+  const cardColor = () => card.evaluate((element) => getComputedStyle(element).backgroundColor)
+  const expectMatchingColor = () =>
+    expect
+      .poll(
+        async () =>
+          (await action.evaluate((el) => getComputedStyle(el).backgroundColor)) ===
+          (await cardColor()),
+      )
+      .toBe(true)
+  await expect(card).toHaveCSS('backdrop-filter', 'blur(11px)')
+  const sharedColor = await cardColor()
+  await expect(actions).toHaveCount(4)
+  for (const button of await actions.all()) {
+    await expect(button).toHaveCSS('backdrop-filter', 'blur(11px)')
+    await expect(button).toHaveCSS('background-color', sharedColor)
+  }
+  await expect(visitor.locator('.page-actions')).toHaveCSS('backdrop-filter', 'none')
+  await action.hover()
+  await expect(action).toHaveCSS('backdrop-filter', 'blur(11px)')
+  await expect(action).toHaveCSS('background-color', /\/ 0\.42\)$/)
+  await visitor.mouse.move(0, 0)
   await page.screenshot({ path: resolve(evidence, 'background-admin-desktop.png'), fullPage: true })
   await page.setViewportSize({ width: 320, height: 844 })
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
@@ -116,6 +145,28 @@ export async function exerciseSharedBackground(
     'src',
     '/media/wallpaper-glass-picnic.webp',
   )
+  const dialog = await settings(visitor)
+  const blur = dialog.getByRole('slider', { name: '卡片背景模糊', exact: true })
+  await blur.press('Home')
+  await expect(action).toHaveCSS('backdrop-filter', 'none')
+  await blur.press('End')
+  await expect(action).toHaveCSS('backdrop-filter', 'blur(20px)')
+  const opacity = dialog.getByRole('slider', { name: '卡片不透明度', exact: true })
+  await opacity.press('Home')
+  await expect(app).toHaveCSS('--card-alpha', '0%')
+  await expectMatchingColor()
+  await opacity.press('End')
+  await expect(app).toHaveCSS('--card-alpha', '100%')
+  await expectMatchingColor()
+  await opacity.press('Home')
+  await select(visitor, '展示方式', '顶部横幅')
+  await expect(app).toHaveAttribute('data-background-layout', 'banner')
+  await expect(action).toHaveCSS('backdrop-filter', 'none')
+  await expectMatchingColor()
+  await select(visitor, '背景来源', '关闭')
+  await expect(app).toHaveAttribute('data-background-layout', 'off')
+  await expect(action).toHaveCSS('backdrop-filter', 'none')
+  await expectMatchingColor()
   await guest.close()
   assert.deepEqual(errors, [])
 }

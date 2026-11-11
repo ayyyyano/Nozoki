@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { expect } from 'playwright/test'
 import { launch, settle } from '../browser/support.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
 import { readConfig, saveConfig } from '../../server/services/config.ts'
@@ -413,10 +414,32 @@ try {
     await device.getByRole('button', { name: '添加权限规则', exact: true }).click()
     await tab('日程安排')
     await page.getByLabel('上班时间 HH:mm', { exact: true }).last().fill('09:00')
-    await page.locator('summary').filter({ hasText: '手动日程例外' }).click()
-    await page.getByLabel('例外日期 YYYY-MM-DD', { exact: true }).last().fill('2026-12-31')
-    await page.getByLabel('例外名称', { exact: true }).last().fill('手动休息日')
-    await page.getByRole('button', { name: '添加或更新日程例外', exact: true }).click()
+    const addSpecialDate = page.getByRole('button', { name: '添加特殊日期', exact: true })
+    await addSpecialDate.click()
+    const specialDate = page.getByRole('dialog', { name: '添加特殊日期' })
+    await specialDate.getByLabel('日期', { exact: true }).fill('2026-12-31')
+    await specialDate.getByRole('textbox', { name: '名称（可选）', exact: true }).fill('手动休息日')
+    await expect(specialDate.getByRole('radio', { name: '休息日', exact: true })).toBeChecked()
+    await specialDate.getByRole('button', { name: '应用', exact: true }).click()
+    const editSpecialDate = page.getByRole('button', { name: '编辑特殊日期 2026-12-31' })
+    await expect(editSpecialDate).toBeFocused()
+    await editSpecialDate.click()
+    const dateEditor = page.getByRole('dialog', { name: '编辑特殊日期' })
+    await dateEditor.getByRole('radio', { name: '工作日', exact: true }).check()
+    await page.keyboard.press('Escape')
+    await expect(editSpecialDate).toBeFocused()
+    await addSpecialDate.click()
+    await specialDate.getByLabel('日期', { exact: true }).fill('2026-12-31')
+    await expect(specialDate.getByRole('button', { name: '应用', exact: true })).toBeDisabled()
+    await page.keyboard.press('Escape')
+    const labelButton = page.getByRole('button', { name: '自定义状态文案', exact: true })
+    await labelButton.click()
+    const labels = page.getByRole('dialog', { name: '自定义状态文案', exact: true })
+    await labels.getByRole('textbox', { name: '休息日状态文字', exact: true }).fill('今天休息')
+    await labels.getByRole('button', { name: '应用', exact: true }).click()
+    const preview = page.getByRole('region', { name: '日程预览' })
+    await preview.getByLabel('预览日期 YYYY-MM-DD', { exact: true }).fill('2026-12-31')
+    await expect(preview.locator('[data-schedule-preview-state]')).toHaveText('今天休息')
     await saveBrowser()
     const c = await config()
     assert.equal(c.modules.find((m) => m.id === 'quotes').visibility, 'admin')
@@ -424,6 +447,8 @@ try {
       '/devices/@future.a~1b~0c/batteryPercent' in c.modules.find((m) => m.id === 'devices').fields,
     )
     assert.equal(c.site.schedule.start, '09:00')
+    assert.deepEqual(c.site.schedule.calendar['2026-12-31'], { workday: false, name: '手动休息日' })
+    assert.equal(c.site.schedule.labels.rest, '今天休息')
     report.browser.push('module order, ACL RFC6901, visibility, schedule')
   })
   await checks('browser add/delete quotes links and credential metadata lifecycle', async () => {
