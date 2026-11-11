@@ -357,7 +357,7 @@ The endpoint is an unversioned Tencent stock-page service with unconfirmed publi
 
 ### Updates and troubleshooting
 
-Push code to the production branch to rebuild and deploy connected Workers. If an update adds `migrations/*.sql`, run the migration command from step 3 before deploying the new code. Applied migrations are skipped. Before migrations, review Time Travel or export a backup from D1. If you enable a custom domain, update `AUTH_ORIGIN` to its actual HTTPS origin.
+Push code to the production branch to rebuild and deploy connected Workers. The deploy command applies new `migrations/*.sql` automatically, so no manual migration step is required; to verify early or take a backup first, run the migration command from step 3, which skips files already applied. Before migrations, review Time Travel or export a backup from D1. If you enable a custom domain, update `AUTH_ORIGIN` to its actual HTTPS origin.
 
 | Symptom                                          | Check                                                                                                                                                                         |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
