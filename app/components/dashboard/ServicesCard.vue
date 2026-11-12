@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { DataSnapshot, ServicesData } from '../../../shared/contracts/dashboard'
 import { serviceSummary } from '../../../shared/domain/home-summary'
-import { additionalSuccess } from '../../../shared/domain/summary-status'
 const props = defineProps<{ snapshot: DataSnapshot<ServicesData>; title: string }>()
 const now = useLocalClock()
 const summary = computed(() => serviceSummary(props.snapshot, now.value))
@@ -41,23 +40,12 @@ const summary = computed(() => serviceSummary(props.snapshot, now.value))
     <p v-if="summary.total && !summary.items.length" class="quiet-note">
       未选择首页服务，可在详情中查看。
     </p>
-    <template v-if="snapshot.collectedAt || summary.down || summary.unknown" #footer>
-      <span v-if="summary.down || summary.unknown" role="status" aria-label="全部监控状态">
+    <template v-if="summary.down || summary.unknown" #footer>
+      <span role="status" aria-label="全部监控状态">
         <span v-if="summary.down">异常 {{ summary.down }}</span
         ><span v-if="summary.down && summary.unknown"> · </span
         ><span v-if="summary.unknown">待确认 {{ summary.unknown }}</span>
-        <span v-if="snapshot.collectedAt"> · </span>
       </span>
-      <DashboardSummaryTime
-        v-if="snapshot.collectedAt"
-        :value="snapshot.collectedAt"
-        label="采集于"
-      />
-      <span
-        v-if="additionalSuccess(snapshot.status, snapshot.lastSuccessAt, snapshot.collectedAt)"
-        class="summary-extra-time"
-        ><DashboardSummaryTime :value="snapshot.lastSuccessAt!" label="最近成功"
-      /></span>
     </template>
     <template #details>
       <DashboardDataState :status="snapshot.status" :empty="!summary.total" compact />

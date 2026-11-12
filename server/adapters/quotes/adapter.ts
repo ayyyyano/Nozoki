@@ -1,4 +1,5 @@
 import { ADAPTER_PROTOCOLS } from '../../../shared/contracts/adapter.ts'
+import { latestMarketClose } from '../../../shared/quotes/markets.ts'
 import type { Adapter, AdapterContext } from '../types.ts'
 import { AdapterError } from '../types.ts'
 import { cap, sourceResult, putView, staleAt } from '../common.ts'
@@ -13,7 +14,11 @@ async function read(context: AdapterContext, probe = false) {
     context.signal,
   )
   const result = sourceResult(context, { quote: cap(true, true) })
-  for (const item of items) if (staleAt(item.asOf, context)) result.status = 'stale'
+  for (const item of items) {
+    if (!staleAt(item.asOf, context) || !item.asOf) continue
+    const close = latestMarketClose(item.market, context.now)
+    if (close === null || Date.parse(item.asOf) < close) result.status = 'stale'
+  }
   const times = items.flatMap((item) => (item.asOf ? [item.asOf] : [])).sort()
   result.observedAt = times[0] ?? null
   result.items = items.length

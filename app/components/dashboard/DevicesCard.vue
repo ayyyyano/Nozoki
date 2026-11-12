@@ -16,8 +16,9 @@ const devices = computed(() => props.snapshot.data?.devices ?? [])
     :title="title"
     :status="snapshot.status"
     :has-data="!!devices.length"
-    :observed-at="snapshot.observedAt"
+    :observed-at="snapshot.observedAt ?? snapshot.collectedAt"
     :last-success-at="snapshot.lastSuccessAt"
+    :time-label="snapshot.observedAt ? '观测于' : '采集于'"
     :details="devicesHaveDetails(devices)"
   >
     <DashboardDataState
@@ -31,17 +32,11 @@ const devices = computed(() => props.snapshot.data?.devices ?? [])
     <DashboardDeviceList
       v-if="devices.length"
       :devices="deviceSummary(devices)"
-      :status="snapshot.status"
       :display-options="displayOptions"
     />
     <template #details>
       <DashboardDataState :status="snapshot.status" :empty="!devices.length" compact />
-      <DashboardDeviceList
-        :devices="devices"
-        :status="snapshot.status"
-        :display-options="displayOptions"
-        detail
-      />
+      <DashboardDeviceList :devices="devices" :display-options="displayOptions" detail />
     </template>
   </DashboardModuleCard>
 </template>

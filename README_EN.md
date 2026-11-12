@@ -1,10 +1,10 @@
 # Nozoki
 
-[简体中文](README.md)
+<img align='right' src='public/logo.png' width='200px' alt="Nozoki logo">
+
+[DEMO}(https://nozoki.nekro.top/) | [简体中文](README.md)
 
 Nozoki is a personal dashboard for Cloudflare Workers or a Node.js server. Nuxt 4 runs the pages and server APIs. Cloudflare deployments use D1; server deployments store settings, sessions and snapshots in a local SQLite file.
-
-The interface uses Varlet Material 3 and xicons Material. It supports generated theme colors, banner or full-page backgrounds, wallpaper mode and loading transitions. The account button on the home page opens the administrator login form.
 
 ## Dashboard modules
 
@@ -272,6 +272,12 @@ The collection environment follows the [Cloudflare deployment version](https://d
 An instance's type and protocol are fixed after creation. Changing its address requires approval again and replacement or deletion of credentials bound to the old address. Saved secrets appear as placeholders. Edit opens an empty field for a new value; Delete asks for confirmation and schedules removal for the next save. You can undo deletion before saving. Credentials are encrypted in the database; admin reads return their configuration status. Each configuration supports up to 10 sources.
 
 Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI uses `cliproxy-bridge` / `cliproxy-v8-accounts`, with its Management Key as the Bearer credential. A stable account identity key is generated and stored encrypted. Allow `GET /v8/management/credentials` and `GET /v8/management/observability/usage/queue?count=50` on your reverse proxy. Reading the queue consumes its records and happens during collection. Scheduled quota reads on Workers also need `POST /v8/management/requests/api-call`. This management route can make arbitrary upstream requests, so restrict it at the reverse proxy to Nozoki's fixed method and destination, `GET https://chatgpt.com/backend-api/wham/usage`.
+
+### UptimeFlare monitor names
+
+The UptimeFlare status page displays monitor names from `uptime.config.ts`. Nozoki reads each monitor's `name` from `/api/data`. When the default UptimeFlare response omits that field, the Services card and admin monitor list display monitor IDs. [UptimeFlare configuration](https://github.com/lyc8503/UptimeFlare/wiki/Configuration#workerconfig) · [API source](https://github.com/lyc8503/UptimeFlare/blob/main/pages/api/data.ts)
+
+To display names in Nozoki, add `name: monitor.name` to `monitors[monitor.id]` in your UptimeFlare instance's `pages/api/data.ts`, keep the existing monitor IDs, and redeploy UptimeFlare. Once `/api/data` returns the names, wait for Nozoki's next successful collection and refresh the monitor list in the admin Services settings. Existing homepage selections are preserved by ID.
 
 ### Public HTTPS access on Cloudflare
 

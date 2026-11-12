@@ -9,7 +9,7 @@ function openDetails() {
   tooltip.value = false
   open.value = true
 }
-defineProps<{
+const props = defineProps<{
   id: ModuleId
   title: string
   status: DataStatus
@@ -17,8 +17,12 @@ defineProps<{
   details?: boolean
   hasData?: boolean
   timeLabel?: string
+  timeZone?: string
   lastSuccessAt?: string | null
 }>()
+const successTime = computed(() =>
+  additionalSuccess(props.status, props.lastSuccessAt, props.observedAt),
+)
 </script>
 <template>
   <section
@@ -39,7 +43,7 @@ defineProps<{
         >{{ summaryStatus(status) }}</span
       >
       <VarTooltip
-        v-if="details && $slots.details"
+        v-if="(details || observedAt || successTime || $slots.subtitle) && $slots.details"
         v-model:show="tooltip"
         :disabled="open"
         :content="`查看${title}详情`"
@@ -59,32 +63,28 @@ defineProps<{
       </VarTooltip>
     </header>
     <div class="module-body"><slot /></div>
-    <footer
-      v-if="
-        observedAt ||
-        $slots.footer ||
-        (hasData && additionalSuccess(status, lastSuccessAt, observedAt))
-      "
-      class="sync-time"
-    >
-      <slot name="footer">
-        <DashboardSummaryTime
-          v-if="observedAt"
-          :value="observedAt"
-          :label="timeLabel ?? '观测于'"
-        />
-        <span
-          v-if="hasData && additionalSuccess(status, lastSuccessAt, observedAt)"
-          class="summary-extra-time"
-          ><DashboardSummaryTime :value="lastSuccessAt!" label="最近成功"
-        /></span>
-      </slot>
-    </footer>
+    <footer v-if="$slots.footer" class="module-footer"><slot name="footer" /></footer>
     <DashboardModuleDetail
-      v-if="details && $slots.details"
+      v-if="(details || observedAt || successTime || $slots.subtitle) && $slots.details"
       v-model:show="open"
       :title="title + '详情'"
     >
+      <template v-if="observedAt || successTime || $slots.subtitle" #subtitle>
+        <slot name="subtitle">
+          <DashboardSummaryTime
+            v-if="observedAt"
+            :value="observedAt"
+            :label="timeLabel ?? '观测于'"
+            :timezone="timeZone"
+          />
+        </slot>
+        <DashboardSummaryTime
+          v-if="successTime"
+          :value="successTime"
+          label="最近成功"
+          :timezone="timeZone"
+        />
+      </template>
       <slot name="details" />
     </DashboardModuleDetail>
   </section>

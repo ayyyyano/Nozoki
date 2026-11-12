@@ -2,7 +2,6 @@
 import type { DataSnapshot, DeepSeekData } from '../../../shared/contracts/dashboard'
 import { decimalText, formatTimestamp } from '../../../shared/domain/format'
 import { balanceDays } from '../../../shared/domain/daily-balances'
-import { additionalSuccess } from '../../../shared/domain/summary-status'
 const props = defineProps<{ snapshot: DataSnapshot<DeepSeekData>; title: string }>()
 const clock = useLocalClock()
 const siteTimezone = useDashboardTimezone()
@@ -40,6 +39,10 @@ const series = computed(() => {
     :title="title"
     :status="snapshot.status"
     :has-data="!!series.length || !!snapshot.data?.masked"
+    :observed-at="snapshot.data?.masked ? null : snapshot.collectedAt"
+    :last-success-at="snapshot.data?.masked ? null : snapshot.lastSuccessAt"
+    time-label="采集于"
+    :time-zone="timezone"
     :details="
       !snapshot.data?.masked &&
       !!snapshot.data &&
@@ -135,17 +138,6 @@ const series = computed(() => {
       <p v-if="series.length > 1" class="quiet-note">
         另有 {{ series.length - 1 }} 种币种，可在详情查看。
       </p>
-    </template>
-    <template v-if="!snapshot.data?.masked && snapshot.collectedAt" #footer>
-      <DashboardSummaryTime :value="snapshot.collectedAt" label="采集于" :timezone="timezone" />
-      <span
-        v-if="additionalSuccess(snapshot.status, snapshot.lastSuccessAt, snapshot.collectedAt)"
-        class="summary-extra-time"
-        ><DashboardSummaryTime
-          :value="snapshot.lastSuccessAt!"
-          label="最近成功"
-          :timezone="timezone"
-      /></span>
     </template>
   </DashboardModuleCard>
 </template>

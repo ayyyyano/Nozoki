@@ -2,6 +2,7 @@
 const show = defineModel<boolean>('show', { required: true })
 defineProps<{ title: string }>()
 const titleId = useId(),
+  subtitleId = useId(),
   panel = useTemplateRef<HTMLElement>('panel')
 const focus = useModalFocus(show, panel)
 </script>
@@ -19,11 +20,17 @@ const focus = useModalFocus(show, panel)
       role="dialog"
       aria-modal="true"
       :aria-labelledby="titleId"
+      :aria-describedby="$slots.subtitle ? subtitleId : undefined"
       tabindex="-1"
       @keydown.esc.stop="show = false"
     >
       <header class="module-detail-heading">
-        <h2 :id="titleId">{{ title }}</h2>
+        <div class="module-detail-title">
+          <h2 :id="titleId">{{ title }}</h2>
+          <div v-if="$slots.subtitle" :id="subtitleId" class="module-detail-subtitle">
+            <slot name="subtitle" />
+          </div>
+        </div>
         <VarButton
           text
           round

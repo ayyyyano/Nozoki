@@ -66,7 +66,7 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
           style = getComputedStyle(el)
         const children = [
           ...el.querySelectorAll(
-            ':scope > .module-header, :scope > .module-body, :scope > .sync-time',
+            ':scope > .module-header, :scope > .module-body, :scope > .module-footer',
           ),
         ]
         return {
@@ -76,7 +76,7 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
           required: el.scrollHeight,
           client: el.clientHeight,
           heading: el.querySelector('h2').getBoundingClientRect().top - r.top,
-          footer: el.querySelector('.sync-time')?.getBoundingClientRect().bottom - r.top,
+          footer: el.querySelector('.module-footer')?.getBoundingClientRect().bottom - r.top,
           contentsBottom:
             Math.max(...children.map((c) => c.getBoundingClientRect().bottom)) - r.top,
           padding: parseFloat(style.paddingBottom),

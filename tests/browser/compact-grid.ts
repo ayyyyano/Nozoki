@@ -19,7 +19,7 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
   const prefix = before ? 'before' : 'after'
   await page.clock.setFixedTime(fixed)
   const full = await fixture({ devices: 7, monitors: 12, disabled: [], stale: true })
-  // The widest percentage must fit alongside charging and an independent age warning.
+  // The widest percentage must fit alongside the charging indicator.
   full.modules.find((m) => m.id === 'devices').snapshot.data.devices[1].batteryPercent = 100
   for (const id of ['codex', 'tailscale']) {
     const m = full.modules.find((m) => m.id === id)
@@ -292,7 +292,7 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
         assert.equal(result.columnCount, count === 7 ? 4 : 3)
         assert.equal(result.rows, 2)
         assert.ok(result.cards.every((c) => Math.abs(c.height - result.cards[0].height) < 1))
-        assert.ok(result.cards.every((c) => c.height <= 244))
+        assert.ok(result.cards.every((c) => c.height === 240))
         assert.equal(result.devicesColumns.split(' ').length, 2)
         assert.equal(result.serviceColumns.split(' ').length, 2)
         assert.equal(result.quoteColumns.split(' ').length, 2)

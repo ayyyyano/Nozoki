@@ -1,10 +1,10 @@
 # Nozoki
 
-[English](README_EN.md)
+<img align='right' src='public/logo.png' width='200px' alt="Nozoki logo">
+
+[DEMO}(https://nozoki.nekro.top/) | [English](README_EN.md)
 
 Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板。Nuxt 4 提供页面与服务端 API。Cloudflare 部署使用 D1，服务器部署使用本机 SQLite 文件保存站点配置、登录会话和数据快照。
-
-界面使用 Varlet Material 3 和 xicons Material，支持动态主题色、横幅或整页背景、纯壁纸模式及加载过渡。管理员通过首页右上角登录入口进入后台，编辑共享配置。
 
 ## 看板模块
 
@@ -289,6 +289,12 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 来源创建后类型和协议固定。密钥输入区的星号是占位符，点击「编辑」填写新值。点击删除图标并确认后，凭据会在全局保存时清除；保存前可以撤销。每份配置最多 10 个来源。删除来源会自动解除模块匹配，受保护的余额和导入历史仍会阻止删除，此时可停用来源。
 
 Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cliproxy-bridge` / `cliproxy-v8-accounts`，使用 Management Key 作为 Bearer 凭据。账户身份密钥自动生成并加密保存。反向代理应放行 `GET /v8/management/credentials` 和 `GET /v8/management/observability/usage/queue?count=50`。用量队列读取即消费，仅正式采集使用。Worker 上的定时额度查询还需要放行 `POST /v8/management/requests/api-call`。此管理接口可发起任意上游请求，建议在反代处将该路由限制到 Nozoki 发出的固定目标与方法 `GET https://chatgpt.com/backend-api/wham/usage`。
+
+### UptimeFlare 监控名称
+
+UptimeFlare 状态页直接使用 `uptime.config.ts` 中的监控名称。Nozoki 从 `/api/data` 读取每项监控的 `name`。UptimeFlare 的默认响应省略这个字段时，Nozoki 的「服务状态」卡片和后台监控列表会显示监控 ID。[UptimeFlare 配置文档](https://github.com/lyc8503/UptimeFlare/wiki/Configuration#workerconfig) · [接口源码](https://github.com/lyc8503/UptimeFlare/blob/main/pages/api/data.ts)
+
+要让 Nozoki 显示名称，请在自建 UptimeFlare 的 `pages/api/data.ts` 中为 `monitors[monitor.id]` 添加 `name: monitor.name`，保留原监控 ID，然后重新部署 UptimeFlare。确认 `/api/data` 已返回名称后，等待 Nozoki 下一次成功采集，再在后台「服务状态」中点击「刷新监控列表」。原有的首页勾选按 ID 保留。
 
 ### Cloudflare 公网 HTTPS 出站
 
