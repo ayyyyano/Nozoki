@@ -64,6 +64,47 @@ test('quota reads use a fixed upstream GET and classify only reported window len
   assert.equal(quotaWindows({ ...response, value: { status_code: 200, body } }, now).length, 1)
 })
 
+test('explicitly unused windows refresh at full quota even with no valid reset time', () => {
+  const nowSeconds = +now / 1000
+  for (const reset of [
+    {},
+    { reset_at: null, reset_after_seconds: null },
+    { reset_at: 0, reset_after_seconds: 0 },
+    { reset_at: nowSeconds },
+    { reset_at: nowSeconds - 3600, reset_after_seconds: 0 },
+    { reset_at: nowSeconds + 18001 },
+    { reset_after_seconds: -1 },
+  ]) {
+    const window = { limit_window_seconds: 18000, ...reset }
+    const read = (primary: unknown) =>
+      quotaWindows(
+        {
+          value: {
+            status_code: 200,
+            body: { rate_limit: { primary_window: primary, secondary_window: null } },
+          },
+        },
+        now,
+      )
+    assert.deepEqual(read({ ...window, used_percent: 0 }), [
+      {
+        id: 'five-hour',
+        label: '5 小时额度',
+        windowMinutes: 300,
+        remainingPercent: '100',
+        resetAt: null,
+        observedAt: now.toISOString(),
+        basis: 'quota_read',
+        status: 'ok',
+      },
+    ])
+    assert.deepEqual(read(window), [])
+    assert.deepEqual(read(null), [])
+    if (Object.values(reset).some(Boolean))
+      assert.deepEqual(read({ ...window, used_percent: 10 }), [])
+  }
+})
+
 test('queue schema rejects missing fields, wrong counters, null tokens and unknown fields', () => {
   assert.equal(UsageQueueSchema.safeParse([usageRecord()]).success, true)
   for (const field of Object.keys(usageRecord())) {
