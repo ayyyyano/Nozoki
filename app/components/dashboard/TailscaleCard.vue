@@ -11,7 +11,8 @@ const summary = computed(() => tailnetSummary(nodes.value))
     :title="title"
     :status="snapshot.status"
     :has-data="nodes.length > 0"
-    :observed-at="nodes.length ? snapshot.collectedAt : null"
+    :observed-at="snapshot.collectedAt"
+    :last-success-at="snapshot.lastSuccessAt"
     time-label="采集于"
     :details="nodes.length > 0"
   >

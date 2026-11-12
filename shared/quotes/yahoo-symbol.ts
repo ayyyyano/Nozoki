@@ -1,3 +1,5 @@
+import { A_SHARE_QUOTE_MARKETS, US_QUOTE_MARKETS } from './markets.ts'
+
 export interface QuoteSymbolInput {
   market: string
   symbol: string
@@ -5,7 +7,7 @@ export interface QuoteSymbolInput {
 export function yahooSymbol(input: QuoteSymbolInput): string {
   const { market, symbol } = input
   if (
-    ['US', 'NASDAQ', 'NYSE', 'AMEX', 'ARCA'].includes(market) &&
+    US_QUOTE_MARKETS.includes(market) &&
     /^[A-Z][A-Z0-9.-]{0,31}$/.test(symbol) &&
     !/\.(?:SS|SZ|HK)$/.test(symbol)
   )
@@ -14,7 +16,7 @@ export function yahooSymbol(input: QuoteSymbolInput): string {
     const code = String(Number(symbol.replace(/\.HK$/, '')))
     if (Number(code) > 0) return code.padStart(4, '0') + '.HK'
   }
-  if (['CN', 'SH', 'SSE', 'SZ', 'SZSE'].includes(market)) {
+  if (A_SHARE_QUOTE_MARKETS.includes(market)) {
     if (/^\d{6}\.(?:SS|SZ)$/.test(symbol)) {
       if (['SH', 'SSE'].includes(market) && !symbol.endsWith('.SS'))
         throw new Error('UNSUPPORTED_QUOTE_SYMBOL')

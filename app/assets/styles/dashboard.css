@@ -268,7 +268,7 @@ p {
 /* Layout capacity follows the dashboard container, including embedded/sidebar widths. */
 @container dashboard (min-width: 700px) {
   .dashboard-grid {
-    --business-card-height: clamp(242px, calc(206px + 4svh), 266px);
+    --business-card-height: 240px;
     --dashboard-columns: var(--medium-columns);
     --navigation-span: span var(--medium-links-span);
     grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -389,7 +389,7 @@ p {
 .data-state[data-status='stale'] {
   color: var(--n-text);
 }
-.sync-time,
+.module-footer,
 .scope-note,
 .quiet-note,
 .capability-note {
@@ -397,7 +397,7 @@ p {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
-.sync-time {
+.module-footer {
   margin-top: 12px;
   flex-shrink: 0;
 }
@@ -1424,11 +1424,25 @@ p {
   padding: 16px 20px;
   border-bottom: 1px solid var(--color-outline-variant);
 }
-.module-detail-heading h2 {
+.module-detail-title {
   min-width: 0;
   flex: 1;
   overflow-wrap: anywhere;
+}
+.module-detail-title h2 {
   font-size: 20px;
+}
+.module-detail-subtitle {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+  max-block-size: 28dvh;
+  overflow-y: auto;
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+}
+.module-detail-heading > .var-button {
+  align-self: flex-start;
 }
 .module-detail-content {
   min-height: 0;
@@ -1561,10 +1575,7 @@ p {
 .summary-status[data-status='error'] {
   color: var(--color-danger);
 }
-.summary-extra-time {
-  display: block;
-}
-.dashboard-grid .sync-time {
+.dashboard-grid .module-footer {
   margin-top: auto;
   padding-top: 8px;
   font-size: 11px;
@@ -1586,17 +1597,9 @@ p {
   font-size: 11px;
   line-height: 1.35;
 }
-.device-age {
-  color: var(--n-muted);
-}
 .module-body .battery-value {
   align-items: center;
   gap: 0 2px;
-}
-.module-body .device-age {
-  font-size: 10px;
-  line-height: 1.35;
-  white-space: nowrap;
 }
 .module-body .battery-value strong {
   font-size: 17px;

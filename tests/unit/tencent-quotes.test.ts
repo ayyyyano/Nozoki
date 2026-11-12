@@ -55,14 +55,21 @@ test('Tencent observed fixtures produce quotes and five adjusted daily buckets i
     ),
   )
   assert.equal(items[0]!.history[0]!.at, '2026-10-26T04:00:00.000Z')
-  const stale = await runAdapter({
+  const beforeNextClose = await runAdapter({
     source,
     transport: transport(),
     quoteSymbols: symbols,
     now: new Date('2026-11-02T05:00:00.000Z'),
   })
-  assert.equal(stale.status, 'stale')
-  assert.equal(stale.observedAt, '2026-10-30T20:00:01.000Z')
+  assert.equal(beforeNextClose.status, 'ok')
+  assert.equal(beforeNextClose.observedAt, '2026-10-30T20:00:01.000Z')
+  const afterNextClose = await runAdapter({
+    source,
+    transport: transport(),
+    quoteSymbols: symbols,
+    now: new Date('2026-11-02T21:00:00.000Z'),
+  })
+  assert.equal(afterNextClose.status, 'stale')
 })
 test('Tencent transport sends no credential or Cookie and limits paths to configured symbols', async () => {
   let calls = 0

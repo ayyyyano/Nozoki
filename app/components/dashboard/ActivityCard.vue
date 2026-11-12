@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { ActivityData, DataSnapshot } from '../../../shared/contracts/dashboard'
 import { formatTimestamp } from '../../../shared/domain/format'
-import { additionalSuccess } from '../../../shared/domain/summary-status'
 const props = defineProps<{ snapshot: DataSnapshot<ActivityData>; title: string; now: number }>()
 const { state, view, legacy } = useScheduleEvaluation(
   () => props.snapshot.data?.schedule,
@@ -14,6 +13,7 @@ const { state, view, legacy } = useScheduleEvaluation(
     :title="title"
     :status="state.valid ? snapshot.status : snapshot.data ? 'error' : snapshot.status"
     :has-data="state.valid && !!snapshot.data"
+    :last-success-at="snapshot.lastSuccessAt"
     :details="state.valid && !legacy && (view.periods.length > 3 || !!state.nextPeriod)"
   >
     <template v-if="state.valid && snapshot.data">
@@ -47,14 +47,8 @@ const { state, view, legacy } = useScheduleEvaluation(
       </div>
     </template>
     <DashboardDataState v-else :status="snapshot.data ? 'error' : snapshot.status" empty />
-    <template v-if="state.valid && snapshot.data" #footer>
-      计划状态 · {{ state.timezone
-      }}<span v-if="view.exceptionName"> · {{ view.exceptionName }}</span>
-      <span
-        v-if="additionalSuccess(snapshot.status, snapshot.lastSuccessAt)"
-        class="summary-extra-time"
-        ><DashboardSummaryTime :value="snapshot.lastSuccessAt!" label="最近成功"
-      /></span>
+    <template v-if="state.valid && snapshot.data && view.exceptionName" #footer>
+      {{ view.exceptionName }}
     </template>
     <template #details>
       <p>{{ view.label }} · {{ state.timezone }}</p>

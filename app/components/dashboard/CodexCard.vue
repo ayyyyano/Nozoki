@@ -29,6 +29,9 @@ const details = computed(
     id="codex"
     :title="title"
     :status="snapshot.status"
+    :observed-at="snapshot.collectedAt"
+    :last-success-at="snapshot.lastSuccessAt"
+    time-label="同步于"
     :details="details"
     :has-data="home.length > 0"
   >

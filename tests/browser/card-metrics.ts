@@ -4,6 +4,9 @@ import { expect } from 'playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fixture, fixed } from '../fixtures/layout.ts'
+import { presentationSnapshots } from '../fixtures/presentation.ts'
+import { createDefaultConfig } from '../../shared/contracts/config.ts'
+import { codexRingProjection } from '../../server/services/dashboard-presentation.ts'
 import { balanceDays } from '../../shared/domain/daily-balances.ts'
 import { decimalText } from '../../shared/domain/format.ts'
 import { settle } from './support.ts'
@@ -15,7 +18,26 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
     report = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.clock.setFixedTime(fixed)
-  let current = await fixture({ stale: true })
+  const current = await fixture({ stale: true, devices: 4, monitors: 8, disabled: [] })
+  const devices = current.modules.find((m) => m.id === 'devices').snapshot.data.devices
+  devices[0].statusUpdatedAt = new Date(fixed.getTime() - 2 * 86400000).toISOString()
+  const presentation = presentationSnapshots(fixed)
+  const { sourceId: _tailSource, ...tailnet } = presentation.tailscale
+  const { sourceId: _codexSource, ...codex } = presentation.codex
+  Object.assign(current.modules.find((m) => m.id === 'tailscale').snapshot, tailnet)
+  Object.assign(current.modules.find((m) => m.id === 'codex').snapshot, {
+    ...codex,
+    data: {
+      ...codex.data,
+      ringView: codexRingProjection(
+        codex.data,
+        codex,
+        createDefaultConfig().modules.find((m) => m.id === 'codex'),
+        fixed.getTime(),
+        true,
+      ),
+    },
+  })
   const balances = current.modules.find((m) => m.id === 'deepseek').snapshot
   const days = balanceDays(fixed, 'Asia/Shanghai')
   const amounts = ['128.50', '126.00', null, '0.00', '-2.00', '110.00', '108.25']
@@ -28,6 +50,7 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
       : [{ day, currency: 'CNY', total: amounts[i], collectedAt: fixed.toISOString() }],
   )
   balances.collectedAt = fixed.toISOString()
+  balances.lastSuccessAt = balances.collectedAt
   await page.route('**/api/dashboard', (route) => route.fulfill({ json: current }))
   async function show(width) {
     await page.setViewportSize({ width, height: 900 })
@@ -38,7 +61,20 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
     await refreshed
     await stable(page)
   }
-  for (const width of [1440, 1024, 768, 390, 320]) {
+  const card = (id) => page.locator(`[data-module="${id}"]`)
+  async function open(id) {
+    await card(id)
+      .getByRole('button', { name: /查看.*详情/ })
+      .click()
+    const panel = page.getByRole('dialog', { name: /详情$/ })
+    await expect(panel).toBeVisible()
+    return panel
+  }
+  async function close(panel) {
+    await page.keyboard.press('Escape')
+    await expect(panel).toBeHidden()
+  }
+  for (const width of [1920, 1440, 1391, 1280, 320]) {
     await show(width)
     const balance = page.locator('[data-module="deepseek"]')
     const quotes = page.locator('[data-module="quotes"]')
@@ -48,21 +84,54 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
     await expect(balance.locator('.balance-bar-value')).toHaveText(
       amounts.filter((v) => v !== null).map(decimalText),
     )
-    await expect(balance.locator('footer.sync-time')).toContainText('采集于')
-    await expect(quotes.locator('details, summary')).toHaveCount(0)
-    for (const detail of await quotes.locator('.quote-details').all())
-      await expect(detail).toBeVisible()
-    await expect(quotes.locator('.quote-details').first()).toContainText('昨收')
-    await expect(quotes.locator('.quote-details').first()).toContainText('振幅')
-    await expect(quotes.locator('.quote-details').first()).toContainText('成交')
-    const footer = quotes.locator('footer.sync-time')
-    await expect(footer).toContainText('QQQM')
-    await expect(footer).toContainText('VOO')
-    await expect(footer.locator('time')).toHaveCount(2)
-    await expect(footer.locator('time').first()).toHaveAttribute(
+    await expect(page.locator('.dashboard-grid .module-card time')).toHaveCount(0)
+    await expect(card('devices')).not.toContainText('较旧')
+    await expect(card('activity')).not.toContainText('计划状态 · Asia/Shanghai')
+    const cards = await page.locator('.dashboard-grid > .module-card').evaluateAll((items) =>
+      items.map((item) => ({
+        id: item.getAttribute('data-module'),
+        height: item.getBoundingClientRect().height,
+        fits:
+          item.scrollHeight <= item.clientHeight + 1 && item.scrollWidth <= item.clientWidth + 1,
+      })),
+    )
+    assert.equal(cards.length, 7)
+    assert.ok(
+      cards.every((item) => item.fits),
+      JSON.stringify(cards),
+    )
+    if (width >= 1280)
+      assert.ok(
+        cards.every((item) => item.height === 240),
+        JSON.stringify(cards),
+      )
+    for (const [id, label] of [
+      ['deepseek', '采集于'],
+      ['devices', '观测于'],
+      ['services', '采集于'],
+      ['tailscale', '采集于'],
+      ['codex', '同步于'],
+    ]) {
+      const panel = await open(id)
+      await expect(panel.locator('.module-detail-subtitle')).toContainText(label)
+      await expect(panel.locator('.module-detail-subtitle time')).toHaveCount(1)
+      await close(panel)
+    }
+    await expect(quotes.locator('.quote-details')).toHaveCount(0)
+    const quoteDetail = await open('quotes')
+    const subtitle = quoteDetail.locator('.module-detail-subtitle')
+    await expect(subtitle).toContainText('QQQM')
+    await expect(subtitle).toContainText('VOO')
+    await expect(subtitle.locator('time')).toHaveCount(2)
+    await expect(subtitle.locator('time').first()).toHaveAttribute(
       'datetime',
       '2026-11-02T17:00:00.000Z',
     )
+    const detail = quoteDetail.locator('.quote-details').first()
+    await expect(detail).toContainText('昨收')
+    await expect(detail).toContainText('振幅')
+    await expect(detail).toContainText('成交')
+    await close(quoteDetail)
     const geometry = await page.evaluate(() => {
       const box = (e) => {
         const r = e.getBoundingClientRect()
@@ -83,9 +152,6 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
           label: { ...box(e), lineHeight: parseFloat(getComputedStyle(e).lineHeight) },
           bar: box(e.nextElementSibling.querySelector('i')),
         })),
-        quotes: [...document.querySelectorAll('.quote-item')].map(box),
-        details: [...document.querySelectorAll('.quote-details')].map(box),
-        footer: box(document.querySelector('[data-module="quotes"] footer')),
       }
     })
     assert.ok(geometry.pageWidth <= width, JSON.stringify(geometry))
@@ -94,20 +160,20 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
       assert.ok(label.scroll <= label.client + 1, JSON.stringify(label))
       assert.ok(label.bottom - label.top <= label.lineHeight + 1, JSON.stringify(label))
     }
-    assert.ok(geometry.footer.top >= Math.max(...geometry.quotes.map((q) => q.bottom)))
-    for (const d of geometry.details) assert.ok(d.scroll <= d.client + 1)
-    report.push(geometry)
+    report.push({ ...geometry, cards })
     if ([1440, 320].includes(width)) {
       await balance.screenshot({ path: resolve(evidence, `daily-balances-${width}.png`) })
       await quotes.screenshot({ path: resolve(evidence, `quote-details-${width}.png`) })
     }
   }
-  // Matching times share one footer line, without replacing quote time with collection time.
+  // Matching quote times share one line in the detail subtitle.
   const quoteData = current.modules.find((m) => m.id === 'quotes').snapshot.data.items
   quoteData[1].asOf = quoteData[0].asOf
   quoteData[1].delayedMinutes = quoteData[0].delayedMinutes
   await show(1440)
-  await expect(page.locator('[data-module="quotes"] footer time')).toHaveCount(1)
+  let quoteDetail = await open('quotes')
+  await expect(quoteDetail.locator('.module-detail-subtitle time')).toHaveCount(1)
+  await close(quoteDetail)
   // Missing quote fields remain absent; fallback observation is explicitly identified.
   for (const quote of quoteData) {
     quote.previousClose = null
@@ -117,8 +183,10 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
     quote.delayedMinutes = null
   }
   await show(320)
-  await expect(page.locator('.quote-details')).toHaveCount(0)
-  await expect(page.locator('[data-module="quotes"] footer')).toContainText('观测于')
+  quoteDetail = await open('quotes')
+  await expect(quoteDetail.locator('.quote-details')).toHaveCount(0)
+  await expect(quoteDetail.locator('.module-detail-subtitle')).toContainText('观测于')
+  await close(quoteDetail)
   balances.data = { masked: true }
   await show(320)
   await expect(page.locator('.balance-private')).toBeVisible()

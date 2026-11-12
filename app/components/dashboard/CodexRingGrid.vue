@@ -66,8 +66,8 @@ const items = computed(() =>
         }}</strong>
       </div>
       <div class="codex-ring-label">{{ RING_LABELS[item.id] }}</div>
-      <small v-if="item.lastTime" :title="item.lastTime">
-        {{ item.lastTime.slice(5) }} · 已过期
+      <small v-if="item.lastTime" :title="detail ? item.lastTime : undefined">
+        {{ detail ? `${item.lastTime.slice(5)} · 已过期` : '已过期' }}
       </small>
       <small v-if="item.resetIn !== null">距重置 {{ resetCountdown(item.resetIn) }}</small>
       <small v-if="detail && item.resetAt !== null">{{

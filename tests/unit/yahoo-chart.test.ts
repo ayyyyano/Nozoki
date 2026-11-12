@@ -49,7 +49,7 @@ test('live-captured Yahoo responses normalize strict quotes, history, UTC and pr
   assert.equal(yahooChart.publicDisplay, false)
   const result = await runAdapter({ source: s, transport: transport(), quoteSymbols: symbols, now })
   assert.equal(result.code, undefined)
-  assert.equal(result.status, 'stale')
+  assert.equal(result.status, 'ok')
   const data = DataSchemas.quotes.parse(result.views.quotes!.data)
   assert.equal(data.items.length, 2)
   const quote = data.items[0]!,
@@ -277,13 +277,49 @@ test('daily changes require a reliable prior session close; range baselines and 
   assert.equal(zero.changePercent, null)
 })
 
+test('a mixed-market batch applies each symbol’s own regular close', async () => {
+  const quoteSymbols = [symbols[0]!, { market: 'SSE', symbol: '600519' }]
+  const { meta } = fixture.responses.QQQM.chart.result[0]
+  const shanghai = (asOf: string) => ({
+    chart: {
+      error: null,
+      result: [
+        {
+          meta: {
+            ...meta,
+            symbol: '600519.SS',
+            regularMarketTime: Date.parse(asOf) / 1000,
+            exchangeTimezoneName: 'Asia/Shanghai',
+          },
+        },
+      ],
+    },
+  })
+  for (const [asOf, expected] of [
+    ['2026-10-30T07:00:00.000Z', 'stale'],
+    ['2026-11-02T07:00:00.000Z', 'ok'],
+  ]) {
+    const result = await runAdapter({
+      source: s,
+      quoteSymbols,
+      now: new Date('2026-11-02T08:00:00.000Z'),
+      transport: transport(
+        { QQQM: fixture.responses.QQQM, '600519.SS': shanghai(asOf!) },
+        quoteSymbols,
+      ),
+    })
+    assert.equal(result.status, expected)
+  }
+})
+
 test('every quote time is validated even if an earlier symbol is stale; abort sends no request', async () => {
   const value = structuredClone(fixture.responses.VOO)
-  value.chart.result[0].meta.regularMarketTime = now.getTime() / 1000 + 100
+  const afterClose = new Date('2026-11-02T21:05:00.000Z')
+  value.chart.result[0].meta.regularMarketTime = afterClose.getTime() / 1000 + 100
   const result = await runAdapter({
     source: s,
     quoteSymbols: symbols,
-    now,
+    now: afterClose,
     transport: transport({ ...fixture.responses, VOO: value }),
   })
   assert.equal(result.code, 'INVALID_RESPONSE')

@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import type { Device, DataStatus } from '../../../shared/contracts/dashboard'
+import type { Device } from '../../../shared/contracts/dashboard'
 import { formatTimestamp } from '../../../shared/domain/format'
-import { staleTime } from '../../../shared/domain/home-summary'
 import { presentDevice, type DeviceDisplayOptions } from '../../../shared/device-state/presentation'
 const props = defineProps<{
   devices: Device[]
-  status: DataStatus
   detail?: boolean
   displayOptions?: DeviceDisplayOptions
 }>()
-const timezone = useDashboardTimezone(),
-  now = useLocalClock()
+const timezone = useDashboardTimezone()
 const presented = computed(() => props.devices.map((d) => presentDevice(d, props.displayOptions)))
 </script>
 <template>
@@ -53,27 +50,11 @@ const presented = computed(() => props.devices.map((d) => presentDevice(d, props
         <small v-if="detail && device.statusUpdatedAt"
           >状态更新 {{ formatTimestamp(device.statusUpdatedAt, timezone) }}</small
         >
-        <small v-if="detail && staleTime(device.statusUpdatedAt, now, 86400000)">状态较旧</small>
-        <div
-          v-if="
-            device.batteryPercent !== null ||
-            (!detail && staleTime(device.statusUpdatedAt, now, 86400000))
-          "
-          class="battery-value"
-        >
-          <strong v-if="device.batteryPercent !== null"
-            >{{ device.batteryPercent }}<small>%</small></strong
-          >
+        <div v-if="device.batteryPercent !== null" class="battery-value">
+          <strong>{{ device.batteryPercent }}<small>%</small></strong>
           <span v-if="device.charging" class="device-charging" aria-label="充电中" title="充电中"
             ><CommonAppIcon name="bolt" :size="detail ? 20 : 14"
           /></span>
-          <small
-            v-if="!detail && staleTime(device.statusUpdatedAt, now, 86400000)"
-            class="device-age"
-            aria-label="状态较旧"
-            title="状态较旧，完整更新时间见详情"
-            >较旧</small
-          >
         </div>
       </div>
     </article>
