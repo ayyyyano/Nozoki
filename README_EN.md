@@ -88,7 +88,7 @@ Collection uses database leases and source revision checks. A failed attempt kee
 
 ## Quick deployment with an agent tool
 
-Send the whole prompt below to an AI agent that can run commands in the project directory, such as Codex CLI or Claude Code. The agent completes the first deployment with wrangler and then binds the Worker to your GitHub repository, so later pushes build and deploy automatically. `wrangler login` requires one browser authorization; the Git binding needs one connect confirmation in the Cloudflare dashboard (including the GitHub App authorization). All other steps run in the terminal. Skip to the next section if you prefer doing each step by hand.
+Send the whole prompt below to an AI agent that can run commands in the project directory, such as Codex CLI or Claude Code. The agent completes the first deployment with wrangler and then binds the Worker to your GitHub repository, so later pushes build and deploy automatically. Automatic deployment defaults to Cloudflare Workers Builds, or the repository's own GitHub Actions workflow via steps 9.a–9.c at step 9. `wrangler login` requires one browser authorization; the Git binding needs one connect confirmation in the Cloudflare dashboard (including the GitHub App authorization). All other steps run in the terminal. Skip to the next section if you prefer doing each step by hand.
 
 ```text
 Deploy the Nozoki dashboard in the current directory to Cloudflare Workers and bind the Worker to my GitHub repository by default, so future pushes build automatically. Use the command line only apart from the final Git binding step, which I confirm in the dashboard; do not open the Cloudflare dashboard for anything else. Ask me before creating any cloud resource. Before starting, read the "Administrator configuration" and "Deploy to Cloudflare from GitHub" sections of README_EN.md. This flow commits and pushes the deployment configuration to my repository.
@@ -110,6 +110,11 @@ Build and deploy:
 Git binding for automatic builds:
 9. Run git remote -v to confirm the repository; ask me for its URL if no remote exists. Commit and push deployment settings to the production branch (master by default). Guide me through nozoki-dashboard → Settings → Builds → Connect. Select that repository and branch, keep the repository root, use pnpm build as the build command and pnpm deploy:cloudflare as the deploy command. Connect this one Worker; later pushes update pages and scheduled collection together.
 
+GitHub Actions binding for automatic deployment (when I choose Actions instead of Cloudflare Builds):
+9.a. Use the repository's included workflow `.github/workflows/deploy-cloudflare.yml` instead: guide me to open **Actions** in my fork and enable workflows when prompted (sync the version containing the workflow first for an existing fork). The runner uses the pinned Wrangler version, so the pushing device needs no Wrangler or wrangler login.
+9.b. Create a Cloudflare API token scoped to that account with **Workers Scripts Edit** and **D1 Edit** at the account level (add zone permissions if `wrangler.jsonc` manages routes). Guide me to create the `production` environment under my fork's **Settings → Environments**, add the environment secret `CLOUDFLARE_API_TOKEN`, restrict that environment's deployment branches to the default branch, and add the repository variable `CLOUDFLARE_ACCOUNT_ID` (my Cloudflare account ID) under **Settings → Secrets and variables → Actions → Variables**. These steps happen on GitHub pages that I operate myself; I enter the token value directly.
+9.c. Commit and push `wrangler.jsonc` to the fork's default branch to trigger the deployment. The workflow installs dependencies, builds the Worker, applies pending D1 migrations, and publishes it. If the same Worker already uses Cloudflare Workers Builds, disable its Git deployment there to avoid duplicate releases. Verify by checking a green run under **Actions → Deploy to Cloudflare Workers**, then request the site to confirm the new version is live.
+
 Credential encryption (only when I ask for it):
 10. Generate an independent random 32-byte base64url key and set it on the main Worker with pnpm exec wrangler secret put INTEGRATION_ENCRYPTION_KEY. Keep INTEGRATION_KEY_VERSION=v1 in the configuration. Pass the key through interactive input or stdin and ask me to retain it in a password manager. Admin saves and scheduled collection use this single key. Reuse the original key when encrypted credentials already exist.
 
@@ -120,6 +125,21 @@ Security: passwords and secrets belong only in Worker Secrets and Git-ignored lo
 ```
 
 ## Deploy to Cloudflare from GitHub
+
+### Automatic deployment with GitHub Actions
+
+Forks can use the included [deployment workflow](.github/workflows/deploy-cloudflare.yml). Push to the fork's own default branch, whether it is `master`, `main`, or another name. The GitHub runner uses the pinned Wrangler version, so your device does not need Wrangler or `wrangler login`.
+
+1. Open **Actions** in your fork and enable workflows when prompted. If you already have a fork, sync the version containing the workflow first.
+2. [Create D1](#2-create-the-cloud-database) in your Cloudflare account or use your existing Nozoki database. In your fork's `wrangler.jsonc`, set the database name and ID, target Worker name, and your own `ADMIN_EMAIL`. To use the default address, confirm that your account has a `workers.dev` subdomain under **Workers & Pages**, then set `AUTH_ORIGIN` to `https://<worker-name>.<account-subdomain>.workers.dev`. If you use a custom domain, enter your site's HTTPS origin.
+3. Create a Cloudflare API token scoped to that account with **Workers Scripts Edit** and **D1 Edit** at the account level. If `wrangler.jsonc` also manages routes, add the permissions required for the relevant zone.
+4. In your fork, create the `production` environment under **Settings → Environments** and add the environment secret `CLOUDFLARE_API_TOKEN`. Restrict that environment's deployment branches to your default branch. Under **Settings → Secrets and variables → Actions → Variables**, add the repository variable `CLOUDFLARE_ACCOUNT_ID` with your Cloudflare **account ID**. Set these values in each fork. The deployment job skips repositories without the account ID.
+5. If the same Worker already uses Cloudflare Workers Builds, disable automatic Git deployments there to avoid duplicate releases. Commit `wrangler.jsonc` and push to the fork's default branch. GitHub Actions installs dependencies, builds the Worker, applies pending D1 migrations, and publishes the Worker. If the configuration is already pushed, go to **Actions → Deploy to Cloudflare Workers → Run workflow** and select the default branch.
+6. After the first successful release, open your Worker in Cloudflare and [set the runtime secrets](#5-set-the-login-address-and-secrets) `ADMIN_PASSWORD` and `AUTH_RATE_LIMIT_SECRET`. To save data source credentials, also [set `INTEGRATION_ENCRYPTION_KEY`](#6-set-source-credentials-and-scheduled-collection). When switching an existing site, keep its runtime secrets and encryption key.
+
+See the [Cloudflare GitHub Actions guide](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/) and [GitHub's guide to workflows in forks](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflows-in-forked-repositories).
+
+### Deploy with Cloudflare Workers Builds
 
 Steps 1 through 5 give you a working website with administrator login, saved settings and scheduled default quotes. Step 6 adds encrypted source credentials and can be configured later. You need GitHub and Cloudflare accounts. Cloudflare provides a `workers.dev` address, so you can start without your own domain.
 

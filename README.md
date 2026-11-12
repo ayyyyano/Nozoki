@@ -88,7 +88,7 @@ pnpm preview
 
 ## 使用 Agent 工具快速部署
 
-把下面整段提示词发给能在项目目录执行命令的 AI Agent（如 Codex CLI、Claude Code），由它用 wrangler 完成首次部署，并把 Worker 绑定到你的 GitHub 仓库，此后推送代码即自动构建部署。`wrangler login` 需要在浏览器完成一次授权；绑定 Git 仓库需要你在 Cloudflare 控制台做一次连接确认（含 GitHub App 授权），其余步骤都在终端进行。愿意手动操作时，直接跳到下一节。
+把下面整段提示词发给能在项目目录执行命令的 AI Agent（如 Codex CLI、Claude Code），由它用 wrangler 完成首次部署，并把 Worker 绑定到你的 GitHub 仓库，此后推送代码即自动构建部署。自动部署默认走 Cloudflare Workers Builds，也可在步骤 9 改用仓库自带的 GitHub Actions 工作流（见 9.a–9.c）。`wrangler login` 需要在浏览器完成一次授权；绑定 Git 仓库需要你在 Cloudflare 控制台做一次连接确认（含 GitHub App 授权），其余步骤都在终端进行。愿意手动操作时，直接跳到下一节。
 
 ```text
 请把当前目录的 Nozoki 看板部署到 Cloudflare Workers，并默认把 Worker 绑定到我的 GitHub 仓库，此后通过推送自动构建。除最后的 Git 绑定一步需要我在控制台确认外，其余全程使用命令行，不要打开 Cloudflare 控制台；创建云端资源前先向我确认。开始前先阅读 README.md 的「管理员配置」和「通过 GitHub 部署到 Cloudflare」两节。本流程需要把部署配置提交推送到我的仓库。
@@ -110,6 +110,11 @@ pnpm preview
 绑定 Git 自动构建：
 9. 执行 git remote -v 确认远端仓库；没有远端时向我索取仓库地址。将部署配置提交并推送到生产分支（默认 master）。引导我打开 nozoki-dashboard → Settings → Builds → Connect，选择该仓库与生产分支，根目录使用仓库根目录，构建命令填写 pnpm build，部署命令填写 pnpm deploy:cloudflare。只需连接这一个 Worker，此后推送会一起更新网页和定时采集。
 
+绑定 GitHub Actions 自动部署（若我选择 Actions 而非 Cloudflare Builds）：
+9.a. 改用仓库自带的工作流 `.github/workflows/deploy-cloudflare.yml`：引导我在 Fork 的 **Actions** 页按提示启用工作流（已有 Fork 先同步该工作流所在版本）。Runner 使用锁定的 Wrangler 版本，推送设备无需安装 Wrangler 或执行 wrangler login。
+9.b. 在 Cloudflare 创建限于该账户的 API Token，授予账户级 **Workers Scripts Edit** 与 **D1 Edit**（`wrangler.jsonc` 管理路由时按实际配置追加区域权限）。引导我在 Fork 的 **Settings → Environments** 创建 `production` 环境并添加环境 Secret `CLOUDFLARE_API_TOKEN`，将该环境的部署分支限制为默认分支；再在 **Settings → Secrets and variables → Actions → Variables** 添加仓库变量 `CLOUDFLARE_ACCOUNT_ID`（值为 Cloudflare 账户 ID）。这些步骤需要我在 GitHub 页面操作，Token 值由我自行填入。
+9.c. 将 `wrangler.jsonc` 提交推送到 Fork 默认分支即触发部署；工作流会安装依赖、构建、应用待执行的 D1 迁移并发布 Worker。若同一 Worker 已接入 Cloudflare Workers Builds，先关闭其 Git 自动部署避免重复发布。验证方式：在 **Actions → Deploy to Cloudflare Workers** 查看运行记录为绿色，随后请求站点确认新版本生效。
+
 数据凭据加密（我明确要求时再执行）：
 10. 生成一份独立的随机 32 字节 base64url 密钥，用 pnpm exec wrangler secret put INTEGRATION_ENCRYPTION_KEY 配置到主 Worker。INTEGRATION_KEY_VERSION 使用配置中的 v1。密钥只通过交互输入或 stdin 传入，提醒我保存在密码管理器中。网页保存和定时采集共用这一份密钥。已有加密凭据时需使用原密钥。
 
@@ -120,6 +125,21 @@ pnpm preview
 ```
 
 ## 通过 GitHub 部署到 Cloudflare
+
+### 使用 GitHub Actions 自动部署
+
+Fork 后可以直接使用仓库自带的 [部署工作流](.github/workflows/deploy-cloudflare.yml)。推送到 Fork 自己的默认分支即触发部署，分支可为 `master`、`main` 或其他名称。GitHub Runner 使用锁定的 Wrangler 版本，推送设备无需安装 Wrangler 或执行 `wrangler login`。
+
+1. 在自己的 Fork 打开 **Actions**，按页面提示启用工作流。已有 Fork 要先同步包含该工作流的版本。
+2. 在自己的 Cloudflare 账户中[创建 D1](#2-创建云端数据库)，或者选用已有 Nozoki 数据库。在 Fork 的 `wrangler.jsonc` 中填写数据库名称和 ID、目标 Worker 名称及自己的 `ADMIN_EMAIL`。使用默认地址时，先在 **Workers & Pages** 确认账户已设置 `workers.dev` 子域名，再将 `AUTH_ORIGIN` 改为 `https://<Worker 名称>.<账户子域名>.workers.dev`。使用自定义域名时填写实际站点的 HTTPS 源地址。
+3. 在 Cloudflare 创建限于该账户的 API Token，授予账户级 **Workers Scripts Edit** 和 **D1 Edit**。如果还要通过 `wrangler.jsonc` 管理路由，再按实际配置授予对应区域权限。
+4. 在自己的 Fork 中，打开 **Settings → Environments**，创建 `production` 环境，添加环境 Secret `CLOUDFLARE_API_TOKEN`。将该环境允许部署的分支限制为自己的默认分支。然后在 **Settings → Secrets and variables → Actions → Variables** 添加仓库变量 `CLOUDFLARE_ACCOUNT_ID`，值为 Cloudflare **账户 ID**。Fork 需要单独配置这些值，未设置账户 ID 时部署作业会跳过。
+5. 如果同一个 Worker 已接入 Cloudflare Workers Builds，先关闭其 Git 自动部署，避免重复发布。提交 `wrangler.jsonc` 并推送到 Fork 的默认分支。GitHub Actions 会安装依赖、构建 Worker、应用待执行的 D1 迁移，再发布 Worker。已推送配置时，也可以在 **Actions → Deploy to Cloudflare Workers → Run workflow** 选择默认分支手动运行。
+6. 首次发布成功后，在 Cloudflare 打开自己的 Worker，按[登录配置](#5-设置登录地址和密码)添加运行时 Secret `ADMIN_PASSWORD` 和 `AUTH_RATE_LIMIT_SECRET`。如需在后台保存数据源凭据，再[配置 `INTEGRATION_ENCRYPTION_KEY`](#6-配置数据凭据与定时采集)。已有站点切换部署方式时继续使用原有运行时 Secret 和加密密钥。
+
+参考 [Cloudflare 的 GitHub Actions 部署指南](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/) 和 [GitHub 关于 Fork 工作流的说明](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflows-in-forked-repositories)。
+
+### 使用 Cloudflare Workers Builds 部署
 
 完成下面 1～5 步后，就能打开网站、登录后台并保存设置，默认行情由同一 Worker 定时采集。第 6 步用于保存其他来源的加密凭据，可以稍后配置。你需要一个 GitHub 账号和一个 Cloudflare 账号，域名可以先使用 Cloudflare 提供的 `workers.dev` 地址。
 
