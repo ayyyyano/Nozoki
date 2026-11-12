@@ -51,11 +51,9 @@ export function quotaWindows(response: ReadResponse, now: Date, accountId?: stri
     if (!parsed.success) continue
     const w = parsed.data
     const end = w.reset_at ? w.reset_at * 1000 : observed + (w.reset_after_seconds ?? 0) * 1000
-    if (
-      (w.reset_at || w.reset_after_seconds) &&
-      !(end > observed && end <= observed + w.limit_window_seconds * 1000)
-    )
-      continue
+    const hasReset = end > observed && end <= observed + w.limit_window_seconds * 1000
+    // A full window can be observed while idle, before a new reset time is available.
+    if (w.used_percent !== 0 && (w.reset_at || w.reset_after_seconds) && !hasReset) continue
     const minutes = w.limit_window_seconds / 60
     windows.push({
       id: minutes === 300 ? 'five-hour' : 'weekly',
@@ -63,10 +61,7 @@ export function quotaWindows(response: ReadResponse, now: Date, accountId?: stri
       windowMinutes: minutes,
       remainingPercent: decimalDifference('100', w.used_percent.toFixed(12)),
       observedAt: now.toISOString(),
-      resetAt:
-        end > observed && end <= observed + w.limit_window_seconds * 1000
-          ? new Date(end).toISOString()
-          : null,
+      resetAt: hasReset ? new Date(end).toISOString() : null,
       basis: 'quota_read',
       status: 'ok',
     })

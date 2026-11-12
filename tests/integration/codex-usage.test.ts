@@ -66,6 +66,7 @@ test(
       disabled = 0,
       quotaReads = 0,
       quotaUsed = 18,
+      quotaResetAt: number | undefined,
       quotaFailure = false
     const wire = async (request) => {
       const url = new URL(request.url)
@@ -87,7 +88,7 @@ test(
               primary_window: {
                 used_percent: quotaUsed,
                 limit_window_seconds: 18000,
-                reset_at: Math.floor(at / 1000) + 3600,
+                reset_at: quotaResetAt ?? Math.floor(at / 1000) + 3600,
               },
               secondary_window: {
                 used_percent: 10,
@@ -348,17 +349,34 @@ test(
     const changed = await scheduledQuota()
     assert.equal(changed[0].remainingPercent, '47')
     assert.ok(changed[0].observedAt > first[0].observedAt)
+    quotaUsed = 0
+    quotaResetAt = Date.parse(changed[0].resetAt) / 1000
+    // Wait until the old reset, then poll the same idle state again beyond the freshness limit.
+    at += 1800000
+    const full = await scheduledQuota()
+    assert.equal(full[0].resetAt, null)
+    assert.equal(full[0].remainingPercent, '100')
+    const stillFull = await scheduledQuota()
+    assert.equal(stillFull[0].observedAt, new Date(at).toISOString())
+    assert.equal(stillFull[0].status, 'ok')
+    const idle = await readAdminDashboard(db, new Date(at))
+    const idleRings = idle.modules[0].snapshot.data.ringView.rings
+    assert.deepEqual(
+      idleRings.map((ring) => ring.state),
+      ['remaining', 'remaining', 'unknown', 'progress'],
+    )
+    assert.equal(idleRings[0].percent, 100)
     quotaFailure = true
     assert.deepEqual(
       await scheduledQuota(),
-      changed.map((w) => ({ ...w, status: 'stale' })),
+      stillFull.map((w) => ({ ...w, status: 'stale' })),
     )
-    assert.equal(quotaReads, 3)
+    assert.equal(quotaReads, 5)
     assert.deepEqual(await readCodexUsageDays(db, 'usage-fixture', new Date(at)), days)
     const stale = await readAdminDashboard(db, new Date(at))
     const rings = stale.modules[0].snapshot.data.ringView.rings
     assert.equal(rings[0].state, 'stale')
-    assert.equal(rings[0].last.percent, 47)
+    assert.equal(rings[0].last.percent, 100)
     const publicStale = await readGuestDashboard(db, new Date(at))
     assert.deepEqual(publicStale.modules[0].snapshot.data.ringView.rings[0], {
       id: 'fiveHourRemaining',
@@ -379,7 +397,7 @@ test(
         await response
         const ring = page.locator('[data-ring="fiveHourRemaining"]')
         await expect(ring).toHaveAttribute('data-state', 'stale')
-        await expect(ring.getByText('47%', { exact: true })).toBeVisible()
+        await expect(ring.getByText('100%', { exact: true })).toBeVisible()
         await expect(ring.getByText(/已过期/)).toBeVisible()
       } finally {
         await browser.close()
