@@ -16,7 +16,7 @@ withDefaults(
 )
 const labels: Record<DataStatus, string> = {
   ok: '暂无数据',
-  stale: '数据已过期',
+  stale: '',
   error: '采集失败',
   unconfigured: '尚未配置数据源',
   unsupported: '来源不支持此能力',
@@ -24,14 +24,16 @@ const labels: Record<DataStatus, string> = {
 }
 const timezone = useDashboardTimezone()
 const notes: Partial<Record<DataStatus, string>> = {
-  stale: '以下为最近成功数据',
   error: '采集失败不代表监控对象离线',
   offline: '离线状态由来源明确报告',
 }
 </script>
 <template>
   <div
-    v-if="loading || ((status !== 'ok' || empty) && !(hasData && summaryStatus(status)))"
+    v-if="
+      loading ||
+      (status !== 'stale' && (status !== 'ok' || empty) && !(hasData && summaryStatus(status)))
+    "
     class="data-state"
     :class="{ compact }"
     :data-status="status"
@@ -51,7 +53,7 @@ const notes: Partial<Record<DataStatus, string>> = {
               : labels[status]
       }}</span
       ><small v-if="!compact && notes[status]">{{ notes[status] }}</small
-      ><small v-if="(status === 'stale' || status === 'error') && lastSuccessAt"
+      ><small v-if="status === 'error' && lastSuccessAt"
         >最近成功 {{ formatTimestamp(lastSuccessAt, timezone) }}</small
       >
     </div>

@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import type { DataSnapshot, TailscaleData } from '../../../shared/contracts/dashboard'
-import { tailnetSummary } from '../../../shared/domain/tailnet-presentation'
+import { tailnetState, tailnetSummary } from '../../../shared/domain/tailnet-presentation'
 const props = defineProps<{ snapshot: DataSnapshot<TailscaleData>; title: string }>()
+const now = useLocalClock()
 const nodes = computed(() => props.snapshot.data?.devices ?? [])
 const summary = computed(() => tailnetSummary(nodes.value))
+const expired = computed(
+  () =>
+    props.snapshot.status !== 'stale' && tailnetState(null, props.snapshot, now.value) === 'stale',
+)
 </script>
 <template>
   <DashboardModuleCard
@@ -25,6 +30,9 @@ const summary = computed(() => tailnetSummary(nodes.value))
       compact
     />
     <DashboardTailnetNodes :nodes="summary" :snapshot="snapshot" />
+    <template v-if="expired" #freshness>
+      <p role="status">数据已过期</p>
+    </template>
     <template #details>
       <DashboardTailnetNodes :nodes="nodes" :snapshot="snapshot" detail />
     </template>

@@ -319,7 +319,7 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
   ]) {
     const trigger = page.getByRole('button', { name: `查看${title}详情`, exact: true })
     await trigger.click()
-    const dialog = page.getByRole('dialog', { name: title + '详情', exact: true })
+    const dialog = page.getByRole('dialog', { name: title, exact: true })
     await expect(dialog).toBeVisible()
     await expect(dialog.locator(selector)).toHaveCount(count)
     if (title === '自选行情') await expect(dialog).toContainText('昨收')
@@ -329,7 +329,7 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
   }
   await page.setViewportSize({ width: 320, height: 844 })
   await page.getByRole('button', { name: '查看服务状态详情', exact: true }).click()
-  const detail = page.getByRole('dialog', { name: '服务状态详情', exact: true })
+  const detail = page.getByRole('dialog', { name: '服务状态', exact: true })
   await expect(detail).toBeVisible()
   assert.ok(await detail.evaluate((el) => el.scrollWidth <= el.clientWidth))
   await page.screenshot({ path: resolve(evidence, 'detail-services-320.png') })

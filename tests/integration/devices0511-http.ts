@@ -239,13 +239,22 @@ try {
       await store()
       await page.reload()
       await settle(page)
-      assert.ok((await page.locator('[data-module="devices"]').innerText()).includes('数据过期'))
+      const devices = page.locator('[data-module="devices"]')
+      assert.ok(!(await devices.innerText()).includes('已过期'))
       assert.ok(!(await page.locator('.device-list').innerText()).includes('离线'))
+      await devices.getByRole('button', { name: /详情/ }).click()
+      const dialog = page.locator('.module-detail-panel:visible')
+      await dialog
+        .locator('.module-detail-subtitle')
+        .getByText('数据已过期', { exact: true })
+        .waitFor()
       await page.screenshot({
         path: evidence + '/devices-stale.png',
         fullPage: true,
         animations: 'disabled',
       })
+      await page.keyboard.press('Escape')
+      await dialog.waitFor({ state: 'hidden' })
     },
   )
   await check(

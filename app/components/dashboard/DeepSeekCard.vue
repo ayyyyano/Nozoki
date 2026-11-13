@@ -51,7 +51,7 @@ const series = computed(() => {
         snapshot.data.dailyBalances.length > 0)
     "
   >
-    <template #details>
+    <template v-if="!snapshot.data?.masked" #details>
       <DashboardDataState :status="snapshot.status" compact />
       <section v-for="balance in snapshot.data?.balances ?? []" :key="balance.currency">
         <h3>{{ balance.currency }} 余额组成</h3>

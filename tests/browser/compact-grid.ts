@@ -298,9 +298,7 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
         assert.equal(result.quoteColumns.split(' ').length, 2)
         if (count === 7) assert.ok(result.minCardWidth >= 320)
         for (const id of ['deepseek', 'devices', 'quotes', 'services']) {
-          await expect(page.locator(`[data-module="${id}"] .summary-status`)).toContainText(
-            '已过期',
-          )
+          await expect(page.locator(`[data-module="${id}"]`)).not.toContainText('已过期')
           await expect(
             page.locator(`[data-module="${id}"] .module-body > .data-state`),
           ).toHaveCount(0)
@@ -613,7 +611,7 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
   for (const title of ['设备', '服务状态', '自选行情', 'DeepSeek']) {
     const button = page.getByRole('button', { name: `查看${title}详情`, exact: true })
     await button.click()
-    const dialog = page.getByRole('dialog', { name: title + '详情', exact: true })
+    const dialog = page.getByRole('dialog', { name: title, exact: true })
     await expect(dialog).toBeVisible()
     if (title === '设备') await expect(dialog.locator('.device-row')).toHaveCount(7)
     if (title === '服务状态') await expect(dialog.locator('.monitor-row')).toHaveCount(12)

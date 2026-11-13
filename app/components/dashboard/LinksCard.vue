@@ -10,6 +10,9 @@ const items = computed(() =>
 )
 const hostname = (url: string) => new URL(url).hostname
 const open = ref(false)
+const details = computed(
+  () => items.value.length > HOME_LIMITS.links || props.snapshot.status === 'stale',
+)
 </script>
 <template>
   <section
@@ -22,7 +25,7 @@ const open = ref(false)
   >
     <h2 id="heading-links" class="sr-only">{{ title }}</h2>
     <VarButton
-      v-if="items.length > HOME_LIMITS.links"
+      v-if="details"
       text
       round
       class="module-detail-button"
@@ -44,11 +47,11 @@ const open = ref(false)
         ><CommonAppIcon :name="item.icon" :size="24" /><span>{{ item.title }}</span></a
       >
     </nav>
-    <DashboardModuleDetail
-      v-if="items.length > HOME_LIMITS.links"
-      v-model:show="open"
-      :title="title + '详情'"
-      ><nav class="link-grid" aria-label="全部常用链接">
+    <DashboardModuleDetail v-if="details" v-model:show="open" :title="title">
+      <template v-if="snapshot.status === 'stale'" #subtitle>
+        <p role="status">数据已过期</p>
+      </template>
+      <nav class="link-grid" aria-label="全部常用链接">
         <a
           v-for="item in items"
           :key="item.id"
@@ -57,7 +60,7 @@ const open = ref(false)
           rel="noopener noreferrer"
           ><CommonAppIcon :name="item.icon" /><span>{{ item.title }}</span></a
         >
-      </nav></DashboardModuleDetail
-    >
+      </nav>
+    </DashboardModuleDetail>
   </section>
 </template>

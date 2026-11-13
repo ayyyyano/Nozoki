@@ -9,7 +9,7 @@ const props = defineProps<{
 }>()
 const now = useLocalClock(),
   timezone = useDashboardTimezone()
-const labels = { up: '在线', down: '离线', unknown: '状态未知', stale: '数据过期' }
+const labels = { up: '在线', down: '离线', unknown: '状态未知', stale: '状态未知' }
 const rows = computed(() =>
   props.nodes.map((node) => ({
     ...node,

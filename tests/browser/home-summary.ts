@@ -95,7 +95,7 @@ export async function exerciseHomeSummary(
           : ['服务状态', '设备', '自选行情', 'DeepSeek']) {
           const trigger = page.getByRole('button', { name: `查看${title}详情`, exact: true })
           await trigger.click()
-          const dialog = page.getByRole('dialog', { name: title + '详情', exact: true })
+          const dialog = page.getByRole('dialog', { name: title, exact: true })
           await expect(dialog).toBeVisible()
           await page.waitForFunction(() =>
             document.getAnimations().every((a) => a.playState !== 'running'),

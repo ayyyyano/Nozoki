@@ -269,7 +269,7 @@ test(
         const page = await context.newPage()
         await page.goto(env.AUTH_ORIGIN)
         await settle(page)
-        // Public account states remain visible while the protected usage subtree is absent.
+        // Protected usage is absent from the guest dashboard.
         const card = page.locator('[data-module="codex"]')
         await expect(card.locator('.codex-usage')).toHaveCount(0)
         assert.ok(
@@ -287,7 +287,7 @@ test(
         await expect(card.locator('.codex-usage-day')).toHaveCount(0)
         await expect(card.locator('.codex-ring')).toHaveCount(2)
         await card.getByRole('button', { name: /查看.*详情/ }).click()
-        const dialog = page.getByRole('dialog', { name: 'Codex详情', exact: true })
+        const dialog = page.getByRole('dialog', { name: 'Codex', exact: true })
         await expect(dialog.locator('.codex-usage-day')).toHaveCount(2)
         await expect(dialog.getByText('总 Token 240', { exact: true })).toBeVisible()
         await expect(dialog.getByText('总 Token 120', { exact: true })).toBeVisible()
@@ -310,7 +310,8 @@ test(
         await page.reload()
         await settle(page)
         await card.getByRole('button', { name: /查看.*详情/ }).click()
-        await expect(dialog.getByText('暂无队列用量', { exact: true })).toBeVisible()
+        await expect(dialog).toBeVisible()
+        await expect(dialog).not.toContainText(/用量 · UTC|暂无队列用量|来源就绪|执行成功/)
         await context.close()
       } finally {
         await browser.close()
@@ -398,7 +399,13 @@ test(
         const ring = page.locator('[data-ring="fiveHourRemaining"]')
         await expect(ring).toHaveAttribute('data-state', 'stale')
         await expect(ring.getByText('100%', { exact: true })).toBeVisible()
-        await expect(ring.getByText(/已过期/)).toBeVisible()
+        await expect(ring).not.toContainText('已过期')
+        await page.getByRole('button', { name: '查看Codex详情', exact: true }).click()
+        const dialog = page.getByRole('dialog', { name: 'Codex', exact: true })
+        await expect(dialog.locator('.module-detail-subtitle')).toContainText(
+          '5 小时额度剩余已过期',
+        )
+        await expect(dialog.locator('.module-detail-content')).not.toContainText('已过期')
       } finally {
         await browser.close()
       }
