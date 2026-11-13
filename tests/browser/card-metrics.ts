@@ -63,16 +63,19 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
   }
   const card = (id) => page.locator(`[data-module="${id}"]`)
   async function open(id) {
-    await card(id)
-      .getByRole('button', { name: /查看.*详情/ })
-      .click()
-    const panel = page.getByRole('dialog', { name: /详情$/ })
+    const title = await card(id).getByRole('heading', { level: 2 }).innerText()
+    const trigger = card(id).getByRole('button', { name: `查看${title}详情`, exact: true })
+    await trigger.click()
+    const panel = page.getByRole('dialog', { name: title, exact: true })
     await expect(panel).toBeVisible()
+    await expect(panel.getByRole('heading', { level: 2, name: title, exact: true })).toBeVisible()
     return panel
   }
   async function close(panel) {
+    const title = await panel.getByRole('heading', { level: 2 }).innerText()
     await page.keyboard.press('Escape')
     await expect(panel).toBeHidden()
+    await expect(page.getByRole('button', { name: `查看${title}详情`, exact: true })).toBeFocused()
   }
   for (const width of [1920, 1440, 1391, 1280, 320]) {
     await show(width)
@@ -85,6 +88,7 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
       amounts.filter((v) => v !== null).map(decimalText),
     )
     await expect(page.locator('.dashboard-grid .module-card time')).toHaveCount(0)
+    await expect(page.locator('.dashboard-grid')).not.toContainText(/已过期|数据过期/)
     await expect(card('devices')).not.toContainText('较旧')
     await expect(card('activity')).not.toContainText('计划状态 · Asia/Shanghai')
     const cards = await page.locator('.dashboard-grid > .module-card').evaluateAll((items) =>
@@ -105,6 +109,20 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
         cards.every((item) => item.height === 240),
         JSON.stringify(cards),
       )
+    for (const [id, selector] of [
+      ['devices', '.device-list'],
+      ['codex', '.codex-ring-grid'],
+      ['quotes', '.quote-list'],
+    ]) {
+      const offset = await card(id)
+        .locator(selector)
+        .evaluate((content) => {
+          const body = content.parentElement.getBoundingClientRect()
+          const block = content.getBoundingClientRect()
+          return Math.abs(block.top - body.top - (body.bottom - block.bottom))
+        })
+      assert.ok(offset < 1, `${id}: vertical offset ${offset}px at ${width}px`)
+    }
     for (const [id, label] of [
       ['deepseek', '采集于'],
       ['devices', '观测于'],
@@ -115,11 +133,18 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
       const panel = await open(id)
       await expect(panel.locator('.module-detail-subtitle')).toContainText(label)
       await expect(panel.locator('.module-detail-subtitle time')).toHaveCount(1)
+      if (id === 'codex') {
+        await expect(panel).not.toContainText(/来源就绪|执行成功|暂无队列用量/)
+        await expect(panel.getByText('原始配额观测', { exact: true })).toBeVisible()
+        await expect(panel.getByText('总 Token 120', { exact: true })).toBeVisible()
+      }
       await close(panel)
     }
     await expect(quotes.locator('.quote-details')).toHaveCount(0)
     const quoteDetail = await open('quotes')
     const subtitle = quoteDetail.locator('.module-detail-subtitle')
+    await expect(subtitle).toContainText('数据已过期')
+    await expect(quoteDetail.locator('.module-detail-content')).not.toContainText('已过期')
     await expect(subtitle).toContainText('QQQM')
     await expect(subtitle).toContainText('VOO')
     await expect(subtitle.locator('time')).toHaveCount(2)
@@ -131,6 +156,23 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
     await expect(detail).toContainText('昨收')
     await expect(detail).toContainText('振幅')
     await expect(detail).toContainText('成交')
+    const panelBounds = await quoteDetail.evaluate(async (el) => {
+      await Promise.all(el.getAnimations().map((animation) => animation.finished))
+      const { x, y, width, height } = el.getBoundingClientRect()
+      const popup = el.parentElement.getBoundingClientRect()
+      return { x, y, width, height, popupWidth: popup.width, popupHeight: popup.height }
+    })
+    const { x, y, width: panelWidth, height, popupWidth, popupHeight } = panelBounds
+    if (width >= 768) {
+      assert.equal(panelWidth, 680, JSON.stringify(panelBounds))
+      assert.ok(height <= popupHeight - 48, JSON.stringify(panelBounds))
+      assert.ok(Math.abs(popupWidth - panelWidth - 2 * x) < 1, JSON.stringify(panelBounds))
+      assert.ok(Math.abs(popupHeight - height - 2 * y) < 1, JSON.stringify(panelBounds))
+    } else {
+      assert.deepEqual([x, y, panelWidth, height], [0, 0, popupWidth, popupHeight])
+    }
+    if ([1440, 320].includes(width))
+      await page.screenshot({ path: resolve(evidence, `quote-dialog-${width}.png`) })
     await close(quoteDetail)
     const geometry = await page.evaluate(() => {
       const box = (e) => {

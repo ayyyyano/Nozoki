@@ -369,6 +369,13 @@ p {
   min-width: 0;
   flex: 0 0 auto;
 }
+.module-card:is([data-module='devices'], [data-module='codex'], [data-module='quotes'])
+  > .module-body {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  justify-content: center;
+}
 .status-label {
   font-size: 12px;
   color: var(--n-muted);
@@ -881,14 +888,10 @@ p {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   align-items: start;
-  padding-block: 10px 4px;
 }
 .codex-ring-grid:has(> :only-child),
 .tailnet-list:has(> :only-child) {
   grid-template-columns: minmax(0, 1fr);
-}
-.codex-ring-detail {
-  padding-block: 0 16px;
 }
 .codex-ring {
   text-align: center;
@@ -930,7 +933,7 @@ p {
   font-size: 11px;
   color: var(--n-muted);
 }
-.module-detail-content [aria-label='账户与用量'] > * + * {
+.codex-detail-data > * + * {
   margin-block-start: 10px;
 }
 .links-module {
@@ -1406,7 +1409,20 @@ p {
   background: var(--color-secondary-container);
 }
 .var-popup__content:has(> .module-detail-panel) {
-  width: min(680px, 100%);
+  width: 100%;
+  overflow: visible;
+  --detail-motion: translateX(100%);
+}
+.var-popup__content.module-detail-enter-from,
+.var-popup__content.module-detail-leave-to {
+  transform: var(--detail-motion);
+  opacity: var(--detail-opacity, 1);
+}
+.var-popup__content.module-detail-enter-active,
+.var-popup__content.module-detail-leave-active {
+  transition:
+    transform 220ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 180ms ease-out;
 }
 .module-detail-panel {
   width: 100%;
@@ -1419,6 +1435,7 @@ p {
 }
 .module-detail-heading {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 16px;
   padding: 16px 20px;
@@ -1505,9 +1522,24 @@ p {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (max-width: 600px) {
+@media (min-width: 768px) {
   .var-popup__content:has(> .module-detail-panel) {
-    width: 100%;
+    width: 680px;
+    --detail-motion: translateY(10px) scale(0.98);
+    --detail-opacity: 0;
+  }
+  .module-detail-panel {
+    height: auto;
+    max-height: calc(100dvh - 48px);
+    border-radius: 28px;
+    box-shadow: 0 12px 36px rgb(0 0 0 / 0.24);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .var-popup__content.module-detail-enter-active,
+  .var-popup__content.module-detail-leave-active,
+  .var-popup:has(> .module-detail-overlay) {
+    transition: none;
   }
 }
 

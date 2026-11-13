@@ -23,6 +23,9 @@ const props = defineProps<{
 const successTime = computed(() =>
   additionalSuccess(props.status, props.lastSuccessAt, props.observedAt),
 )
+const hasSubtitle = computed(
+  () => props.status === 'stale' || props.observedAt || successTime.value,
+)
 </script>
 <template>
   <section
@@ -36,14 +39,14 @@ const successTime = computed(() =>
       <span class="module-icon"><CommonAppIcon :name="MODULE_ICONS[id]" /></span>
       <h2 :id="`heading-${id}`">{{ title }}</h2>
       <span
-        v-if="hasData && summaryStatus(status)"
+        v-if="hasData && status !== 'stale' && summaryStatus(status)"
         class="summary-status"
         :data-status="status"
         role="status"
         >{{ summaryStatus(status) }}</span
       >
       <VarTooltip
-        v-if="(details || observedAt || successTime || $slots.subtitle) && $slots.details"
+        v-if="(details || hasSubtitle || $slots.freshness || $slots.subtitle) && $slots.details"
         v-model:show="tooltip"
         :disabled="open"
         :content="`查看${title}详情`"
@@ -65,11 +68,13 @@ const successTime = computed(() =>
     <div class="module-body"><slot /></div>
     <footer v-if="$slots.footer" class="module-footer"><slot name="footer" /></footer>
     <DashboardModuleDetail
-      v-if="(details || observedAt || successTime || $slots.subtitle) && $slots.details"
+      v-if="(details || hasSubtitle || $slots.freshness || $slots.subtitle) && $slots.details"
       v-model:show="open"
-      :title="title + '详情'"
+      :title="title"
     >
-      <template v-if="observedAt || successTime || $slots.subtitle" #subtitle>
+      <template v-if="hasSubtitle || $slots.freshness || $slots.subtitle" #subtitle>
+        <p v-if="status === 'stale'" role="status">数据已过期</p>
+        <slot name="freshness" />
         <slot name="subtitle">
           <DashboardSummaryTime
             v-if="observedAt"

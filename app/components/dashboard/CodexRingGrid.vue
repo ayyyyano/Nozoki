@@ -12,7 +12,7 @@ const timezone = useDashboardTimezone()
 const labels = {
   masked: '已遮蔽',
   unknown: '待同步',
-  stale: '已过期',
+  stale: '—',
   unsupported: '不支持',
   unconfigured: '未配置',
 }
@@ -27,9 +27,6 @@ const items = computed(() =>
     return {
       id: ring.id,
       ...value,
-      lastTime: value.last
-        ? formatTimestamp(new Date(value.last.observedAt).toISOString(), timezone.value)
-        : null,
       progress: resetRing(ring.id),
       text:
         value.percent === null
@@ -42,7 +39,7 @@ const items = computed(() =>
 )
 </script>
 <template>
-  <div v-if="items.length" class="codex-ring-grid" :class="{ 'codex-ring-detail': detail }">
+  <div v-if="items.length" class="codex-ring-grid">
     <div
       v-for="item in items"
       :key="item.id"
@@ -66,9 +63,6 @@ const items = computed(() =>
         }}</strong>
       </div>
       <div class="codex-ring-label">{{ RING_LABELS[item.id] }}</div>
-      <small v-if="item.lastTime" :title="detail ? item.lastTime : undefined">
-        {{ detail ? `${item.lastTime.slice(5)} · 已过期` : '已过期' }}
-      </small>
       <small v-if="item.resetIn !== null">距重置 {{ resetCountdown(item.resetIn) }}</small>
       <small v-if="detail && item.resetAt !== null">{{
         formatTimestamp(new Date(item.resetAt).toISOString(), timezone)

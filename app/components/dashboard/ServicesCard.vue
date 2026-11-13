@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import type { DataSnapshot, ServicesData } from '../../../shared/contracts/dashboard'
-import { serviceSummary } from '../../../shared/domain/home-summary'
+import { monitorName, monitorStale, serviceSummary } from '../../../shared/domain/home-summary'
 const props = defineProps<{ snapshot: DataSnapshot<ServicesData>; title: string }>()
 const now = useLocalClock()
 const summary = computed(() => serviceSummary(props.snapshot, now.value))
+const expired = computed(() =>
+  (props.snapshot.data?.monitors ?? [])
+    .filter((monitor) => monitorStale(monitor, props.snapshot, now.value))
+    .map((monitor) => monitorName(monitor.name, monitor.displayId ?? monitor.id)),
+)
 </script>
 <template>
   <DashboardModuleCard
@@ -46,6 +51,9 @@ const summary = computed(() => serviceSummary(props.snapshot, now.value))
         ><span v-if="summary.down && summary.unknown"> · </span
         ><span v-if="summary.unknown">待确认 {{ summary.unknown }}</span>
       </span>
+    </template>
+    <template v-if="snapshot.status !== 'stale' && expired.length" #freshness>
+      <p role="status">数据已过期 · {{ expired.join('、') }}</p>
     </template>
     <template #details>
       <DashboardDataState :status="snapshot.status" :empty="!summary.total" compact />

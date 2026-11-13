@@ -9,21 +9,16 @@ const focus = useModalFocus(show, panel)
 <template>
   <VarPopup
     v-model:show="show"
-    position="right"
+    position="center"
+    transition="module-detail"
+    overlay-class="module-detail-overlay"
     :default-style="false"
     :close-on-key-escape="true"
+    :aria-labelledby="titleId"
+    :aria-describedby="$slots.subtitle ? subtitleId : undefined"
     @closed="focus.restoreFocus"
   >
-    <section
-      ref="panel"
-      class="module-detail-panel"
-      role="dialog"
-      aria-modal="true"
-      :aria-labelledby="titleId"
-      :aria-describedby="$slots.subtitle ? subtitleId : undefined"
-      tabindex="-1"
-      @keydown.esc.stop="show = false"
-    >
+    <section ref="panel" class="module-detail-panel" tabindex="-1" @keydown.esc.stop="show = false">
       <header class="module-detail-heading">
         <div class="module-detail-title">
           <h2 :id="titleId">{{ title }}</h2>

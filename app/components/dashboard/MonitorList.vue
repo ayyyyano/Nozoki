@@ -20,7 +20,7 @@ const states: Record<Monitor['state'] | 'stale', string> = {
   maintenance: '维护中',
   pending: '等待检测',
   unknown: '未知',
-  stale: '已过期',
+  stale: '未知',
 }
 const rows = computed(() =>
   props.monitors.map((monitor) => ({
