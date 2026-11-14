@@ -2,9 +2,11 @@
 
 <img align='right' src='public/logo.png' width='200px' alt="Nozoki logo">
 
-[DEMO}(https://nozoki.nekro.top/) | [简体中文](README.md)
+[DEMO](https://nozoki.nekro.top/) | [简体中文](README.md)
 
 Nozoki is a personal dashboard for Cloudflare Workers or a Node.js server. Nuxt 4 runs the pages and server APIs. Cloudflare deployments use D1; server deployments store settings, sessions and snapshots in a local SQLite file.
+
+![Nozoki Preview](public/preview.png)
 
 ## Dashboard modules
 
@@ -35,56 +37,6 @@ DeepSeek needs only a balance source. Today's bar updates with collection; histo
 | xicons Material (`@vicons/material`) | 0.13.0  |
 | TypeScript                           | 5.9.3   |
 | Node.js                              | 24.21.0 |
-
-## Local development
-
-```sh
-pnpm install --frozen-lockfile
-pnpm db:init
-pnpm dev
-```
-
-Open http://127.0.0.1:3000. Both `db:init` and `db:migrate` apply local SQL migrations. The regular local database lives in `.wrangler/state/v3`. The API returns a service-unavailable response if the database binding or initial configuration is missing.
-
-For a generated local admin account, run:
-
-```sh
-pnpm dev:local
-```
-
-Login details are stored in `.wrangler/local-debug/LOGIN.txt`. The first run copies the regular local database. Debug changes go to `.wrangler/local-debug/state/v3`, and later runs reuse this database and account. Stop any service using port 3000 before starting a development command.
-
-`pnpm dev` uses the existing environment configuration. To set your own local account, copy [.dev.vars.example](.dev.vars.example) to `.dev.vars` and fill in the values. Edit an existing `.dev.vars` file directly.
-
-## Administrator configuration
-
-| Variable                 | Purpose                                                                  |
-| ------------------------ | ------------------------------------------------------------------------ |
-| `ADMIN_EMAIL`            | Administrator email address                                              |
-| `ADMIN_PASSWORD`         | Administrator password, 12 to 1024 characters                            |
-| `AUTH_VERSION`           | Positive session version; increment it when changing account credentials |
-| `AUTH_ORIGIN`            | Full site origin, such as `https://dashboard.example.com`                |
-| `AUTH_RATE_LIMIT_SECRET` | Independent random 32-byte base64url secret                              |
-| `AUTH_ALLOW_LOCAL_HTTP`  | Set to `1` for local loopback HTTP development                           |
-
-Cloudflare uses `.dev.vars` locally and Worker Secrets for production passwords and auxiliary secrets. Node.js reads a protected environment file. `AUTH_ORIGIN` must match the browser address. Development and local Workers preview use ports 3000 and 8787 respectively. Missing required authentication settings disable administrator login; public dashboard requests continue as guests.
-
-Successful login opens `/admin`. A separate login page is available at `/login`. Configuration saves check CSRF tokens, the shared configuration version and request idempotency. Sessions default to a 12-hour absolute lifetime and a 30-minute idle timeout. Logout revokes the session in the database.
-
-Integration credentials use `keep`, `replace` and `clear` operations. Replacement requires `INTEGRATION_ENCRYPTION_KEY` and `INTEGRATION_KEY_VERSION`. Existing encrypted credentials need the matching key version. `INTEGRATION_DECRYPTION_KEYS` supplies retained versions. Keep those keys available when rotating credentials.
-
-## Build and preview
-
-```sh
-pnpm build
-pnpm preview
-```
-
-Open http://127.0.0.1:8787. The Dashboard Worker entry is `.output/server/index.mjs`; static files are in `.output/public`.
-
-Pages, APIs and scheduled collection use one Worker. Its Cron calls the independent collection engine every five minutes; each source keeps its own refresh interval. In local preview, open `http://127.0.0.1:8787/cdn-cgi/handler/scheduled` to trigger it manually. Wrangler provides this local route; production has no public collection endpoint.
-
-Collection uses database leases and source revision checks. A failed attempt keeps the last valid snapshot and records the error separately.
 
 ## Quick deployment with an agent tool
 
@@ -298,6 +250,56 @@ Sleepy, Kuma and Flare use their registered read-only protocols. CLIProxyAPI use
 The UptimeFlare status page displays monitor names from `uptime.config.ts`. Nozoki reads each monitor's `name` from `/api/data`. When the default UptimeFlare response omits that field, the Services card and admin monitor list display monitor IDs. [UptimeFlare configuration](https://github.com/lyc8503/UptimeFlare/wiki/Configuration#workerconfig) · [API source](https://github.com/lyc8503/UptimeFlare/blob/main/pages/api/data.ts)
 
 To display names in Nozoki, add `name: monitor.name` to `monitors[monitor.id]` in your UptimeFlare instance's `pages/api/data.ts`, keep the existing monitor IDs, and redeploy UptimeFlare. Once `/api/data` returns the names, wait for Nozoki's next successful collection and refresh the monitor list in the admin Services settings. Existing homepage selections are preserved by ID.
+
+## Local development
+
+```sh
+pnpm install --frozen-lockfile
+pnpm db:init
+pnpm dev
+```
+
+Open http://127.0.0.1:3000. Both `db:init` and `db:migrate` apply local SQL migrations. The regular local database lives in `.wrangler/state/v3`. The API returns a service-unavailable response if the database binding or initial configuration is missing.
+
+For a generated local admin account, run:
+
+```sh
+pnpm dev:local
+```
+
+Login details are stored in `.wrangler/local-debug/LOGIN.txt`. The first run copies the regular local database. Debug changes go to `.wrangler/local-debug/state/v3`, and later runs reuse this database and account. Stop any service using port 3000 before starting a development command.
+
+`pnpm dev` uses the existing environment configuration. To set your own local account, copy [.dev.vars.example](.dev.vars.example) to `.dev.vars` and fill in the values. Edit an existing `.dev.vars` file directly.
+
+## Administrator configuration
+
+| Variable                 | Purpose                                                                  |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `ADMIN_EMAIL`            | Administrator email address                                              |
+| `ADMIN_PASSWORD`         | Administrator password, 12 to 1024 characters                            |
+| `AUTH_VERSION`           | Positive session version; increment it when changing account credentials |
+| `AUTH_ORIGIN`            | Full site origin, such as `https://dashboard.example.com`                |
+| `AUTH_RATE_LIMIT_SECRET` | Independent random 32-byte base64url secret                              |
+| `AUTH_ALLOW_LOCAL_HTTP`  | Set to `1` for local loopback HTTP development                           |
+
+Cloudflare uses `.dev.vars` locally and Worker Secrets for production passwords and auxiliary secrets. Node.js reads a protected environment file. `AUTH_ORIGIN` must match the browser address. Development and local Workers preview use ports 3000 and 8787 respectively. Missing required authentication settings disable administrator login; public dashboard requests continue as guests.
+
+Successful login opens `/admin`. A separate login page is available at `/login`. Configuration saves check CSRF tokens, the shared configuration version and request idempotency. Sessions default to a 12-hour absolute lifetime and a 30-minute idle timeout. Logout revokes the session in the database.
+
+Integration credentials use `keep`, `replace` and `clear` operations. Replacement requires `INTEGRATION_ENCRYPTION_KEY` and `INTEGRATION_KEY_VERSION`. Existing encrypted credentials need the matching key version. `INTEGRATION_DECRYPTION_KEYS` supplies retained versions. Keep those keys available when rotating credentials.
+
+## Build and preview
+
+```sh
+pnpm build
+pnpm preview
+```
+
+Open http://127.0.0.1:8787. The Dashboard Worker entry is `.output/server/index.mjs`; static files are in `.output/public`.
+
+Pages, APIs and scheduled collection use one Worker. Its Cron calls the independent collection engine every five minutes; each source keeps its own refresh interval. In local preview, open `http://127.0.0.1:8787/cdn-cgi/handler/scheduled` to trigger it manually. Wrangler provides this local route; production has no public collection endpoint.
+
+Collection uses database leases and source revision checks. A failed attempt keeps the last valid snapshot and records the error separately.
 
 ### Public HTTPS access on Cloudflare
 

@@ -23,6 +23,7 @@ const expired = computed(() =>
       summary.total > summary.items.length ||
       !!snapshot.data?.monitors.some(
         (m) =>
+          m.sourceName ||
           m.checkedAt ||
           m.statusPageUrl ||
           m.uptimePercent !== null ||

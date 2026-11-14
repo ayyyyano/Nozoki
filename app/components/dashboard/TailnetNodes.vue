@@ -31,6 +31,9 @@ const rows = computed(() =>
       <span class="monitor-indicator" :data-state="node.state" aria-hidden="true" />
       <div class="tailnet-copy">
         <h3 :title="!detail ? node.name : undefined">{{ node.name }}</h3>
+        <small v-if="detail && node.sourceName" class="item-source-name"
+          >来源名称 · {{ node.sourceName }}</small
+        >
         <p v-if="node.ip" class="tailnet-address" :title="!detail ? node.ip : undefined">
           {{ node.ip }}
         </p>

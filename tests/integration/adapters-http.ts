@@ -474,7 +474,7 @@ try {
     const n = calls
     await page.goto(origin + '/admin')
     await settle(page)
-    await page.getByRole('button', { name: '数据源', exact: true }).click()
+    await page.getByRole('button', { name: '来源接入', exact: true }).click()
     assert.equal(calls, n)
     const editors = page
       .locator('.admin-item')

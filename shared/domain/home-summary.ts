@@ -1,6 +1,7 @@
 import type { DataSnapshot, Device, Monitor, Quote, ServicesData } from '../contracts/dashboard.ts'
+import { ITEM_HOME_LIMITS, orderedHomeItems } from './item-display.ts'
 
-export const HOME_LIMITS = { services: 8, devices: 4, links: 4, quotes: 2 } as const
+export const HOME_LIMITS = { ...ITEM_HOME_LIMITS, links: 4, quotes: 2 } as const
 export function monitorName(name: unknown, fallback: string) {
   return typeof name === 'string' && name.length <= 500 ? name.trim() || fallback : fallback
 }
@@ -20,17 +21,11 @@ export function monitorHomeIds(monitors: Pick<Monitor, 'id'>[], selected?: Servi
 }
 export function serviceSummary(snapshot: DataSnapshot<ServicesData>, now?: number) {
   const all = snapshot.data?.monitors ?? []
-  const byId = new Map(all.map((m) => [m.id, m]))
   const states = all.map((m) =>
     now === undefined ? m.state : monitorDisplayState(m, snapshot, now),
   )
   return {
-    items:
-      snapshot.homeItems === undefined
-        ? all.slice(0, HOME_LIMITS.services)
-        : snapshot.homeItems
-            .flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []))
-            .slice(0, HOME_LIMITS.services),
+    items: orderedHomeItems(all, snapshot.homeItems, HOME_LIMITS.services),
     total: all.length,
     down: states.filter((state) => state === 'down').length,
     unknown: states.filter((state) => ['unknown', 'pending', 'stale'].includes(state)).length,
@@ -59,14 +54,15 @@ export function monitorDisplayState(
   if (snapshot.status !== 'ok' && !snapshot.partialFailures) return 'unknown'
   return monitor.state ?? 'unknown'
 }
-export function deviceSummary(devices: Device[]) {
-  return devices.slice(0, HOME_LIMITS.devices)
+export function deviceSummary(devices: Device[], home?: string[]) {
+  return orderedHomeItems(devices, home, HOME_LIMITS.devices)
 }
-export function devicesHaveDetails(devices: Device[]) {
+export function devicesHaveDetails(devices: Device[], home?: string[]) {
   return (
-    devices.length > HOME_LIMITS.devices ||
+    devices.length > deviceSummary(devices, home).length ||
     devices.some(
       (d) =>
+        !!d.sourceName ||
         !!d.statusUpdatedAt ||
         !!d.observedAt ||
         (d.stateText?.length ?? 0) > 40 ||

@@ -17,7 +17,12 @@ import { parseFieldPath, pathPrefix } from '../../shared/contracts/field-paths.t
 import { ModuleSettingsSchema } from '../../shared/contracts/config.ts'
 import { DataLayerError } from '../types/database.ts'
 import { withCollectionState } from './collection-dashboard.ts'
-import { monitorHomeIds, monitorDisplayState } from '../../shared/domain/home-summary.ts'
+import { monitorCode, monitorDisplayState } from '../../shared/domain/home-summary.ts'
+import {
+  itemKey,
+  type ItemChoice,
+  type ItemDisplayModule,
+} from '../../shared/domain/item-display.ts'
 import { codexRingProjection, tailnetNodeProjection } from './dashboard-presentation.ts'
 type Json = null | string | number | boolean | Json[] | { [key: string]: Json }
 export interface GuestModule {
@@ -117,6 +122,64 @@ function projectValue(
     return out
   }
   return value
+}
+
+function itemDisplaySource(module: ModuleSettings, id: string, sourceId: string) {
+  return module.id === 'services'
+    ? Object.values(module.sources).find((ref) => id.startsWith(ref.sourceId + '/'))?.sourceId
+    : sourceId
+}
+
+function presentationItems(
+  projected: Json | undefined,
+  module: ModuleSettings,
+  sourceId: string,
+  admin: boolean,
+) {
+  const field = module.id === 'services' ? 'monitors' : 'devices'
+  const rows =
+    projected && typeof projected === 'object' && !Array.isArray(projected)
+      ? projected[field]
+      : undefined
+  const policy = module.presentation
+  const selected =
+    module.id === 'services'
+      ? module.homeServices?.map(({ sourceId, monitorId }) => ({ sourceId, itemId: monitorId }))
+      : module.id === 'devices'
+        ? policy?.deviceHome
+        : policy?.tailnetHome
+  const overrides =
+    module.id === 'services'
+      ? policy?.serviceAliases
+      : module.id === 'devices'
+        ? policy?.deviceOverrides
+        : policy?.tailnetAliases
+  const items = new Map(overrides?.map((value) => [itemKey(value), value] as const))
+  const visible = new Map<string, string>()
+  if (Array.isArray(rows)) {
+    for (const row of rows) {
+      if (!row || typeof row !== 'object' || Array.isArray(row) || typeof row.id !== 'string')
+        continue
+      const source = itemDisplaySource(module, row.id, sourceId)
+      if (!source) continue
+      const key = itemKey({ sourceId: source, itemId: row.id })
+      visible.set(key, row.id)
+      const override = items.get(key)
+      if (!override || typeof row.name !== 'string') continue
+      const alias = override.alias
+      const nameVisible =
+        module.id !== 'tailscale' || admin || (policy?.tailnetName ?? 'full') === 'full'
+      if (alias && nameVisible) {
+        if (admin && row.name.trim() && row.name !== alias) row.sourceName = row.name
+        row.name = alias
+      }
+      if (module.id === 'devices' && 'icon' in override && override.icon) row.icon = override.icon
+    }
+  }
+  return selected?.flatMap((ref) => {
+    const id = visible.get(itemKey(ref))
+    return id === undefined ? [] : [id]
+  })
 }
 function mergedServices(state: StoredState, module: ModuleSettings): DataSnapshot<unknown> {
   const refs = Object.values(module.sources).filter((ref) =>
@@ -250,6 +313,39 @@ function rawSnapshot(state: StoredState, m: ModuleSettings, admin = false): Data
   }
   return snapshot('unconfigured', null, mapped?.id ?? 'not-configured')
 }
+
+export async function readAdminDisplayItems(db: Database, id: ItemDisplayModule) {
+  const now = new Date()
+  const state = await withCollectionState(db, await readStoredState(db, { displayItems: id }), now)
+  const module = state.config.modules.find((m) => m.id === id)!
+  const snapshot = rawSnapshot(state, module, true)
+  const field = id === 'services' ? 'monitors' : 'devices'
+  const data = projectValue(snapshot.data as Json, module, [], true) as Partial<
+    Record<typeof field, { id?: string; name?: string }[]>
+  > | null
+  const items: ItemChoice[] = (data?.[field] ?? []).flatMap((item) => {
+    const itemId = item.id
+    if (!itemId?.trim() || /\p{Cc}/u.test(itemId)) return []
+    const sourceId = itemDisplaySource(module, itemId, snapshot.sourceId)
+    if (!sourceId) return []
+    return [
+      {
+        sourceId,
+        itemId,
+        name: item.name?.trim() || (id === 'services' ? monitorCode(itemId) : itemId),
+      },
+    ]
+  })
+  return {
+    items,
+    status:
+      snapshot.expiresAt &&
+      Date.parse(snapshot.expiresAt) < now.getTime() &&
+      snapshot.status === 'ok'
+        ? ('stale' as const)
+        : snapshot.status,
+  }
+}
 async function publicVersion(config: Config, modules: GuestModule[]) {
   // Ignore snapshots, generation times and private/global versions: private edits cannot bump this hash.
   const visible = modules.map((m) =>
@@ -360,6 +456,9 @@ async function projectDashboard(state: StoredState, now = new Date(), admin = fa
     if (safe.expiresAt && safe.expiresAt < now.toISOString() && safe.status === 'ok')
       safe.status = 'stale'
     let projected = projectValue(safe.data as Json, m, [], admin)
+    const homeItems = ['devices', 'tailscale', 'services'].includes(m.id)
+      ? presentationItems(projected, m, raw.sourceId, admin)
+      : undefined
     if (m.id === 'codex') {
       const data = (projected ?? {}) as Partial<CodexData>
       const ringView = codexRingProjection(
@@ -383,14 +482,7 @@ async function projectDashboard(state: StoredState, now = new Date(), admin = fa
         ...safe,
         sourceConfigured: Object.keys(m.sources).length > 0,
         data: projected ?? null,
-        ...(m.id === 'services' && m.homeServices !== undefined
-          ? {
-              homeItems: monitorHomeIds(
-                (projected as unknown as { monitors?: { id: string }[] })?.monitors ?? [],
-                m.homeServices,
-              ),
-            }
-          : {}),
+        ...(homeItems === undefined ? {} : { homeItems }),
       } as Record<string, Json>,
     })
   }

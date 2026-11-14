@@ -56,7 +56,7 @@ export async function exerciseSourceOnboarding(
     assert.equal(result.protocolMatched, false)
     assert.equal(result.connectionProof, undefined)
   }
-  await section('数据源')
+  await section('来源接入')
   const addSource = page.getByRole('button', { name: '添加来源', exact: true })
   const picker = page.getByRole('dialog', { name: '选择数据源类型' })
   for (const [provider, field, value, hint] of [
@@ -116,11 +116,13 @@ export async function exerciseSourceOnboarding(
     initial,
     'Adding a tested source still only edits the local draft',
   )
-  await section('Dashboard 模块')
+  await section('主页模块')
   const devices = page.locator('[data-edit-module="devices"]')
   await devices.locator('.admin-item-toggle').click()
-  await expect(devices).toContainText('自动匹配：Sleepy')
-  await expect(devices.getByText('数据源引用', { exact: true })).toHaveCount(0)
+  await expect(page.locator('[data-module-editor="devices"]')).toContainText('自动匹配：Sleepy')
+  await expect(
+    page.locator('[data-module-editor="devices"]').getByText('数据源引用', { exact: true }),
+  ).toHaveCount(0)
   await page.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect
     .poll(async () => (await input()).config.integrations.some((i) => i.id === 'sleepy'))
@@ -146,7 +148,7 @@ export async function exerciseSourceOnboarding(
   changedSource.baseUrl = 'https://changed-sleepy.example.com/'
   changedSource.access.approvedTarget = sourceTargetKey(changedSource, changedSource.access)
   assert.equal((await (await save(changed)).json()).reason, 'SOURCE_TEST_REQUIRED')
-  await section('数据源')
+  await section('来源接入')
   await page.getByRole('button', { name: '添加来源', exact: true }).click()
   await expect(picker.getByRole('button').filter({ hasText: 'Sleepy' })).toBeDisabled()
   await expect(picker).toContainText('已添加')
@@ -179,7 +181,7 @@ export async function exerciseSourceOnboarding(
   await collector.fetch(origin + '/collect')
   await page.reload()
   await settle(page)
-  await section('数据源')
+  await section('来源接入')
   await expect(page.locator('.source-manager')).not.toContainText('56982f4b7bab')
   await page.screenshot({ path: resolve(evidence, 'sources-desktop.png'), fullPage: true })
   for (const width of [390, 320]) {

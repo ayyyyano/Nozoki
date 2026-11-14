@@ -1,4 +1,5 @@
 import type { DeviceState } from '../device-state/types.ts'
+import type { DeviceIcon } from '../domain/item-display.ts'
 import type { CodexRingView } from '../domain/codex-rings.ts'
 export const MODULE_IDS = [
   'deepseek',
@@ -25,7 +26,7 @@ export interface DataSnapshot<T> {
   errorCode?: string
   sourceConfigured?: boolean
   partialFailures?: number
-  /** Authorized monitor IDs for the home summary; absent means automatic selection. */
+  /** Authorized IDs in home order. Absent means automatic selection. */
   homeItems?: string[]
   collection?: {
     status: DataStatus
@@ -54,6 +55,8 @@ export interface DeepSeekData {
   capabilities: { balance: SourceCapability }
 }
 export interface Device extends DeviceState {
+  icon?: DeviceIcon
+  sourceName?: string
   heartbeatAt: string | null
   capabilities: Record<string, SourceCapability>
 }
@@ -64,6 +67,7 @@ export interface TailscaleData {
   devices: {
     id: string
     name: string
+    sourceName?: string
     connectedToControl: boolean | null
     lastSeen: string | null
     addresses: string[]
@@ -187,6 +191,7 @@ export interface Monitor {
   id: string
   displayId?: string | null
   name: string
+  sourceName?: string
   state: 'up' | 'down' | 'maintenance' | 'pending' | 'unknown'
   latencyMs: number | null
   checkedAt: string | null

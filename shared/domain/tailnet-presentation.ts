@@ -1,6 +1,7 @@
 import type { DataSnapshot, TailscaleData } from '../contracts/dashboard.ts'
+import { ITEM_HOME_LIMITS, orderedHomeItems } from './item-display.ts'
 
-export const TAILNET_HOME_LIMIT = 8
+export const TAILNET_HOME_LIMIT = ITEM_HOME_LIMITS.tailscale
 export function primaryTailnetAddress(addresses: readonly string[]) {
   return addresses.find((address) => !address.includes(':')) ?? addresses[0] ?? null
 }
@@ -14,6 +15,6 @@ export function tailnetState(
   if (snapshot.status !== 'ok' || connected == null) return 'unknown'
   return connected ? 'up' : 'down'
 }
-export function tailnetSummary(nodes: TailscaleData['devices']) {
-  return nodes.slice(0, TAILNET_HOME_LIMIT)
+export function tailnetSummary(nodes: TailscaleData['devices'], home?: string[]) {
+  return orderedHomeItems(nodes, home, TAILNET_HOME_LIMIT)
 }

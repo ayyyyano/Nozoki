@@ -1,5 +1,6 @@
 import type { ModuleSettings } from '../../shared/contracts/config.ts'
 import type { CodexData, DataSnapshot } from '../../shared/contracts/dashboard.ts'
+import { hasAddressText } from '../../shared/domain/item-display.ts'
 import {
   CODEX_RINGS,
   DEFAULT_CODEX_GUEST,
@@ -37,8 +38,7 @@ export function tailnetNodeProjection<T>(
       (Array.isArray(original.addresses) && original.addresses.length > addresses.length)
     ) {
       // A hostname can include an address. Use a constant placeholder, even for alternate IP forms.
-      if (/(?:\d{1,3}\.){3}\d{1,3}|(?:[\da-f]*:){2,}[\da-f:.]*/i.test(node.name))
-        node.name = '名称已遮蔽' as T
+      if (hasAddressText(node.name)) node.name = '名称已遮蔽' as T
     }
   }
   if (ipPolicy !== 'full' || !addresses) {

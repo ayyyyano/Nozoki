@@ -369,6 +369,13 @@ try {
       .getByRole('button', { name, exact: true })
       .click()
   }
+  const moduleEditor = async (id) => {
+    await tab('主页模块')
+    const back = page.getByRole('button', { name: '返回模块列表' })
+    if (await back.isVisible()) await back.click()
+    await page.locator('[data-edit-module="' + id + '"] .admin-item-toggle').click()
+    return page.locator('[data-module-editor="' + id + '"]')
+  }
   const choose = async (label, text) => {
     await page.getByLabel(label, { exact: true }).last().click()
     await page.locator('.var-menu__menu:visible .var-option').filter({ hasText: text }).click()
@@ -391,16 +398,13 @@ try {
       report.browser.push('site, RGB preview, persistence, preference isolation')
     },
   )
-  await checks('browser module reorder visibility ACL editor and schedule', async () => {
-    await tab('Dashboard 模块')
-    await page.locator('[data-edit-module="deepseek"] .admin-item-toggle').click()
-    await page.locator('[data-edit-module="quotes"] .admin-item-toggle').click()
-    await page.locator('[data-edit-module="devices"] .admin-item-toggle').click()
+  await checks('browser module visibility ACL editor and schedule', async () => {
+    await moduleEditor('deepseek')
     await page.getByLabel('deepseek 标题', { exact: true }).last().fill('私人余额')
-    await page.getByRole('button', { name: '上移 links', exact: true }).click()
+    await moduleEditor('quotes')
     await choose('quotes 模块权限', '管理员')
     await choose('quotes 访客行为', '隐藏')
-    const device = page.locator('[data-edit-module="devices"]')
+    const device = await moduleEditor('devices')
     await device.locator('summary').filter({ hasText: '字段权限' }).click()
     await device.getByLabel('添加字段规则', { exact: true }).last().click()
     await page
@@ -412,7 +416,7 @@ try {
       .last()
       .fill('future.a/b~c')
     await device.getByRole('button', { name: '添加权限规则', exact: true }).click()
-    await tab('日程安排')
+    await moduleEditor('activity')
     await page.getByLabel('上班时间 HH:mm', { exact: true }).last().fill('09:00')
     const addSpecialDate = page.getByRole('button', { name: '添加特殊日期', exact: true })
     await addSpecialDate.click()
@@ -449,16 +453,16 @@ try {
     assert.equal(c.site.schedule.start, '09:00')
     assert.deepEqual(c.site.schedule.calendar['2026-12-31'], { workday: false, name: '手动休息日' })
     assert.equal(c.site.schedule.labels.rest, '今天休息')
-    report.browser.push('module order, ACL RFC6901, visibility, schedule')
+    report.browser.push('module navigation, ACL RFC6901, visibility, schedule')
   })
   await checks('browser add/delete quotes links and credential metadata lifecycle', async () => {
-    await tab('行情标的')
+    await moduleEditor('quotes')
     await page.getByRole('button', { name: '添加行情标的', exact: true }).click()
     await page.getByLabel('标的 3 代码', { exact: true }).last().fill('MSFT')
     await saveBrowser()
-    await page.getByRole('button', { name: '删除标的 3', exact: true }).click()
+    await page.getByRole('button', { name: '移除标的 MSFT', exact: true }).click()
     await saveBrowser()
-    await tab('常用链接')
+    await moduleEditor('links')
     await page.getByRole('button', { name: '添加链接', exact: true }).click()
     await page.getByLabel('链接 2 名称', { exact: true }).last().fill('公开新链接')
     await page.getByLabel('链接 2 URL', { exact: true }).last().fill('https://example.invalid/new')
@@ -466,7 +470,7 @@ try {
     assert.ok((await config()).links.every((link) => link.visibility === 'public'))
     await page.getByRole('button', { name: '添加链接', exact: true }).click()
     await page.getByRole('button', { name: '删除链接 3', exact: true }).click()
-    await tab('数据源')
+    await tab('来源接入')
     await page.getByRole('button', { name: '添加来源', exact: true }).click()
     await page.getByLabel('来源 ID', { exact: true }).last().fill('browser-source')
     await page
@@ -486,7 +490,7 @@ try {
   await checks(
     'browser conflict preserves draft, discard and validation error retain changes',
     async () => {
-      await tab('站点与外观')
+      await tab('站点外观')
       const other = await context.newPage()
       await other.goto(origin + '/admin')
       await other.getByLabel('站点名称', { exact: true }).last().fill('另一个窗口')

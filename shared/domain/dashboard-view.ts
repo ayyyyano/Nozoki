@@ -32,7 +32,6 @@ export function dashboardView(dto: PublicDashboard | AdminDashboard): DashboardS
         data = {
           devices: (raw.devices ?? []).map((v: any, i: number) => ({
             id: `visible-${i}`,
-            name: '设备',
             using: null,
             stateText: null,
             foregroundApp: null,
@@ -43,6 +42,7 @@ export function dashboardView(dto: PublicDashboard | AdminDashboard): DashboardS
             heartbeatAt: null,
             statusUpdatedAt: null,
             ...v,
+            name: typeof v.name === 'string' && v.name.trim() ? v.name : '设备',
             capabilities: {},
           })),
         }
@@ -50,10 +50,10 @@ export function dashboardView(dto: PublicDashboard | AdminDashboard): DashboardS
         data = {
           devices: (raw.devices ?? []).map((v: any, i: number) => ({
             id: `visible-${i}`,
-            name: '节点',
             connectedToControl: null,
             lastSeen: null,
             ...v,
+            name: typeof v.name === 'string' && v.name.trim() ? v.name : '节点',
             addresses: v.addresses ?? [],
             addressesHidden: v.addressesHidden === true,
           })),

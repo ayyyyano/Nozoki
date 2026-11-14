@@ -9,8 +9,9 @@ import {
 import type { ConfigImportPlan } from '../../shared/domain/config-backup'
 import { editableConfig, canonical } from '../../shared/contracts/admin'
 import { SOURCE_WRITE_ERRORS } from '../../shared/integration-presets'
-import { bindSources, SOURCE_MODULES } from '../../shared/integration-presets/bindings'
+import { bindSources } from '../../shared/integration-presets/bindings'
 import { integrationPreset } from '../../shared/integration-presets'
+import type { ModuleId } from '../../shared/contracts/dashboard'
 import { MODULE_ICONS } from '../../shared/icons/modules'
 import { COLOR_PRESETS, parseSourceColor } from '../../shared/domain/color-input'
 import type { Appearance } from '../../shared/contracts/appearance'
@@ -19,9 +20,11 @@ import {
   sectionResetIssue,
   type AdminSection,
 } from '../../shared/domain/admin-reset'
-const { data: session, refresh: refreshSession } = await useFetch<SessionDto>('/api/auth/session', {
-  key: 'admin-session',
-})
+const {
+  data: session,
+  error: sessionError,
+  refresh: refreshSession,
+} = await useFetch<SessionDto>('/api/auth/session', { key: 'admin-session' })
 if (session.value?.viewer !== 'admin') await navigateTo('/login')
 const readOnly = useState('admin-storage-read-only', () => false)
 const { data: initial } = await useFetch<Config>('/api/admin/config', {
@@ -61,20 +64,13 @@ watch(
     const bound = bindSources(draft.value)
     if (canonical(bound.modules) !== canonical(draft.value.modules))
       draft.value.modules = bound.modules
-    if (canonical(bound.quotes) !== canonical(draft.value.quotes)) draft.value.quotes = bound.quotes
+    // Preserve the identity used by the quote editor for expanded rows and input focus.
+    draft.value.quotes.forEach((quote, index) => {
+      const provider = bound.quotes[index]!.provider
+      if (quote.provider !== provider) quote.provider = provider
+    })
   },
-  { flush: 'sync' },
 )
-function moduleSources(module: ConfigWrite['modules'][number]) {
-  const names = Object.values(module.sources)
-    .map(
-      (ref) =>
-        integrationPreset(draft.value!.integrations.find((i) => i.id === ref.sourceId))?.name ??
-        '旧协议来源',
-    )
-    .filter(Boolean)
-  return names.length ? '自动匹配：' + names.join('、') : '添加对应类型的数据源后自动匹配'
-}
 const backgroundProcessing = ref(false)
 const backgroundUpload = ref<{ url: string; data: string } | null>(null)
 const backgroundPreview = useState<{ url: string; preview: string } | null>(
@@ -89,8 +85,7 @@ watch(backgroundUpload, (value) => {
 onBeforeUnmount(() => {
   backgroundPreview.value = null
 })
-const section = ref('site'),
-  busy = ref(false),
+const busy = ref(false),
   message = ref(''),
   errors = ref<string[]>([]),
   conflict = ref(false),
@@ -99,23 +94,53 @@ const section = ref('site'),
   savedNeedsReload = ref(false),
   latest = ref<Config | null>(null),
   preview = ref(false)
-const editorSections = [
-  { id: 'site', label: '站点与外观', icon: 'tune' },
-  { id: 'modules', label: 'Dashboard 模块', icon: 'devices' },
-  { id: 'integrations', label: '数据源', icon: 'server' },
-  { id: 'schedule', label: '日程安排', icon: 'clock' },
-  { id: 'quotes', label: '行情标的', icon: 'chart' },
-  { id: 'links', label: '常用链接', icon: 'link' },
-] as const
 const sections = [
-  ...editorSections,
+  { id: 'site', label: '站点外观', icon: 'tune' },
+  { id: 'modules', label: '主页模块', icon: 'SpaceDashboardRound' },
+  { id: 'integrations', label: '来源接入', icon: 'server' },
   { id: 'data', label: '数据管理', icon: 'StorageRound' },
 ] as const
+const route = useRoute()
+const router = useRouter()
 const currentSection = computed(
-  () => sections.find((item) => item.id === section.value) ?? sections[0],
+  () => sections.find((item) => item.id === route.query.section) ?? sections[0],
 )
+const section = computed(() => currentSection.value.id)
+const activeModuleIndex = computed(() =>
+  section.value === 'modules'
+    ? (draft.value?.modules.findIndex((module) => module.id === route.query.module) ?? -1)
+    : -1,
+)
+const activeModule = computed(() => draft.value?.modules[activeModuleIndex.value])
+const selectedModule = computed(() => activeModule.value?.id)
+const sectionHeading = useTemplateRef<HTMLElement>('sectionHeading')
+function openSection(id: string, module?: ModuleId) {
+  if (section.value === id && selectedModule.value === module) return Promise.resolve()
+  return router.push({
+    query: { ...route.query, section: id === 'site' ? undefined : id, module },
+  })
+}
+watch([section, selectedModule], async ([next, id], [previous, previousId]) => {
+  await nextTick()
+  window.scrollTo(0, 0)
+  const trigger =
+    next === 'modules' && previous === 'modules' && !id && previousId
+      ? document.querySelector<HTMLButtonElement>(`[data-edit-module="${previousId}"] button`)
+      : null
+  ;(trigger ?? sectionHeading.value)?.focus()
+})
+const moduleResets: Partial<Record<ModuleId, { id: AdminSection; label: string }>> = {
+  activity: { id: 'schedule', label: '日程安排' },
+  quotes: { id: 'quotes', label: '行情标的' },
+  links: { id: 'links', label: '常用链接' },
+}
+const currentReset = computed(() => {
+  if (activeModule.value) return moduleResets[activeModule.value.id]
+  const { id, label } = currentSection.value
+  if (id !== 'data') return { id, label }
+})
 const showReset = ref(false)
-const resetTarget = ref<(typeof editorSections)[number]>(editorSections[0])
+const resetTarget = ref<{ id: AdminSection; label: string }>({ id: 'site', label: '站点外观' })
 const resetIssue = computed(() =>
   draft.value ? sectionResetIssue(draft.value, resetTarget.value.id) : null,
 )
@@ -130,7 +155,7 @@ const resetDescriptions: Record<AdminSection, string> = {
 }
 function requestReset() {
   if (busy.value || !draft.value) return
-  const target = editorSections.find((item) => item.id === section.value)
+  const target = currentReset.value
   if (!target) return
   resetTarget.value = target
   showReset.value = true
@@ -145,17 +170,15 @@ function resetCurrentSection() {
     preview.value = false
     backgroundUpload.value = null
   }
-  if (target === 'schedule') scheduleDraftReset.value++
-  if (target === 'links') expandedLinks.value = {}
-  if (target === 'quotes') expandedQuotes.value = {}
-  if (target === 'modules') expandedModules.value = {}
+  if (target === 'schedule' || target === 'links' || target === 'quotes') editorResetToken.value++
   pending = null
   errors.value = []
   message.value = `已恢复${resetTarget.value.label}默认设置，保存配置后生效`
   showReset.value = false
 }
 const navigation = useTemplateRef('navigation')
-const scheduleDraftReset = ref(0)
+const editorResetToken = ref(0)
+const editorLocateToken = ref(0)
 const showActions = ref(false)
 const actionsPanel = useTemplateRef<HTMLElement>('actionsPanel')
 const showFeedback = ref(false)
@@ -216,29 +239,7 @@ function themeFromMenu() {
   themeControl.toggleTheme()
   showActions.value = false
 }
-const expandedLinks = ref<Record<string, boolean>>({})
-const expandedQuotes = ref<Record<string, boolean>>({})
-const quoteKeys = new WeakMap<object, string>()
-let nextQuoteKey = 0
-function quoteKey(quote: ConfigWrite['quotes'][number]) {
-  const value = toRaw(quote)
-  if (!quoteKeys.has(value)) quoteKeys.set(value, `quote-${nextQuoteKey++}`)
-  return quoteKeys.get(value)!
-}
-function removeQuote(index: number) {
-  const [quote] = draft.value!.quotes.splice(index, 1)
-  if (quote) delete expandedQuotes.value[quoteKey(quote)]
-}
 const sourceManager = useTemplateRef('sourceManager')
-const expandedModules = ref<Record<string, boolean>>({})
-function linkSummary(url: string) {
-  try {
-    const u = new URL(url)
-    return u.host + (u.pathname === '/' ? '' : u.pathname)
-  } catch {
-    return url
-  }
-}
 const dirty = computed(
   () =>
     !!draft.value &&
@@ -277,10 +278,7 @@ function applyConfigTransfer(plan: ConfigImportPlan, action: 'import' | 'reset')
   clearSecrets()
   draft.value = plan.config
   backgroundUpload.value = plan.backgroundUpload ?? null
-  scheduleDraftReset.value++
-  expandedLinks.value = {}
-  expandedQuotes.value = {}
-  expandedModules.value = {}
+  editorResetToken.value++
   pending = null
   preview.value = false
   errors.value = []
@@ -294,7 +292,7 @@ function accept(config: Config) {
   clearSecrets()
   baseline.value = ConfigSchema.parse(config)
   draft.value = editableConfig(baseline.value)
-  scheduleDraftReset.value++
+  editorResetToken.value++
   pending = null
   conflict.value = false
   errors.value = []
@@ -306,29 +304,37 @@ function errorLabel(error: string) {
   const source = draft.value?.integrations.find((s) => error.startsWith('integrations.' + s.id))
   return source ? '数据源 · ' + (integrationPreset(source)?.name ?? '旧配置') : '数据源配置'
 }
-function locate(error: string) {
-  section.value = error.includes('schedule')
-    ? 'schedule'
-    : error.includes('modules')
-      ? 'modules'
-      : error.includes('integrations')
-        ? 'integrations'
-        : error.includes('quotes')
-          ? 'quotes'
-          : error.includes('links')
-            ? 'links'
-            : 'site'
-  if (draft.value) {
-    draft.value.links.forEach((l) => (expandedLinks.value[l.id] = true))
-    draft.value.modules.forEach((m) => (expandedModules.value[m.id] = true))
-    sourceManager.value?.expandAll()
-    draft.value.quotes.forEach((q) => (expandedQuotes.value[quoteKey(q)] = true))
-  }
-  nextTick(() =>
-    document
-      .querySelector<HTMLElement>('.admin-form fieldset:not([style*="display: none"]) input')
-      ?.focus(),
+async function locate(error: string) {
+  const path = error.split('：', 1)[0]!.replace(/^config\./, '')
+  const [field, item] = path.split('.')
+  const module =
+    path === 'site.schedule' || path.startsWith('site.schedule.') || path === 'site.timezone'
+      ? 'activity'
+      : field === 'quotes' || field === 'links'
+        ? field
+        : field === 'modules' && item
+          ? draft.value?.modules.find(
+              (module, index) => module.id === item || String(index) === item,
+            )?.id
+          : undefined
+  await openSection(
+    module || field === 'modules' ? 'modules' : field === 'integrations' ? field : 'site',
+    module,
   )
+  if (field === 'integrations') sourceManager.value?.expandAll()
+  if (field === 'modules' && path.includes('.fields')) {
+    const acl = document.querySelector<HTMLDetailsElement>('.admin-module-editor .admin-details')
+    if (acl) acl.open = true
+  }
+  editorLocateToken.value++
+  await nextTick()
+  const group = document.querySelector<HTMLElement>(
+    '.admin-form > fieldset:not([style*="display: none"])',
+  )
+  const input = [...(group?.querySelectorAll<HTMLElement>('input:not(:disabled)') ?? [])].find(
+    (el) => el.getClientRects().length,
+  )
+  ;(input ?? sectionHeading.value)?.focus()
 }
 function acceptLatest() {
   if (latest.value) accept(latest.value)
@@ -424,42 +430,6 @@ function discard() {
   showDiscard.value = false
   message.value = '已放弃未保存修改'
 }
-function move<T extends { sortOrder: number }>(items: T[], index: number, offset: number) {
-  const target = index + offset
-  if (target < 0 || target >= items.length) return
-  ;[items[index], items[target]] = [items[target]!, items[index]!]
-  items.forEach((item, i) => (item.sortOrder = i))
-}
-function makePrivate(module: ConfigWrite['modules'][number]) {
-  if (module.visibility === 'admin')
-    for (const policy of Object.values(module.fields)) policy.visibility = 'admin'
-}
-function addQuote() {
-  draft.value!.quotes.push({
-    market: 'US',
-    symbol: 'NEW',
-    displayName: '新标的',
-    provider: null,
-    sortOrder: draft.value!.quotes.length,
-    enabled: true,
-    refreshInterval: 300,
-  })
-  expandedQuotes.value[quoteKey(draft.value!.quotes.at(-1)!)] = true
-}
-function addLink() {
-  if (!draft.value || draft.value.links.length >= 4) return
-  const id = 'link-' + crypto.randomUUID().slice(0, 8)
-  expandedLinks.value[id] = true
-  draft.value!.links.push({
-    id,
-    title: '新链接',
-    url: 'https://example.com/',
-    icon: 'link',
-    sortOrder: draft.value!.links.length,
-    visibility: 'public',
-    enabled: true,
-  })
-}
 async function logout() {
   if (dirty.value) {
     message.value = '请先保存或放弃修改，再注销'
@@ -502,11 +472,15 @@ async function checkSession() {
     // A transient session check failure must not discard the current draft or redirect.
     return
   }
-  if (session.value?.viewer !== 'admin') {
+  if (!sessionError.value && session.value?.viewer === 'guest') {
     clearSecrets()
+    pending = null
+    draft.value = null
+    baseline.value = null
+    clearNuxtData('admin-config')
     clearNuxtData('dashboard')
     shared.value = null
-    await navigateTo('/login')
+    await navigateTo('/login', { replace: true })
   }
 }
 onMounted(() => {
@@ -523,8 +497,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', beforeUnload)
   window.removeEventListener('focus', checkSession)
 })
-onBeforeRouteLeave(() => {
-  if (dirty.value && !confirm('存在未保存修改，确定离开？')) return false
+onBeforeRouteLeave((to, from) => {
+  if (to.path !== from.path && dirty.value && !confirm('存在未保存修改，确定离开？')) return false
 })
 </script>
 <template>
@@ -654,20 +628,45 @@ onBeforeRouteLeave(() => {
         <VarButton text @click="loadLatest">重新读取配置</VarButton>
       </div>
       <div v-else class="admin-workspace">
-        <AdminSectionNav ref="navigation" v-model="section" :sections="sections" />
+        <AdminSectionNav
+          ref="navigation"
+          :section="section"
+          :sections="sections"
+          @select="openSection"
+        />
         <form class="admin-form" @submit.prevent="save">
           <p v-if="readOnly" class="admin-storage-notice" role="status">
             数据库等待迁移，当前为只读模式。已有配置和看板数据保持可读；请完成数据库迁移后刷新页面。
           </p>
           <div class="admin-section-heading">
-            <h2>{{ currentSection.label }}</h2>
+            <div class="admin-section-title">
+              <VarButton
+                v-if="activeModule"
+                text
+                round
+                class="admin-icon-button"
+                aria-label="返回模块列表"
+                @click="openSection('modules')"
+                ><CommonAppIcon name="ArrowBackRound"
+              /></VarButton>
+              <CommonAppIcon v-if="activeModule" :name="MODULE_ICONS[activeModule.id]" :size="24" />
+              <h2 ref="sectionHeading" tabindex="-1">
+                {{ activeModule?.title || currentSection.label }}
+              </h2>
+              <VarSwitch
+                v-if="activeModule"
+                v-model="activeModule.enabled"
+                :disabled="readOnly"
+                :aria-label="`启用 ${activeModule.id}`"
+              />
+            </div>
             <VarButton
               text
               round
-              v-if="section !== 'data'"
+              v-if="currentReset"
               class="admin-icon-button edge-icon-action"
               :disabled="busy || readOnly"
-              :aria-label="`重置${currentSection.label}为默认设置`"
+              :aria-label="`重置${currentReset.label}为默认设置`"
               title="重置为默认设置"
               @click="requestReset"
             >
@@ -682,7 +681,7 @@ onBeforeRouteLeave(() => {
             @apply="applyConfigTransfer"
           />
           <fieldset v-show="section === 'site'" :disabled="readOnly">
-            <legend class="sr-only">站点与外观</legend>
+            <legend class="sr-only">站点外观</legend>
             <AdminText v-model="draft.site.siteName" label="站点名称" :max="100" />
             <div class="palette-presets">
               <VarButton
@@ -717,65 +716,25 @@ onBeforeRouteLeave(() => {
               @processing="backgroundProcessing = $event"
             />
           </fieldset>
-          <fieldset v-show="section === 'modules'" :disabled="readOnly">
-            <legend class="sr-only">Dashboard 模块</legend>
-            <AdminEditorItem
-              v-for="(m, index) in draft.modules"
-              :key="m.id"
-              v-model:open="expandedModules[m.id]"
-              :title="m.title"
-              :description="m.id"
-              :status="m.visibility === 'public' ? '公开' : '管理员'"
-              :data-edit-module="m.id"
-              :icon="MODULE_ICONS[m.id]"
-              class="admin-module-card"
-            >
-              <template #actions>
-                <VarSwitch
-                  v-model="m.enabled"
-                  :aria-label="`启用 ${m.id}`"
-                  :title="`启用或停用 ${m.title}`"
-                />
-              </template>
-              <div class="admin-fields admin-module-fields">
-                <AdminText v-model="m.title" :label="`${m.id} 标题`" :max="100" /><VarSelect
-                  v-model="m.visibility"
-                  :aria-label="`${m.id} 模块权限`"
-                  placeholder="模块权限"
-                  variant="outlined"
-                  @update:model-value="makePrivate(m)"
-                  ><VarOption label="公开" value="public" /><VarOption
-                    label="管理员"
-                    value="admin" /></VarSelect
-                ><VarSelect
-                  v-model="m.guestBehavior"
-                  :aria-label="`${m.id} 访客行为`"
-                  placeholder="访客行为"
-                  variant="outlined"
-                  ><VarOption label="隐藏" value="hidden" /><VarOption
-                    label="登录提示"
-                    value="login_hint"
-                /></VarSelect>
-              </div>
-              <label v-if="m.id === 'deepseek'">
-                <VarSwitch
-                  v-model="m.guestBlur"
-                  aria-label="DeepSeek 未登录时模糊展示"
-                />未登录时模糊展示余额（保留卡片）
-              </label>
-              <AdminModulePresentationEditor
-                v-if="m.id === 'tailscale' || m.id === 'codex'"
-                v-model="draft.modules[index]!"
-              />
-              <p v-if="Object.values(SOURCE_MODULES).includes(m.id)" class="admin-note">
-                {{ moduleSources(m) }}
-              </p>
-              <AdminFieldEditor v-model="draft.modules[index]!" />
-              <AdminServiceHomeEditor v-if="m.id === 'services'" v-model="draft.modules[index]!" />
-            </AdminEditorItem>
+          <fieldset v-if="section === 'modules'" :disabled="!!activeModule && readOnly">
+            <legend class="sr-only">主页模块</legend>
+            <AdminModuleEditor
+              v-if="activeModule"
+              :key="activeModule.id"
+              v-model="draft.modules[activeModuleIndex]!"
+              :draft="draft"
+              :reset-token="editorResetToken"
+              :locate-token="editorLocateToken"
+            />
+            <AdminModuleList
+              v-else
+              :modules="draft.modules"
+              :read-only="readOnly"
+              @edit="openSection('modules', $event)"
+            />
           </fieldset>
           <fieldset v-show="section === 'integrations'" :disabled="readOnly">
-            <legend class="sr-only">数据源</legend>
+            <legend class="sr-only">来源接入</legend>
             <AdminSourceManager
               ref="sourceManager"
               v-model="draft.integrations"
@@ -786,152 +745,6 @@ onBeforeRouteLeave(() => {
               :timezone="draft.site.timezone"
               :read-only="readOnly"
             />
-          </fieldset>
-          <fieldset v-show="section === 'schedule'" :disabled="readOnly">
-            <legend class="sr-only">日程安排</legend>
-            <AdminScheduleEditor v-model="draft.site.schedule" :reset-token="scheduleDraftReset" />
-          </fieldset>
-          <fieldset v-show="section === 'quotes'" :disabled="readOnly">
-            <legend class="sr-only">行情标的</legend>
-            <AdminEditorItem
-              v-for="(q, index) in draft.quotes"
-              :key="quoteKey(q)"
-              v-model:open="expandedQuotes[quoteKey(q)]"
-              :title="q.symbol"
-              :description="q.displayName"
-              :status="q.market"
-              icon="chart"
-              class="admin-quote-card admin-order-card"
-              :data-edit-quote="quoteKey(q)"
-            >
-              <template #actions>
-                <VarButton
-                  text
-                  round
-                  :disabled="index === 0"
-                  :aria-label="`上移标的 ${q.symbol}`"
-                  :title="`上移 ${q.symbol}`"
-                  @click="move(draft.quotes, index, -1)"
-                  ><CommonAppIcon name="up" :size="20"
-                /></VarButton>
-                <VarButton
-                  text
-                  round
-                  :disabled="index === draft.quotes.length - 1"
-                  :aria-label="`下移标的 ${q.symbol}`"
-                  :title="`下移 ${q.symbol}`"
-                  @click="move(draft.quotes, index, 1)"
-                  ><CommonAppIcon name="down" :size="20"
-                /></VarButton>
-                <VarButton
-                  text
-                  round
-                  type="danger"
-                  :aria-label="`移除标的 ${q.symbol}`"
-                  :title="`移除 ${q.symbol}`"
-                  @click="removeQuote(index)"
-                  ><CommonAppIcon name="DeleteRound" :size="20"
-                /></VarButton>
-                <VarSwitch
-                  v-model="q.enabled"
-                  :aria-label="`启用标的 ${index + 1}`"
-                  :title="`启用或停用 ${q.symbol}`"
-                />
-              </template>
-              <div class="admin-fields">
-                <AdminText
-                  v-model="q.market"
-                  :label="`标的 ${index + 1} 市场`"
-                  reserve-details
-                /><AdminText
-                  v-model="q.symbol"
-                  :label="`标的 ${index + 1} 代码`"
-                  reserve-details
-                /><AdminText
-                  v-model="q.displayName"
-                  :label="`标的 ${index + 1} 名称`"
-                  reserve-details
-                />
-                <p class="admin-note">
-                  {{
-                    q.provider
-                      ? '行情来源：' +
-                        (integrationPreset(draft.integrations.find((i) => i.id === q.provider))
-                          ?.name ?? '待配置')
-                      : '添加行情来源后自动匹配'
-                  }}
-                </p>
-                <AdminNumber
-                  v-model="q.refreshInterval"
-                  :label="`标的 ${index + 1} 刷新间隔`"
-                  class="admin-quote-refresh"
-                />
-              </div>
-            </AdminEditorItem>
-            <VarButton
-              class="admin-add-button"
-              type="primary"
-              tonal
-              :disabled="draft.quotes.length >= 20"
-              @click="addQuote"
-              ><CommonAppIcon name="AddRound" :size="20" />添加行情标的</VarButton
-            >
-          </fieldset>
-          <fieldset v-show="section === 'links'" :disabled="readOnly">
-            <legend class="sr-only">常用链接</legend>
-            <AdminEditorItem
-              v-for="(l, index) in draft.links"
-              :key="l.id"
-              v-model:open="expandedLinks[l.id]"
-              :title="l.title"
-              :description="linkSummary(l.url)"
-              :icon="l.icon"
-              :data-edit-link="l.id"
-              class="admin-link-card"
-            >
-              <template #actions>
-                <VarSwitch
-                  v-model="l.enabled"
-                  :aria-label="`启用链接 ${index + 1}`"
-                  :title="`启用或停用 ${l.title}`"
-                />
-              </template>
-              <div class="admin-fields">
-                <AdminText v-model="l.title" :label="`链接 ${index + 1} 名称`" /><AdminText
-                  v-model="l.url"
-                  :label="`链接 ${index + 1} URL`"
-                /><AdminLinkIconInput v-model="l.icon" :label="`链接 ${index + 1} 图标`" />
-              </div>
-              <div class="admin-actions">
-                <VarButton
-                  text
-                  round
-                  :disabled="index === 0"
-                  :aria-label="`上移链接 ${index + 1}`"
-                  :title="`上移 ${l.title}`"
-                  @click="move(draft.links, index, -1)"
-                  ><CommonAppIcon name="up" :size="20" /></VarButton
-                ><VarButton
-                  text
-                  round
-                  :disabled="index === draft.links.length - 1"
-                  :aria-label="`下移链接 ${index + 1}`"
-                  :title="`下移 ${l.title}`"
-                  @click="move(draft.links, index, 1)"
-                  ><CommonAppIcon name="down" :size="20" /></VarButton
-                ><VarButton text @click="draft.links.splice(index, 1)"
-                  >删除链接 {{ index + 1 }}</VarButton
-                >
-              </div>
-            </AdminEditorItem>
-            <VarButton
-              class="admin-add-button"
-              type="primary"
-              tonal
-              :disabled="draft.links.length >= 4"
-              @click="addLink"
-              ><CommonAppIcon name="AddRound" :size="20" />添加链接</VarButton
-            >
           </fieldset>
         </form>
       </div>
