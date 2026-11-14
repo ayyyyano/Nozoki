@@ -638,6 +638,24 @@ p {
 .device-copy {
   min-width: 0;
 }
+.device-list-detail .device-copy h3,
+.module-detail-panel .item-source-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.device-battery-dots {
+  display: inline-flex;
+  gap: 2px;
+}
+.device-battery-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--n-outline);
+}
+.device-battery-dots i[data-filled='true'] {
+  background: var(--color-primary);
+}
 .device-copy .device-state {
   overflow: hidden;
   text-overflow: ellipsis;

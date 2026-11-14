@@ -399,16 +399,18 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(origin + '/admin')
   await settle(page)
-  await page.getByRole('button', { name: 'Dashboard 模块', exact: true }).click()
+  await page.getByRole('button', { name: '主页模块', exact: true }).click()
   assert.equal(
     await page
       .locator(
-        '.admin-module-card button[aria-label^="上移"], .admin-module-card button[aria-label^="下移"]',
+        '[data-edit-module] button[aria-label^="上移"], [data-edit-module] button[aria-label^="下移"]',
       )
       .count(),
     0,
   )
-  await expect(page.locator('.admin-module-card > header [role="switch"]')).toHaveCount(8)
+  await expect(page.locator('[data-edit-module] > header [role="switch"]')).toHaveCount(
+    before.config.modules.length,
+  )
   await page.screenshot({ path: resolve(evidence, 'admin-modules.png') })
   await page.getByRole('switch', { name: '启用 devices', exact: true }).click()
   const put = page.waitForResponse(

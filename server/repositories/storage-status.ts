@@ -25,7 +25,7 @@ export async function requireWritableStorage(db: Database): Promise<void> {
   const modules = (await db.prepare('PRAGMA table_info(dashboard_modules)').all()).results
   if (
     storageMode(modules) !== 'ready' ||
-    !['guest_blur', 'home_services_json', 'presentation_json'].every((name) =>
+    !['guest_blur', 'home_services_json', 'presentation_json', 'item_display_json'].every((name) =>
       modules.some((c) => c.name === name),
     )
   )

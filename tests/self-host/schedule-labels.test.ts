@@ -75,11 +75,13 @@ test(
     await page.getByRole('button', { name: '登录', exact: true }).click()
     await page.waitForURL('**/admin')
     await settle(page)
-    const section = async () =>
-      page
+    const section = async () => {
+      await page
         .getByRole('navigation', { name: '管理分区', exact: true })
-        .getByRole('button', { name: '日程安排', exact: true })
+        .getByRole('button', { name: '主页模块', exact: true })
         .click()
+      await page.locator('[data-edit-module="activity"] .admin-item-toggle').click()
+    }
     const field = (label) => page.getByLabel(label, { exact: true }).last()
     const labelsButton = page.getByRole('button', { name: '自定义状态文案', exact: true })
     const labelsDialog = page.getByRole('dialog', { name: '自定义状态文案', exact: true })

@@ -237,9 +237,9 @@ export async function exerciseHomeSummary(
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(origin + '/admin')
   await settle(page)
-  await page.getByRole('button', { name: 'Dashboard 模块', exact: true }).click()
-  const service = page.locator('[data-edit-module="services"]')
-  await service.locator('.admin-item-toggle').click()
+  await page.getByRole('button', { name: '主页模块', exact: true }).click()
+  await page.locator('[data-edit-module="services"] .admin-item-toggle').click()
+  const service = page.locator('[data-module-editor="services"]')
   await page.screenshot({ path: resolve(evidence, 'admin-debug.png'), fullPage: true })
   await writeFile(
     resolve(evidence, 'admin-debug.json'),
@@ -255,9 +255,11 @@ export async function exerciseHomeSummary(
     ),
   )
   await expect(service.getByRole('checkbox')).toHaveCount(10)
-  await service.getByRole('checkbox', { name: 'service-0', exact: true }).uncheck()
-  await expect(service.getByRole('checkbox', { name: 'service-0', exact: true })).not.toBeChecked()
-  await service.getByRole('checkbox', { name: 'service-9', exact: true }).click()
+  await service.getByRole('checkbox', { name: '在首页显示 service-0', exact: true }).uncheck()
+  await expect(
+    service.getByRole('checkbox', { name: '在首页显示 service-0', exact: true }),
+  ).not.toBeChecked()
+  await service.getByRole('checkbox', { name: '在首页显示 service-9', exact: true }).click()
   const saved = page.waitForResponse(
     (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
   )
@@ -270,16 +272,20 @@ export async function exerciseHomeSummary(
   assert.ok(!selection.some((s) => s.monitorId.endsWith('/service-0')))
   await page.reload()
   await settle(page)
-  await page.getByRole('button', { name: 'Dashboard 模块', exact: true }).click()
-  await page.locator('[data-edit-module="services"] .admin-item-toggle').click()
-  await expect(page.getByRole('checkbox', { name: 'service-0', exact: true })).not.toBeChecked()
-  await expect(page.getByRole('checkbox', { name: 'service-9', exact: true })).toBeChecked()
+  await expect(service).toBeVisible()
+  await expect(
+    page.getByRole('checkbox', { name: '在首页显示 service-0', exact: true }),
+  ).not.toBeChecked()
+  await expect(
+    page.getByRole('checkbox', { name: '在首页显示 service-9', exact: true }),
+  ).toBeChecked()
   await page.screenshot({ path: resolve(evidence, 'services-home-admin.png'), fullPage: true })
   const tooMany = structuredClone(actual)
   tooMany.config.links.push({ ...tooMany.config.links[0], id: 'link-fifth', sortOrder: 4 })
   assert.equal((await save(tooMany)).status, 400)
   assert.equal((await input()).expectedVersion, actual.expectedVersion)
-  await page.getByRole('button', { name: '常用链接', exact: true }).click()
+  await page.getByRole('button', { name: '返回模块列表', exact: true }).click()
+  await page.locator('[data-edit-module="links"] .admin-item-toggle').click()
   await expect(page.getByRole('button', { name: '添加链接', exact: true })).toBeDisabled()
   // Deselect every service: an explicit empty list persists; new monitors do not fill it.
   actual.config.modules.find((m) => m.id === 'services').homeServices = []

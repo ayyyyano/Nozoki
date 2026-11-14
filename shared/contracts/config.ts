@@ -136,9 +136,12 @@ export const ModuleSettingsSchema = z
     const p = value.presentation
     if (
       p &&
-      (!['codex', 'tailscale'].includes(value.id) ||
+      (!['codex', 'tailscale', 'devices', 'services'].includes(value.id) ||
         (p.codex && value.id !== 'codex') ||
-        ((p.tailnetName || p.tailnetIp) && value.id !== 'tailscale'))
+        ((p.tailnetName || p.tailnetIp || p.tailnetHome || p.tailnetAliases) &&
+          value.id !== 'tailscale') ||
+        ((p.deviceHome || p.deviceOverrides) && value.id !== 'devices') ||
+        (p.serviceAliases && value.id !== 'services'))
     )
       ctx.addIssue({
         code: 'custom',

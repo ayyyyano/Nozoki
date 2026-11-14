@@ -120,7 +120,7 @@ test(
       ).success,
       true,
     )
-    const snapshots = presentationSnapshots(new Date(), baseline)
+    const { devices: _devices, ...snapshots } = presentationSnapshots(new Date(), baseline)
     for (const [moduleId, snapshot] of Object.entries(snapshots))
       await upsertSnapshot(db, {
         sourceId: snapshot.sourceId,
@@ -272,7 +272,7 @@ test(
         await expect(page.locator('.module-detail-panel:visible')).toHaveCount(0)
       }
       await page.goto(origin + '/admin')
-      await page.getByRole('button', { name: 'Dashboard 模块', exact: true }).click()
+      await page.getByRole('button', { name: '主页模块', exact: true }).click()
       await page.locator('[data-edit-module="codex"] .admin-item-toggle').click()
       await select(page, 'Codex 左侧圆环', '周重置进度')
       await expect(page.getByLabel('Codex 左侧圆环', { exact: true })).toContainText('周重置进度')
@@ -288,7 +288,7 @@ test(
         'weeklyResetProgress',
       )
       await page.goto(origin + '/admin')
-      await page.getByRole('button', { name: '数据源', exact: true }).click()
+      await page.getByRole('button', { name: '来源接入', exact: true }).click()
       await page.getByRole('button', { name: '添加来源', exact: true }).click()
       const picker = page.getByRole('dialog', { name: '选择数据源类型', exact: true })
       await expect(picker.getByRole('button').filter({ hasText: 'Uptime Kuma' })).toContainText(

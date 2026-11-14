@@ -1,6 +1,11 @@
 import { source } from './adapters.ts'
 import { snapshot } from '../../shared/domain/dashboard.ts'
-import type { CodexData, TailscaleData, ServicesData } from '../../shared/contracts/dashboard.ts'
+import type {
+  CodexData,
+  DevicesData,
+  TailscaleData,
+  ServicesData,
+} from '../../shared/contracts/dashboard.ts'
 import { DEFAULT_CODEX_GUEST, DEFAULT_CODEX_SLOTS } from '../../shared/domain/codex-rings.ts'
 
 export const fullCodexPresentation = () => ({
@@ -45,6 +50,21 @@ export function presentationSnapshots(now = new Date(), baseline = false) {
       connectedToControl: i % 3 === 0 ? true : i % 3 === 1 ? false : null,
       lastSeen: i % 3 === 1 ? new Date(now.getTime() - 100000).toISOString() : null,
       addresses: [`100.64.${i}.1`, `fd7a:115c:a1e0::${i + 1}`],
+    })),
+  }
+  const devices: DevicesData = {
+    devices: Array.from({ length: 5 }, (_, i) => ({
+      id: i === 4 ? 'sleepy-key-'.repeat(16) : `device-${i}`,
+      name: `SYNTHETIC DEVICE ${i}`,
+      batteryPercent: i === 0 ? 0 : i === 1 ? null : 76,
+      charging: i === 3,
+      foregroundApp: i === 2 ? 'PRIVATE FOREGROUND' : 'Synthetic app',
+      stateText: i === 2 ? 'PRIVATE FOREGROUND' : 'Synthetic app',
+      using: true,
+      online: true,
+      observedAt: at,
+      heartbeatAt: null,
+      capabilities: {},
     })),
   }
   const codex: CodexData = {
@@ -122,6 +142,7 @@ export function presentationSnapshots(now = new Date(), baseline = false) {
     })),
   }
   return {
+    devices: make('sleepy-fixture', devices),
     tailscale: make('tail-fixture', tailnet),
     codex: make('cpa-fixture', codex),
     services: make('flare-fixture', services),

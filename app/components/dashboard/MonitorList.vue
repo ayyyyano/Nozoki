@@ -65,7 +65,10 @@ const rows = computed(() =>
           <small v-if="monitor.latencyMs !== null">{{ monitor.latencyMs }} ms</small>
         </div>
         <template v-if="detail"
-          ><p v-if="monitor.checkedAt">检测于 {{ formatTimestamp(monitor.checkedAt, timezone) }}</p>
+          ><p v-if="monitor.sourceName" class="item-source-name">
+            来源名称 · {{ monitor.sourceName }}
+          </p>
+          <p v-if="monitor.checkedAt">检测于 {{ formatTimestamp(monitor.checkedAt, timezone) }}</p>
           <p v-if="monitor.uptimePercent !== null">
             可用率 {{ decimalText(monitor.uptimePercent) }}%
           </p>

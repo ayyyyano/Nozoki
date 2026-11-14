@@ -46,9 +46,9 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
       await drawer.click()
       await page
         .getByRole('dialog', { name: '选择管理分区' })
-        .getByRole('button', { name: '数据源', exact: true })
+        .getByRole('button', { name: '来源接入', exact: true })
         .click()
-    } else await page.getByRole('button', { name: '数据源', exact: true }).click()
+    } else await page.getByRole('button', { name: '来源接入', exact: true }).click()
   }
   const card = (id) => page.locator(`[data-source-id="${id}"]`)
   const expand = async (id) => {

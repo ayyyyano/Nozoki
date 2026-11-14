@@ -8,7 +8,11 @@ import { hmacKey, mac, hex, randomToken } from '../../server/services/auth-crypt
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
 import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
+import { bindSources } from '../../shared/integration-presets/bindings.ts'
 import { saveConfig } from '../../server/services/config.ts'
+import { credentialKeys } from '../../server/services/credential-keys.ts'
+import { upsertSnapshot } from '../../server/repositories/telemetry.ts'
+import { presentationSnapshots, presentationSources } from '../fixtures/presentation.ts'
 import {
   source,
   sleepMeta,
@@ -211,6 +215,7 @@ test(
       request('/api/admin/config', 'PUT', value, { 'Idempotency-Key': key })
     if (
       process.env.NOZOKI_TEST_LIST_HEADERS === '1' ||
+      process.env.NOZOKI_TEST_ITEM_DISPLAY === '1' ||
       process.env.NOZOKI_TEST_BACKGROUND === '1' ||
       process.env.NOZOKI_TEST_DEVICE_COLUMNS === '1' ||
       process.env.NOZOKI_TEST_CARD_METRICS === '1' ||
@@ -224,64 +229,139 @@ test(
       const { exerciseAdminListHeaders } = await import('../browser/admin-list-headers.ts')
       await mf.ready
       browser = await launch()
-      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
       await context.addCookies([
         { name: cookie.split('=')[0], value: cookie.slice(cookie.indexOf('=') + 1), url: origin },
       ])
       const page = await context.newPage()
-      await page.goto(origin + '/admin')
-      await settle(page)
-      if (process.env.NOZOKI_TEST_COMPACT_GRID === '1') {
-        const { exerciseCompactGrid } = await import('../browser/compact-grid.ts')
-        await exerciseCompactGrid(page, { origin, evidence })
-      } else if (process.env.NOZOKI_TEST_UNIFORM_GRID === '1') {
-        const { exerciseUniformGrid } = await import('../browser/uniform-grid.ts')
-        await exerciseUniformGrid(page, { origin, input, request, save, db, evidence })
-      } else if (process.env.NOZOKI_TEST_HOME_SUMMARY === '1') {
-        const { exerciseHomeSummary } = await import('../browser/home-summary.ts')
-        await exerciseHomeSummary(page, {
-          origin,
-          input,
-          request,
-          save,
-          db,
-          collector,
-          env,
-          evidence,
+      if (process.env.NOZOKI_TEST_ITEM_DISPLAY === '1') {
+        const fixture = await input()
+        const { credentialState: _sleepyState, ...sleepySource } = source('sleepy')
+        fixture.config.integrations.push(
+          { ...sleepySource, id: 'sleepy-fixture', credential: { operation: 'keep' } },
+          ...presentationSources()
+            .filter((item) => item.provider !== 'cliproxy-bridge')
+            .map(({ credentialState: _, ...item }) => ({
+              ...item,
+              credential:
+                item.provider === 'tailscale'
+                  ? {
+                      operation: 'replace',
+                      value: '{"clientId":"synthetic","clientSecret":"synthetic"}',
+                    }
+                  : { operation: 'keep' },
+            })),
+        )
+        for (const id of ['devices', 'tailscale', 'services']) {
+          const module = fixture.config.modules.find((item) => item.id === id)
+          module.enabled = true
+          module.visibility = 'public'
+          module.fields = {}
+          if (id === 'services')
+            module.homeServices = [2, 0, 1].map((index) => ({
+              sourceId: 'flare-fixture',
+              monitorId: 'flare-fixture/service-' + index,
+            }))
+        }
+        fixture.config = bindSources(fixture.config)
+        const seeded = await saveConfig(db, fixture, {
+          actor: { kind: 'system' },
+          keys: await credentialKeys(env),
         })
-      } else if (process.env.NOZOKI_TEST_DATA_MANAGEMENT === '1') {
-        const { exerciseDataManagement } = await import('../browser/data-management.ts')
-        await exerciseDataManagement(page, { input, request, save, evidence })
-      } else if (process.env.NOZOKI_TEST_ONBOARDING === '1') {
-        const { exerciseSourceOnboarding } = await import('../browser/source-onboarding.ts')
-        await exerciseSourceOnboarding(page, {
-          origin,
-          input,
-          request,
-          save,
-          db,
-          collector,
-          env,
-          evidence,
-        })
-      } else if (process.env.NOZOKI_TEST_CARD_METRICS === '1') {
-        const { exerciseCardMetrics } = await import('../browser/card-metrics.ts')
-        await exerciseCardMetrics(page, { origin, evidence })
-      } else if (process.env.NOZOKI_TEST_DEVICE_COLUMNS === '1') {
-        const { exerciseDeviceColumns } = await import('../browser/device-columns.ts')
-        await exerciseDeviceColumns(page, { origin, evidence })
-      } else if (process.env.NOZOKI_TEST_BACKGROUND === '1') {
-        const { exerciseSharedBackground } = await import('../browser/admin-background.ts')
-        await exerciseSharedBackground(page, {
+        assert.equal(seeded.success, true, JSON.stringify(seeded))
+        const { codex: _, ...snapshots } = presentationSnapshots()
+        for (const [moduleId, snapshot] of Object.entries(snapshots))
+          await upsertSnapshot(db, {
+            sourceId: snapshot.sourceId,
+            moduleId,
+            subject: 'default',
+            snapshot,
+            updatedAt: snapshot.collectedAt,
+          })
+        const { exerciseItemDisplay } = await import('../browser/item-display.ts')
+        await exerciseItemDisplay(page, {
           browser,
-          origin,
-          input,
-          request,
-          save,
           db,
+          snapshots,
+          origin,
+          request,
+          input,
+          save,
           evidence,
         })
-      } else await exerciseAdminListHeaders(page, { input, evidence })
+      } else {
+        if (process.env.NOZOKI_TEST_LIST_HEADERS === '1') {
+          const fixture = await input()
+          const { credentialState: _, ...flareSource } = presentationSources().find(
+            (item) => item.provider === 'uptimeflare',
+          )
+          fixture.config.integrations.push({ ...flareSource, credential: { operation: 'keep' } })
+          const services = fixture.config.modules.find((module) => module.id === 'services')
+          services.sources = { main: { sourceId: flareSource.id, subject: 'default' } }
+          assert.equal((await saveConfig(db, fixture, { actor: { kind: 'system' } })).success, true)
+          const snapshot = presentationSnapshots().services
+          await upsertSnapshot(db, {
+            sourceId: flareSource.id,
+            moduleId: 'services',
+            subject: 'default',
+            snapshot,
+            updatedAt: snapshot.collectedAt,
+          })
+        }
+        await page.goto(origin + '/admin')
+        await settle(page)
+        if (process.env.NOZOKI_TEST_COMPACT_GRID === '1') {
+          const { exerciseCompactGrid } = await import('../browser/compact-grid.ts')
+          await exerciseCompactGrid(page, { origin, evidence })
+        } else if (process.env.NOZOKI_TEST_UNIFORM_GRID === '1') {
+          const { exerciseUniformGrid } = await import('../browser/uniform-grid.ts')
+          await exerciseUniformGrid(page, { origin, input, request, save, db, evidence })
+        } else if (process.env.NOZOKI_TEST_HOME_SUMMARY === '1') {
+          const { exerciseHomeSummary } = await import('../browser/home-summary.ts')
+          await exerciseHomeSummary(page, {
+            origin,
+            input,
+            request,
+            save,
+            db,
+            collector,
+            env,
+            evidence,
+          })
+        } else if (process.env.NOZOKI_TEST_DATA_MANAGEMENT === '1') {
+          const { exerciseDataManagement } = await import('../browser/data-management.ts')
+          await exerciseDataManagement(page, { input, request, save, evidence })
+        } else if (process.env.NOZOKI_TEST_ONBOARDING === '1') {
+          const { exerciseSourceOnboarding } = await import('../browser/source-onboarding.ts')
+          await exerciseSourceOnboarding(page, {
+            origin,
+            input,
+            request,
+            save,
+            db,
+            collector,
+            env,
+            evidence,
+          })
+        } else if (process.env.NOZOKI_TEST_CARD_METRICS === '1') {
+          const { exerciseCardMetrics } = await import('../browser/card-metrics.ts')
+          await exerciseCardMetrics(page, { origin, evidence })
+        } else if (process.env.NOZOKI_TEST_DEVICE_COLUMNS === '1') {
+          const { exerciseDeviceColumns } = await import('../browser/device-columns.ts')
+          await exerciseDeviceColumns(page, { origin, evidence })
+        } else if (process.env.NOZOKI_TEST_BACKGROUND === '1') {
+          const { exerciseSharedBackground } = await import('../browser/admin-background.ts')
+          await exerciseSharedBackground(page, {
+            browser,
+            origin,
+            input,
+            request,
+            save,
+            db,
+            evidence,
+          })
+        } else await exerciseAdminListHeaders(page, { input, save, evidence })
+      }
       await context.close()
       await browser.close()
       browser = null

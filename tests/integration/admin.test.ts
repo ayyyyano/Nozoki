@@ -75,6 +75,14 @@ test('phase 04 atomic HTTP-save core in real D1/workerd', async (t) => {
         ),
       )
     const before = (await db.prepare('select * from integration_audit order by id').all()).results
+    const legacyOrder = JSON.stringify([
+      { sourceId: 'flare', monitorId: 'flare/second' },
+      { sourceId: 'flare', monitorId: 'flare/first' },
+    ])
+    await db
+      .prepare("UPDATE dashboard_modules SET home_services_json=? WHERE id='services'")
+      .bind(legacyOrder)
+      .run()
     await db.batch(
       unstable_splitSqlQuery(await readFile(`migrations/${files.at(-1)}`, 'utf8')).map((sql) =>
         db.prepare(sql),
@@ -85,6 +93,18 @@ test('phase 04 atomic HTTP-save core in real D1/workerd', async (t) => {
       before,
     )
     assert.deepEqual((await db.prepare('pragma foreign_key_check').all()).results, [])
+    assert.equal(
+      (
+        await db
+          .prepare("SELECT home_services_json FROM dashboard_modules WHERE id='services'")
+          .first()
+      ).home_services_json,
+      legacyOrder,
+    )
+    assert.deepEqual(
+      (await input()).config.modules.find((module) => module.id === 'services').homeServices,
+      JSON.parse(legacyOrder),
+    )
   })
   await check('normalized no-op retains version/audit and has atomic retry result', async () => {
     const i = await input(),

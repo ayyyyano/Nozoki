@@ -30,6 +30,7 @@ async function fresh(legacy = false) {
     db.connection.exec(await readFile('migrations/0020_balance_display.sql', 'utf8'))
     db.connection.exec(await readFile('migrations/0022_home_services.sql', 'utf8'))
     db.connection.exec(await readFile('migrations/0024_module_presentation.sql', 'utf8'))
+    db.connection.exec(await readFile('migrations/0025_item_display.sql', 'utf8'))
   } else await migrateDatabase(db, 'migrations', resolve(folder, 'backups'))
   return db
 }

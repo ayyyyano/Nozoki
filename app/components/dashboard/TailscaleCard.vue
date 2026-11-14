@@ -4,7 +4,7 @@ import { tailnetState, tailnetSummary } from '../../../shared/domain/tailnet-pre
 const props = defineProps<{ snapshot: DataSnapshot<TailscaleData>; title: string }>()
 const now = useLocalClock()
 const nodes = computed(() => props.snapshot.data?.devices ?? [])
-const summary = computed(() => tailnetSummary(nodes.value))
+const summary = computed(() => tailnetSummary(nodes.value, props.snapshot.homeItems))
 const expired = computed(
   () =>
     props.snapshot.status !== 'stale' && tailnetState(null, props.snapshot, now.value) === 'stale',
@@ -30,6 +30,9 @@ const expired = computed(
       compact
     />
     <DashboardTailnetNodes :nodes="summary" :snapshot="snapshot" />
+    <p v-if="nodes.length && !summary.length" class="quiet-note">
+      未选择首页节点，可在详情中查看。
+    </p>
     <template v-if="expired" #freshness>
       <p role="status">数据已过期</p>
     </template>

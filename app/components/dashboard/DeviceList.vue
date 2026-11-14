@@ -8,10 +8,16 @@ const props = defineProps<{
   displayOptions?: DeviceDisplayOptions
 }>()
 const timezone = useDashboardTimezone()
-const presented = computed(() => props.devices.map((d) => presentDevice(d, props.displayOptions)))
+const presented = computed(() =>
+  props.devices.map((device) => ({
+    ...presentDevice(device, props.displayOptions),
+    icon: device.icon ?? 'devices',
+    sourceName: device.sourceName,
+  })),
+)
 </script>
 <template>
-  <div class="device-list">
+  <div class="device-list" :class="{ 'device-list-detail': detail }">
     <article
       v-for="device in presented"
       :key="device.id"
@@ -35,10 +41,13 @@ const presented = computed(() => props.devices.map((d) => presentDevice(d, props
           :line-width="3"
           :color="device.batteryLevel === 'low' ? 'var(--color-danger)' : 'var(--color-primary)'"
         />
-        <CommonAppIcon name="devices" :size="24" />
+        <CommonAppIcon :name="device.icon" :size="24" />
       </div>
       <div class="device-copy">
         <h3 :title="device.name">{{ device.name }}</h3>
+        <small v-if="detail && device.sourceName" class="item-source-name"
+          >来源名称 · {{ device.sourceName }}</small
+        >
         <p
           class="device-state"
           tabindex="0"
@@ -52,6 +61,9 @@ const presented = computed(() => props.devices.map((d) => presentDevice(d, props
         >
         <div v-if="device.batteryPercent !== null" class="battery-value">
           <strong>{{ device.batteryPercent }}<small>%</small></strong>
+          <span class="device-battery-dots" aria-hidden="true">
+            <i v-for="dot in 4" :key="dot" :data-filled="device.batteryPercent > (dot - 1) * 25" />
+          </span>
           <span v-if="device.charging" class="device-charging" aria-label="充电中" title="充电中"
             ><CommonAppIcon name="bolt" :size="detail ? 20 : 14"
           /></span>

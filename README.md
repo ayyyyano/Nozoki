@@ -2,9 +2,11 @@
 
 <img align='right' src='public/logo.png' width='200px' alt="Nozoki logo">
 
-[DEMO}(https://nozoki.nekro.top/) | [English](README_EN.md)
+[DEMO](https://nozoki.nekro.top/) | [English](README_EN.md)
 
 Nozoki 是支持 Cloudflare Workers 和 Node.js 服务器部署的个人看板。Nuxt 4 提供页面与服务端 API。Cloudflare 部署使用 D1，服务器部署使用本机 SQLite 文件保存站点配置、登录会话和数据快照。
+
+![Nozoki Preview](public/preview.png)
 
 ## 看板模块
 
@@ -27,7 +29,7 @@ DeepSeek 自动匹配余额来源。今日余额随采集更新，历史柱取�
 
 ## 技术栈
 
-| 技术                                 | 版本    |
+| 组件                                 | 版本    |
 | ------------------------------------ | ------- |
 | Vue                                  | 3.5.44  |
 | Nuxt                                 | 4.6.2   |
@@ -35,56 +37,6 @@ DeepSeek 自动匹配余额来源。今日余额随采集更新，历史柱取�
 | xicons Material (`@vicons/material`) | 0.13.0  |
 | TypeScript                           | 5.9.3   |
 | Node.js                              | 24.21.0 |
-
-## 本地启动
-
-```sh
-pnpm install --frozen-lockfile
-pnpm db:init
-pnpm dev
-```
-
-访问 http://127.0.0.1:3000。`db:init` 和 `db:migrate` 执行本地 SQL 迁移，日常数据库位于 `.wrangler/state/v3`。缺少数据库绑定或初始化数据时，API 返回服务不可用。
-
-需要本地调试账号时，使用：
-
-```sh
-pnpm dev:local
-```
-
-登录资料保存在 `.wrangler/local-debug/LOGIN.txt`。首次运行会复制日常数据库，调试期间的数据写入 `.wrangler/local-debug/state/v3`。后续启动继续使用这份数据库和账号。运行开发命令前先停止占用 3000 的服务。
-
-`pnpm dev` 使用已有环境配置。需要固定本地账号时，将 [.dev.vars.example](.dev.vars.example) 复制为 `.dev.vars` 并填写配置；已有文件请直接编辑。
-
-## 管理员配置
-
-| 配置项                   | 用途                                                |
-| ------------------------ | --------------------------------------------------- |
-| `ADMIN_EMAIL`            | 管理员邮箱                                          |
-| `ADMIN_PASSWORD`         | 管理员密码，12～1024 字符                           |
-| `AUTH_VERSION`           | 正整数会话版本，修改账号凭据时递增                  |
-| `AUTH_ORIGIN`            | 站点完整 origin，如 `https://dashboard.example.com` |
-| `AUTH_RATE_LIMIT_SECRET` | 独立随机 32 字节 base64url 密钥                     |
-| `AUTH_ALLOW_LOCAL_HTTP`  | 本地 loopback HTTP 开发环境设为 `1`                 |
-
-Cloudflare 本地配置使用 `.dev.vars`，生产密码和辅助密钥使用 Worker Secrets。Node.js 使用受限权限的环境变量文件。`AUTH_ORIGIN` 需要与浏览器访问地址一致，开发服务和本地 Workers 预览分别使用 3000、8787。必填认证配置缺失时，管理员登录不可用，公开看板继续按访客身份提供数据。
-
-首页登录成功后进入 `/admin`，独立登录页为 `/login`。配置保存使用 CSRF 校验、全局版本检查和请求幂等处理。默认会话绝对有效期为 12 小时，空闲期限为 30 分钟；注销会撤销数据库中的会话。
-
-集成凭据使用 `keep`、`replace`、`clear` 操作。替换凭据需要 `INTEGRATION_ENCRYPTION_KEY` 和 `INTEGRATION_KEY_VERSION`。旧密文需要对应版本的密钥，可通过 `INTEGRATION_DECRYPTION_KEYS` 提供历史版本。轮换前请保管这些密钥。
-
-## 构建与预览
-
-```sh
-pnpm build
-pnpm preview
-```
-
-预览地址为 http://127.0.0.1:8787。Dashboard Worker 入口为 `.output/server/index.mjs`，静态资源为 `.output/public`。
-
-网页、API 和定时采集使用同一个 Worker。根配置中的 Cron 每五分钟调用独立的采集引擎，来源仍按各自刷新间隔更新。预览时可打开 `http://127.0.0.1:8787/cdn-cgi/handler/scheduled` 手动触发；这一路径由本地 Wrangler 提供，线上没有公开采集入口。
-
-采集使用数据库租约和来源修订检查。失败时保留上次有效快照，错误单独记录。
 
 ## 使用 Agent 工具快速部署
 
@@ -315,6 +267,56 @@ Sleepy、Kuma、Flare 使用各自支持的只读协议。CLIProxyAPI 选择 `cl
 UptimeFlare 状态页直接使用 `uptime.config.ts` 中的监控名称。Nozoki 从 `/api/data` 读取每项监控的 `name`。UptimeFlare 的默认响应省略这个字段时，Nozoki 的「服务状态」卡片和后台监控列表会显示监控 ID。[UptimeFlare 配置文档](https://github.com/lyc8503/UptimeFlare/wiki/Configuration#workerconfig) · [接口源码](https://github.com/lyc8503/UptimeFlare/blob/main/pages/api/data.ts)
 
 要让 Nozoki 显示名称，请在自建 UptimeFlare 的 `pages/api/data.ts` 中为 `monitors[monitor.id]` 添加 `name: monitor.name`，保留原监控 ID，然后重新部署 UptimeFlare。确认 `/api/data` 已返回名称后，等待 Nozoki 下一次成功采集，再在后台「服务状态」中点击「刷新监控列表」。原有的首页勾选按 ID 保留。
+
+## 本地启动
+
+```sh
+pnpm install --frozen-lockfile
+pnpm db:init
+pnpm dev
+```
+
+访问 http://127.0.0.1:3000。`db:init` 和 `db:migrate` 执行本地 SQL 迁移，日常数据库位于 `.wrangler/state/v3`。缺少数据库绑定或初始化数据时，API 返回服务不可用。
+
+需要本地调试账号时，使用：
+
+```sh
+pnpm dev:local
+```
+
+登录资料保存在 `.wrangler/local-debug/LOGIN.txt`。首次运行会复制日常数据库，调试期间的数据写入 `.wrangler/local-debug/state/v3`。后续启动继续使用这份数据库和账号。运行开发命令前先停止占用 3000 的服务。
+
+`pnpm dev` 使用已有环境配置。需要固定本地账号时，将 [.dev.vars.example](.dev.vars.example) 复制为 `.dev.vars` 并填写配置；已有文件请直接编辑。
+
+## 管理员配置
+
+| 配置项                   | 用途                                                |
+| ------------------------ | --------------------------------------------------- |
+| `ADMIN_EMAIL`            | 管理员邮箱                                          |
+| `ADMIN_PASSWORD`         | 管理员密码，12～1024 字符                           |
+| `AUTH_VERSION`           | 正整数会话版本，修改账号凭据时递增                  |
+| `AUTH_ORIGIN`            | 站点完整 origin，如 `https://dashboard.example.com` |
+| `AUTH_RATE_LIMIT_SECRET` | 独立随机 32 字节 base64url 密钥                     |
+| `AUTH_ALLOW_LOCAL_HTTP`  | 本地 loopback HTTP 开发环境设为 `1`                 |
+
+Cloudflare 本地配置使用 `.dev.vars`，生产密码和辅助密钥使用 Worker Secrets。Node.js 使用受限权限的环境变量文件。`AUTH_ORIGIN` 需要与浏览器访问地址一致，开发服务和本地 Workers 预览分别使用 3000、8787。必填认证配置缺失时，管理员登录不可用，公开看板继续按访客身份提供数据。
+
+首页登录成功后进入 `/admin`，独立登录页为 `/login`。配置保存使用 CSRF 校验、全局版本检查和请求幂等处理。默认会话绝对有效期为 12 小时，空闲期限为 30 分钟；注销会撤销数据库中的会话。
+
+集成凭据使用 `keep`、`replace`、`clear` 操作。替换凭据需要 `INTEGRATION_ENCRYPTION_KEY` 和 `INTEGRATION_KEY_VERSION`。旧密文需要对应版本的密钥，可通过 `INTEGRATION_DECRYPTION_KEYS` 提供历史版本。轮换前请保管这些密钥。
+
+## 构建与预览
+
+```sh
+pnpm build
+pnpm preview
+```
+
+预览地址为 http://127.0.0.1:8787。Dashboard Worker 入口为 `.output/server/index.mjs`，静态资源为 `.output/public`。
+
+网页、API 和定时采集使用同一个 Worker。根配置中的 Cron 每五分钟调用独立的采集引擎，来源仍按各自刷新间隔更新。预览时可打开 `http://127.0.0.1:8787/cdn-cgi/handler/scheduled` 手动触发；这一路径由本地 Wrangler 提供，线上没有公开采集入口。
+
+采集使用数据库租约和来源修订检查。失败时保留上次有效快照，错误单独记录。
 
 ### Cloudflare 公网 HTTPS 出站
 

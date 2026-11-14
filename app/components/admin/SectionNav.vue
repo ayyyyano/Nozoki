@@ -1,12 +1,12 @@
 <script setup lang="ts">
-const section = defineModel<string>({ required: true })
-defineProps<{ sections: readonly { id: string; label: string; icon: string }[] }>()
+defineProps<{ section: string; sections: readonly { id: string; label: string; icon: string }[] }>()
+const emit = defineEmits<{ select: [id: string] }>()
 const show = ref(false)
 const panel = useTemplateRef<HTMLElement>('panel')
 const focus = useModalFocus(show, panel)
 defineExpose({ open: () => (show.value = true), show })
 function choose(id: string) {
-  section.value = id
+  emit('select', id)
   show.value = false
 }
 let desktop: MediaQueryList | undefined
