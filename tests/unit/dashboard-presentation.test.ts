@@ -179,7 +179,7 @@ test('Tailscale guest masks are constant, fields cannot override private ancesto
       assert.equal(text.includes('100.64.'), ip === 'full')
       if (name === 'masked') assert.equal(data.devices[0].name, '名称已遮蔽')
       if (name === 'hidden') assert.equal(data.devices[0].name, undefined)
-      if (ip === 'masked') assert.equal(data.devices[0].addressLabel, 'IP 已遮蔽')
+      if (ip === 'masked') assert.equal(data.devices[0].addressLabel, 'IP 已隐藏')
       if (ip === 'hidden') assert.equal(data.devices[0].addressLabel, undefined)
     }
   m.presentation = { tailnetName: 'full', tailnetIp: 'full' }

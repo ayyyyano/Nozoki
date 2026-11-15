@@ -42,7 +42,7 @@ export function tailnetNodeProjection<T>(
     }
   }
   if (ipPolicy !== 'full' || !addresses) {
-    if (ipPolicy === 'masked' && addresses) node.addressLabel = 'IP 已遮蔽' as T
+    if (ipPolicy === 'masked' && addresses) node.addressLabel = 'IP 已隐藏' as T
     delete node.addresses
     node.addressesHidden = true as T
   } else {

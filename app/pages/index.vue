@@ -154,6 +154,7 @@ const DevPreview = import.meta.dev
           :title="module.title"
           :icon="moduleIcons[module.id]"
           status="unconfigured"
+          class="module-login-required"
           ><a href="/login" @click.prevent="account?.open()">登录后查看</a></DashboardModuleCard
         >
         <DashboardDeepSeekCard

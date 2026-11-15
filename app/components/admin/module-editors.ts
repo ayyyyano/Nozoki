@@ -1,7 +1,7 @@
 import type { Component } from 'vue'
 import type { ModuleId } from '../../../shared/contracts/dashboard'
 import CodexPresentationEditor from './CodexPresentationEditor.vue'
-import DeepSeekPermissionsEditor from './DeepSeekPermissionsEditor.vue'
+import DevicesPermissionsEditor from './DevicesPermissionsEditor.vue'
 import HomeItemsEditor from './HomeItemsEditor.vue'
 import TailscalePermissionsEditor from './TailscalePermissionsEditor.vue'
 
@@ -12,8 +12,10 @@ interface Editor {
 }
 
 export const moduleEditors: Partial<Record<ModuleId, { home?: Editor; guest?: Editor }>> = {
-  deepseek: { guest: { component: DeepSeekPermissionsEditor } },
-  devices: { home: { component: HomeItemsEditor, props: { kind: 'devices' }, title: '首页展示' } },
+  devices: {
+    home: { component: HomeItemsEditor, props: { kind: 'devices' }, title: '首页展示' },
+    guest: { component: DevicesPermissionsEditor },
+  },
   tailscale: {
     home: { component: HomeItemsEditor, props: { kind: 'tailscale' }, title: '首页展示' },
     guest: { component: TailscalePermissionsEditor },

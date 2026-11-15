@@ -10,7 +10,7 @@ import { formatTimestamp } from '../../../shared/domain/format'
 const props = defineProps<{ rings: CodexRing[]; now: number; detail?: boolean }>()
 const timezone = useDashboardTimezone()
 const labels = {
-  masked: '已遮蔽',
+  masked: '已隐藏',
   unknown: '待同步',
   stale: '—',
   unsupported: '不支持',

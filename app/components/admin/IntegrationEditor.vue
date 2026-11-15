@@ -8,6 +8,8 @@ import {
   type DraftIntegrationTest,
 } from '../../../shared/contracts/integration-test'
 import { sourceTargetKey } from '../../../shared/contracts/source-access'
+import { sourceConnection } from '../../../shared/integration-presets/connection'
+import { normalizeServiceTarget } from '../../../shared/contracts/service-target'
 import {
   integrationPreset,
   fixedPresetTarget,
@@ -21,8 +23,9 @@ const props = defineProps<{
   saved?: IntegrationSettings
   expectedVersion: number
   quoteSymbols: { market: string; symbol: string }[]
+  recentFailure?: boolean
 }>()
-const emit = defineEmits<{ tested: [ProbeResult | null, boolean?] }>()
+const emit = defineEmits<{ tested: [ProbeResult | null] }>()
 const preset = computed(() => integrationPreset(model.value))
 const clock = useLocalClock()
 const proofExpired = computed(
@@ -51,18 +54,23 @@ const url = computed({
     model.value.baseUrl = value || null
   },
 })
-const addressChanged = computed(
-  () =>
-    configured.value &&
-    model.value.credential.operation === 'keep' &&
-    model.value.baseUrl !== props.saved?.baseUrl,
-)
-const savedMatches = computed(() => {
-  if (!props.saved || model.value.credential.operation !== 'keep' || model.value.identityCredential)
-    return false
-  const { credentialState: _state, identityConfigured: _identity, ...saved } = props.saved
-  const { credential: _credential, connectionProof: _proof, ...draft } = model.value
-  return canonical(saved) === canonical(draft)
+const addressChanged = computed(() => {
+  if (!configured.value || model.value.credential.operation !== 'keep') return false
+  try {
+    return (
+      normalizeServiceTarget(model.value.baseUrl) !== normalizeServiceTarget(props.saved!.baseUrl)
+    )
+  } catch {
+    return true
+  }
+})
+const connectionChanged = computed(() => {
+  if (!props.saved) return false
+  try {
+    return sourceConnection(model.value) !== sourceConnection(props.saved)
+  } catch {
+    return true
+  }
 })
 const testInput = () => {
   const { identityCredential: _identity, connectionProof: _proof, ...draft } = model.value
@@ -124,12 +132,9 @@ function approvalAccess() {
 }
 const targetKey = () => {
   try {
-    const a = model.value.access
-    return a && a.mode !== 'legacy'
-      ? sourceTargetKey(model.value, a)
-      : JSON.stringify([model.value.baseUrl, model.value.provider, model.value.protocolVersion])
+    return sourceConnection(model.value)
   } catch {
-    return model.value.baseUrl
+    return canonical([model.value.baseUrl, model.value.fieldMappings])
   }
 }
 let acceptingTest = false
@@ -160,7 +165,6 @@ let revision = 0
 onBeforeUnmount(() => {
   revision++
 })
-const draftResult = ref(false)
 watch(
   testFingerprint,
   () => {
@@ -193,17 +197,14 @@ const feedback = computed(() => {
   }
   return result.value.code
     ? (messages[result.value.code] ?? '连接未完成，请检查服务配置后重试。')
-    : result.value.protocolMatched
-      ? draftResult.value
-        ? '草稿测试通过，尚未保存；各项能力见下方结果。'
-        : '连接协议已确认；各项能力见下方结果。'
+    : result.value.connectionProof
+      ? '验证成功 · 待保存'
       : '尚未确认服务协议。'
 })
 async function testConnection() {
   if (testing.value || !canTest.value) return
   const submitted = testFingerprint(),
     startedRevision = revision,
-    unsaved = !savedMatches.value,
     id = model.value.id
   let body: DraftIntegrationTest | undefined = DraftIntegrationTestSchema.parse(testInput())
   testing.value = true
@@ -225,9 +226,8 @@ async function testConnection() {
         acceptingTest = false
         model.value.connectionProof = response.connectionProof
       }
-      draftResult.value = unsaved
       result.value = response
-      emit('tested', response, unsaved)
+      emit('tested', response)
     }
   } catch (e) {
     if (revision !== startedRevision || testFingerprint() !== submitted) return
@@ -284,13 +284,8 @@ const identityImport = computed({
     <p v-if="showCredential && !needsCredential" class="admin-note">
       此类型不发送凭据；可以清除以前保存的凭据。
     </p>
-    <p v-if="addressChanged" class="source-warning" role="status">
-      地址已更改。请更新或清除已保存的凭据，再保存此来源。
-    </p>
-    <p class="admin-note">
-      点击测试会访问此 HTTPS 服务{{
-        needsCredential ? '并使用填写的凭据' : '，无需凭据'
-      }}。测试通过后确认此地址；保存后开始采集。
+    <p v-if="connectionChanged && !model.connectionProof" class="source-warning" role="status">
+      目标已修改，需重新验证。{{ addressChanged ? '请更新原凭据。' : '' }}
     </p>
     <div class="admin-actions source-test-actions">
       <VarButton
@@ -299,13 +294,31 @@ const identityImport = computed({
         :loading="testing"
         :disabled="testing || !canTest"
         @click="testConnection"
-        ><CommonAppIcon name="LinkRound" :size="18" />测试并确认访问</VarButton
+        ><CommonAppIcon name="LinkRound" :size="18" />测试并批准</VarButton
       >
       <VarButton v-if="approved" tonal @click="revoke">撤销访问批准</VarButton>
       <span v-if="!canTest" class="admin-note">{{
-        addressChanged ? '地址已更改，请更新或清除原凭据' : '请补齐此来源的必要配置'
+        addressChanged ? '凭据与原地址绑定' : '请补齐此来源的必要配置'
       }}</span>
     </div>
+    <p v-if="!result && model.connectionProof && !proofExpired" class="admin-note" role="status">
+      验证成功 · 待保存
+    </p>
+    <p v-else-if="!result && recentFailure" class="source-warning" role="status">最近验证失败</p>
+    <p v-if="saved?.verification" class="admin-note">
+      上次成功验证
+      <time :datetime="saved.verification.verifiedAt">{{
+        formatTimestamp(saved.verification.verifiedAt, timezone)
+      }}</time>
+      <span
+        v-if="
+          !model.connectionProof &&
+          (!saved.verification.current || !approved || model.credential.operation !== 'keep')
+        "
+      >
+        · 需重新验证
+      </span>
+    </p>
     <div
       v-if="result"
       class="source-test-result"
@@ -326,7 +339,11 @@ const identityImport = computed({
       测试结果已过期，请重新测试后保存。
     </p>
     <p v-if="testError" class="source-warning" role="alert">{{ testError }}</p>
-    <ul v-if="preset.capabilities.length" class="source-capabilities" aria-label="能力状态">
+    <ul
+      v-if="result && preset.capabilities.length"
+      class="source-capabilities"
+      aria-label="本次验证能力"
+    >
       <li v-for="capability in preset.capabilities" :key="capability.key">
         {{ capability.label }} ·
         {{ result?.capabilities[capability.key]?.verified ? '已验证' : '尚未验证' }}

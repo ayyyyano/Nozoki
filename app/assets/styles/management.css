@@ -1,13 +1,4 @@
 /* Management surfaces share Dashboard M3 roles; no image filters or separate palette. */
-.nozoki-app:has(.management-page) .background-scene.banner {
-  position: absolute;
-  inset: 0;
-  height: 100%;
-  min-height: 0;
-}
-.nozoki-app:has(.management-page) .banner-wave {
-  display: none;
-}
 .nozoki-app:has(.management-page) .dashboard-stage {
   background: none;
 }
@@ -221,14 +212,14 @@
 .admin-section-title > .app-icon {
   color: var(--color-primary);
 }
-.admin-module-list,
+.admin-record-list,
 .admin-module-editor,
 .admin-module-group {
   display: grid;
   gap: 16px;
   min-width: 0;
 }
-.admin-module-list {
+.admin-record-list {
   gap: 10px;
 }
 .admin-module-editor {
@@ -240,13 +231,6 @@
   font-size: 16px;
   font-weight: 650;
 }
-.admin-module-list .admin-item-toggle {
-  gap: clamp(4px, 1.3vw, 12px);
-  padding: 8px;
-}
-.admin-module-list .admin-item-actions {
-  flex-shrink: 0;
-}
 .admin-fields {
   min-width: 0;
   display: grid;
@@ -256,9 +240,6 @@
 }
 .admin-fields > * {
   min-width: 0;
-}
-.admin-quote-refresh {
-  grid-column: 1 / -1;
 }
 .admin-fields > label {
   align-self: center;
@@ -287,23 +268,6 @@
   flex-wrap: wrap;
   gap: 4px 12px;
   align-items: center;
-}
-.admin-item-title {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-}
-.admin-item-title > .admin-item-toggle {
-  width: 100%;
-}
-.admin-item-title--with-action .admin-item-chevron {
-  margin-inline-start: 40px;
-}
-.admin-item-title-action {
-  position: absolute;
-  inset-inline-end: 36px;
-  inset-block-start: 50%;
-  translate: 0 -50%;
 }
 .admin-item-toggle {
   display: flex;
@@ -342,11 +306,6 @@
   color: var(--color-muted);
   font-size: 12px;
 }
-.admin-item-status {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: var(--color-muted);
-}
 .admin-item-actions {
   display: flex;
   flex-wrap: wrap;
@@ -356,44 +315,9 @@
   min-width: 44px;
   padding-inline: 10px;
 }
-.admin-item-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 20px;
-  padding: 8px 12px 12px;
-  min-width: 0;
-}
-.admin-item-body[style*='display: none'] {
-  display: none;
-}
-.source-manager {
-  display: grid;
-  gap: 20px;
-  min-width: 0;
-}
-.source-manager .source-card > header,
-.admin-editor-item.admin-order-card > header,
-.admin-editor-item.admin-link-card > header {
+.admin-list-item > header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-}
-.source-card .admin-item-toggle,
-.admin-order-card .admin-item-toggle,
-.admin-link-card .admin-item-toggle {
-  width: 100%;
-}
-.source-enable {
-  padding-inline: 8px;
-}
-.admin-order-card .admin-item-actions,
-.admin-link-card .admin-item-actions {
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-  padding-inline: 4px 12px;
-}
-.admin-order-card .admin-item-actions > .var-switch {
-  margin-inline-start: 8px;
 }
 .source-settings-grid {
   display: grid;
@@ -478,16 +402,7 @@
   color: var(--color-on-surface-variant);
   font-size: 12px;
 }
-.source-danger-zone {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 8px;
-}
-.source-danger-zone .var-button {
-  --button-danger-color: var(--color-danger);
-}
-.source-test-actions .var-button__content,
-.source-danger-zone .var-button__content {
+.source-test-actions .var-button__content {
   gap: 8px;
 }
 .source-dialog {
@@ -580,27 +495,8 @@
   color: var(--color-on-surface-variant);
 }
 @media (max-width: 540px) {
-  .source-card .admin-item-title-action {
-    inset-inline-end: 34px;
-  }
-  .source-manager .admin-item-status {
-    display: none;
-  }
-  .admin-editor-item.admin-order-card > header {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .admin-order-card .admin-item-actions {
-    justify-self: end;
-  }
   .source-settings-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .source-manager .admin-item-actions {
-    padding: 0;
-  }
-  .source-manager .source-enable {
-    gap: 6px;
-    padding-inline: 0 4px;
   }
   .source-dialog {
     padding: 20px;
@@ -631,16 +527,6 @@
 .admin-details[open] > :not(summary) {
   margin-top: 16px;
 }
-.admin-rule {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.admin-rule code {
-  flex: 1 1 100%;
-  overflow-wrap: anywhere;
-}
 .schedule-editor .admin-text:not(:focus-within) .var-form-details {
   display: none;
 }
@@ -654,9 +540,6 @@
   display: grid;
   gap: 12px;
   min-width: 0;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 16px;
-  padding: 16px;
 }
 .schedule-section h3,
 .schedule-section p {
@@ -686,7 +569,11 @@
   gap: 16px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.admin-form fieldset.schedule-hour-group {
+.schedule-hour-group {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  border: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   background: var(--color-surface-container);
@@ -808,7 +695,6 @@
   width: min(220px, 100%);
 }
 .schedule-preview {
-  background: var(--color-surface-container);
   overflow-wrap: anywhere;
 }
 .schedule-preview-result {
@@ -832,9 +718,6 @@
 .schedule-exceptions {
   max-height: 280px;
   overflow-y: auto;
-}
-.admin-rule .var-select {
-  max-width: 180px;
 }
 .admin-feedback {
   padding: 16px 24px;
@@ -1096,9 +979,6 @@
   .admin-item-toggle {
     padding: 12px 10px;
   }
-  .admin-item-body {
-    padding: 8px 10px 10px;
-  }
   .admin-item-toggle {
     width: 100%;
   }
@@ -1147,13 +1027,13 @@
 
 .data-management {
   display: grid;
-  gap: 24px;
+  gap: 16px;
   min-width: 0;
 }
 .data-management-card {
   display: grid;
   justify-items: start;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
   padding: 24px;
   border: 1px solid var(--color-outline-variant);
@@ -1169,6 +1049,257 @@
 .data-management-card p {
   margin: 0;
   overflow-wrap: anywhere;
+}
+.admin-list-item > header {
+  gap: clamp(2px, 1.4vw, 12px);
+}
+.admin-list-item .admin-item-toggle {
+  min-height: 58px;
+  gap: clamp(6px, 1.3vw, 12px);
+  padding: 8px;
+}
+.admin-list-item .admin-item-actions {
+  padding-inline: 4px;
+}
+.admin-list-item .admin-item-copy {
+  gap: 2px;
+}
+.admin-edit-popup {
+  --editor-inline-gap: max(16px, env(safe-area-inset-left), env(safe-area-inset-right));
+  --editor-block-gap: max(16px, env(safe-area-inset-top), env(safe-area-inset-bottom));
+  --editor-max-width: 920px;
+  width: min(var(--editor-max-width), calc(100% - 2 * var(--editor-inline-gap)));
+  flex: none;
+  overflow: visible;
+}
+.admin-edit-popup--compact {
+  --editor-max-width: 760px;
+}
+.admin-edit-scrim {
+  --popup-overlay-background-color: rgb(0 0 0 / 52%);
+}
+.admin-edit-dialog {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100dvh - 2 * var(--editor-block-gap));
+  gap: 0;
+  padding: 0;
+  overflow: clip;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 24px;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 28%);
+}
+.admin-edit-dialog .source-dialog-heading,
+.admin-edit-dialog-footer {
+  flex: none;
+  padding: 12px 24px;
+}
+.admin-edit-dialog .source-dialog-heading {
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+.admin-edit-dialog h2 {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.admin-edit-dialog h2 .app-icon {
+  color: var(--color-primary);
+  flex: none;
+}
+.admin-edit-dialog h2 > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-edit-dialog-body {
+  container-type: inline-size;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px 24px;
+  scroll-padding-block: 16px;
+}
+.admin-dialog-fields {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.admin-setting-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.admin-setting-toggle > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.admin-setting-toggle > .var-switch {
+  flex: none;
+  pointer-events: none;
+}
+.admin-setting-toggle:disabled {
+  cursor: default;
+}
+.admin-edit-dialog-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--color-outline-variant);
+}
+.admin-edit-dialog-footer .var-button__content {
+  gap: 8px;
+}
+.admin-edit-dialog-footer:has(> .source-remove-action) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'status status'
+    'reload reload'
+    'remove save';
+  gap: 0 8px;
+}
+.source-remove-action {
+  --button-danger-color: var(--color-danger);
+  grid-area: remove;
+  justify-self: start;
+}
+.admin-editor-save-button {
+  grid-area: save;
+}
+.admin-editor-reload {
+  grid-area: reload;
+  justify-self: end;
+}
+.admin-edit-dialog-footer:has(> .source-remove-action) > .admin-editor-save-state,
+.admin-edit-dialog-footer:has(> .source-remove-action) > .admin-editor-reload {
+  margin-bottom: 8px;
+}
+.admin-editor-save-state {
+  grid-area: status;
+  flex: 1 1 12ch;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--color-on-surface-variant);
+  overflow-wrap: anywhere;
+  max-height: 24dvh;
+  overflow-y: auto;
+}
+.admin-appearance-group {
+  display: grid;
+  gap: 16px;
+  padding-block: 8px 20px;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+.admin-appearance-group > h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 16px;
+}
+.admin-appearance-group .palette-presets {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin: 0;
+}
+.admin-appearance-preview {
+  grid-column: 1 / -1;
+  position: relative;
+  isolation: isolate;
+  width: min(100%, 420px);
+  height: 144px;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  border-radius: 16px;
+  overflow: clip;
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-outline-variant);
+}
+.admin-appearance-image,
+.admin-appearance-image span {
+  position: absolute;
+  inset: 0;
+}
+.admin-appearance-image span {
+  background: black;
+}
+.admin-appearance-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.admin-appearance-preview[data-layout='banner'] .admin-appearance-image {
+  bottom: 50%;
+}
+.admin-appearance-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.admin-appearance-cards i {
+  height: 42px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 8px;
+  background: var(--color-surface-container-high);
+}
+.admin-appearance-preview[data-layout='page'] .admin-appearance-cards i {
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-high) var(--preview-opacity),
+    transparent
+  );
+  backdrop-filter: var(--preview-blur);
+}
+@media (max-width: 1023px) {
+  .admin-edit-popup {
+    --editor-max-width: 100%;
+  }
+}
+@media (max-width: 767px) {
+  .admin-edit-popup {
+    --editor-max-width: 480px;
+  }
+  .admin-edit-dialog .source-dialog-heading,
+  .admin-edit-dialog-body,
+  .admin-edit-dialog-footer {
+    padding-inline: 16px;
+  }
+}
+@media (max-width: 429px) {
+  .admin-edit-popup {
+    --editor-inline-gap: max(12px, env(safe-area-inset-left), env(safe-area-inset-right));
+  }
+  .admin-edit-dialog .source-dialog-heading,
+  .admin-edit-dialog-body,
+  .admin-edit-dialog-footer {
+    padding-inline: 12px;
+  }
+}
+@container (max-width: 480px) {
+  .admin-edit-dialog :is(.admin-fields, .source-settings-grid) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .admin-edit-dialog .schedule-hour-group {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .data-import-source {
   display: grid;
@@ -1199,7 +1330,14 @@
   min-height: 48px;
   border-bottom: 1px solid var(--color-outline-variant);
 }
-.admin-home-items input {
+.home-item-choice {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+}
+.home-item-choice input {
   accent-color: var(--color-primary);
   flex: 0 0 18px;
   height: 18px;
@@ -1207,6 +1345,7 @@
 }
 .admin-home-items .var-button {
   flex: 0 0 40px;
+  min-height: 44px;
   padding: 0;
 }
 .home-item-label {

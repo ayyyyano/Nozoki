@@ -28,6 +28,7 @@ export async function exerciseDeviceColumns(page, { origin, evidence }) {
   ]) {
     current = await fixture({ devices: count, stale: true })
     const devices = current.modules.find((m) => m.id === 'devices').snapshot.data.devices
+    const visibleCount = Math.min(count, 4)
     devices[0].name = 'Fixture-iPhone-very-long-device-name-for-layout'
     devices[0].stateText = 'Fixture status with a long application name'
     await page.setViewportSize({ width, height: 900 })
@@ -37,7 +38,7 @@ export async function exerciseDeviceColumns(page, { origin, evidence }) {
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
     await refreshed
     await stable(page)
-    await expect(page.locator('.device-row')).toHaveCount(count)
+    await expect(page.locator('.device-row')).toHaveCount(visibleCount)
     const geometry = await page.evaluate(() => {
       const box = (e) => {
         const r = e.getBoundingClientRect()
@@ -64,23 +65,34 @@ export async function exerciseDeviceColumns(page, { origin, evidence }) {
           ...box(e),
         })),
         copy: [...document.querySelectorAll('.device-copy')].map(box),
+        batteryGaps: [...list.querySelectorAll('.battery-value')].map((e) => {
+          const percent = box(e.querySelector('strong'))
+          const dots = box(e.querySelector('.device-battery-dots'))
+          return dots.x - percent.right
+        }),
       }
     })
-    assert.equal(geometry.columns, 2, JSON.stringify(geometry))
+    assert.equal(geometry.columns, visibleCount === 1 ? 1 : 2, JSON.stringify(geometry))
     assert.ok(geometry.pageWidth <= width, JSON.stringify(geometry))
+    assert.ok(geometry.batteryGaps.length > 0)
+    assert.ok(
+      geometry.batteryGaps.every((gap) => gap >= 8),
+      JSON.stringify(geometry),
+    )
     for (const row of [...geometry.rows, ...geometry.copy]) {
       assert.ok(row.scroll <= row.client + 1, JSON.stringify(row))
       assert.ok(row.right <= geometry.list.right + 1, JSON.stringify(row))
     }
     assert.deepEqual(
       geometry.rows.map((r) => r.id),
-      devices.map((d) => d.id),
+      devices.slice(0, visibleCount).map((d) => d.id),
     )
-    for (let i = 0; i + 1 < count; i += 2) {
+    for (let i = 0; i + 1 < visibleCount; i += 2) {
       assert.ok(Math.abs(geometry.rows[i].y - geometry.rows[i + 1].y) < 1)
       assert.ok(geometry.rows[i].right < geometry.rows[i + 1].x)
     }
-    for (let i = 2; i < count; i++) assert.ok(geometry.rows[i].y >= geometry.rows[i - 2].bottom)
+    for (let i = 2; i < visibleCount; i++)
+      assert.ok(geometry.rows[i].y >= geometry.rows[i - 2].bottom)
     measurements.push({ count, ...geometry })
     if ([1440, 768, 320].includes(width) && count === 4)
       await page

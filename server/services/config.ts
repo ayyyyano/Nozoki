@@ -26,6 +26,7 @@ import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import { randomToken } from './auth-crypto.ts'
 import { parseFieldPath } from '../../shared/contracts/field-paths.ts'
 import { TailscaleCredentialsSchema } from '../adapters/tailscale-transport.ts'
+import { sourceVerificationFingerprint } from './source-verification.ts'
 import {
   integrationWriteIssue,
   sourceReferences,
@@ -81,6 +82,7 @@ export async function saveConfig(
     now?: Date
     request?: ConfigRequest
     verifiedIdentityImports?: readonly string[]
+    verifiedSources?: ReadonlyMap<string, string>
   },
 ): Promise<SaveResult> {
   let parsed: ReturnType<typeof SaveConfigSchema.safeParse>
@@ -349,7 +351,15 @@ export async function saveConfig(
           options.keys,
           now,
         )
-      stored.push({ settings, envelope, identityEnvelope })
+      const verifiedAt = options.verifiedSources?.get(i.id)
+      let verification = old?.verification
+      if (verifiedAt || verification) {
+        const fingerprint = await sourceVerificationFingerprint(settings, envelope)
+        if (verifiedAt && fingerprint) verification = { verifiedAt, fingerprint }
+        else if (verification && verification.fingerprint !== fingerprint)
+          verification = { ...verification, fingerprint: null }
+      }
+      stored.push({ settings, envelope, identityEnvelope, verification })
     }
     const credentialChanged = stored.some(
       (i) =>
@@ -376,6 +386,15 @@ export async function saveConfig(
     )
       changedFields.push('integrations')
     if (credentialChanged) changedFields.push('integrations.credentials')
+    const verificationChanged = stored.some(
+      (i) =>
+        canonical(i.verification ?? null) !==
+        canonical(
+          current.integrations.find((old) => old.settings.id === i.settings.id)?.verification ??
+            null,
+        ),
+    )
+    if (verificationChanged) changedFields.push('integrations.verification')
     if (
       stored.some(
         (i) =>
@@ -395,6 +414,7 @@ export async function saveConfig(
     }
     const changed =
       credentialChanged ||
+      verificationChanged ||
       canonical(orderedConfig(comparable)) !==
         canonical(orderedConfig(editableConfig(current.config)))
     // HTTP no-op still takes the database version guard and records its retry result atomically.

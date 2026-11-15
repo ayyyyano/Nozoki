@@ -32,10 +32,10 @@ test('seven local balance dates handle Shanghai, New York DST and midnight witho
     '2026-11-06T10:05:00.000Z',
   )
 })
-test('guest blur is a constant redacted card independent of data, ACL, source state and private changes', async () => {
+test('admin-only DeepSeek always uses a constant redacted card', async () => {
   const config = createDefaultConfig(),
     module = config.modules.find((m) => m.id === 'deepseek')!
-  module.guestBlur = true
+  module.guestBlur = false
   module.visibility = 'admin'
   module.guestBehavior = 'hidden'
   const state = { config, integrations: [], snapshots: [] }
@@ -43,6 +43,11 @@ test('guest blur is a constant redacted card independent of data, ACL, source st
   const card = first.modules.find((m) => m.id === 'deepseek')!
   assert.equal(card.kind, 'data')
   if (card.kind === 'data') assert.deepEqual(card.snapshot.data, { masked: true })
+  module.guestBehavior = 'login_hint'
+  assert.deepEqual(
+    (await projectGuestDashboard(state)).modules.find((m) => m.id === 'deepseek'),
+    card,
+  )
   config.site.configVersion++
   module.fields = { balance: { enabled: false, visibility: 'admin' } }
   const second = await projectGuestDashboard(state)
@@ -52,6 +57,21 @@ test('guest blur is a constant redacted card independent of data, ACL, source st
     (await projectGuestDashboard(state)).modules.some((m) => m.id === 'deepseek'),
     false,
   )
+})
+test('public DeepSeek preserves its configurated visibility and legacy blur choice', async () => {
+  const config = createDefaultConfig()
+  const module = config.modules.find((m) => m.id === 'deepseek')!
+  module.visibility = 'public'
+  const state = { config, integrations: [], snapshots: [] }
+  const card = async () =>
+    (await projectGuestDashboard(state)).modules.find((m) => m.id === 'deepseek')
+  const visible = await card()
+  assert.equal(visible?.kind, 'data')
+  if (visible?.kind === 'data') assert.equal(visible.snapshot.data, null)
+  module.guestBlur = true
+  const masked = await card()
+  assert.equal(masked?.kind, 'data')
+  if (masked?.kind === 'data') assert.deepEqual(masked.snapshot.data, { masked: true })
 })
 test('historical balances cannot reveal a current-balance field hidden by ACL; retired spend is stripped', async () => {
   const config = createDefaultConfig(),

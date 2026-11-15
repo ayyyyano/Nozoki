@@ -38,11 +38,7 @@ const themeControl = inject<{ dark: Ref<boolean>; ready: Ref<boolean>; toggleThe
   'themeControl',
 )!
 const themeLabel = computed(() =>
-  themeControl.ready.value
-    ? themeControl.dark.value
-      ? '切换到亮色模式'
-      : '切换到暗色模式'
-    : '切换明暗模式',
+  themeControl.ready.value ? (themeControl.dark.value ? '浅色模式' : '暗色模式') : '切换明暗模式',
 )
 const baseline = ref<Config | null>(initial.value ? ConfigSchema.parse(initial.value) : null)
 const draft = ref<ConfigWrite | null>(baseline.value ? editableConfig(baseline.value) : null)
@@ -113,21 +109,34 @@ const activeModuleIndex = computed(() =>
 )
 const activeModule = computed(() => draft.value?.modules[activeModuleIndex.value])
 const selectedModule = computed(() => activeModule.value?.id)
+const selectedSource = computed(() =>
+  section.value === 'integrations'
+    ? draft.value?.integrations.find((source) => source.id === route.query.source)?.id
+    : undefined,
+)
 const sectionHeading = useTemplateRef<HTMLElement>('sectionHeading')
-function openSection(id: string, module?: ModuleId) {
-  if (section.value === id && selectedModule.value === module) return Promise.resolve()
+function openSection(id: string, module?: ModuleId, source?: string) {
+  if (section.value === id && route.query.module === module && route.query.source === source)
+    return Promise.resolve()
   return router.push({
-    query: { ...route.query, section: id === 'site' ? undefined : id, module },
+    query: { ...route.query, section: id === 'site' ? undefined : id, module, source },
   })
 }
-watch([section, selectedModule], async ([next, id], [previous, previousId]) => {
+function closeEditor() {
+  const query = { ...route.query, module: undefined, source: undefined }
+  if (router.options.history.state.back === router.resolve({ query }).fullPath) router.back()
+  else void router.replace({ query })
+}
+const moduleDialog = computed({
+  get: () => !!activeModule.value,
+  set: (show) => {
+    if (!show) closeEditor()
+  },
+})
+watch(section, async () => {
   await nextTick()
   window.scrollTo(0, 0)
-  const trigger =
-    next === 'modules' && previous === 'modules' && !id && previousId
-      ? document.querySelector<HTMLButtonElement>(`[data-edit-module="${previousId}"] button`)
-      : null
-  ;(trigger ?? sectionHeading.value)?.focus()
+  if (!selectedModule.value && !selectedSource.value) sectionHeading.value?.focus()
 })
 const moduleResets: Partial<Record<ModuleId, { id: AdminSection; label: string }>> = {
   activity: { id: 'schedule', label: '日程安排' },
@@ -135,7 +144,6 @@ const moduleResets: Partial<Record<ModuleId, { id: AdminSection; label: string }
   links: { id: 'links', label: '常用链接' },
 }
 const currentReset = computed(() => {
-  if (activeModule.value) return moduleResets[activeModule.value.id]
   const { id, label } = currentSection.value
   if (id !== 'data') return { id, label }
 })
@@ -146,16 +154,17 @@ const resetIssue = computed(() =>
 )
 const resetDescriptions: Record<AdminSection, string> = {
   site: '恢复默认站点名称、主题色和背景。日程与浏览器个人偏好保持当前值。',
-  modules: '恢复各模块的启停、标题、权限和来源引用。模块按默认顺序排列，Tailscale 默认关闭。',
+  modules: '恢复各模块的启停、标题、权限和来源匹配，清除自定义旧版高级限制。Tailscale 默认关闭。',
   integrations:
     '恢复腾讯默认来源，移除其他来源及其凭据配置。已有历史记录的来源可能受删除保护限制。',
   schedule: '恢复默认时区、工作时间和休息日规则，移除自定义周计划、模板及日期例外。',
   quotes: '恢复 QQQM、VOO 默认标的，移除其他标的。',
   links: '恢复默认的博客、项目、主页和关于链接。',
 }
-function requestReset() {
+function requestReset(
+  target: { id: AdminSection; label: string } | undefined = currentReset.value,
+) {
   if (busy.value || !draft.value) return
-  const target = currentReset.value
   if (!target) return
   resetTarget.value = target
   showReset.value = true
@@ -169,6 +178,7 @@ function resetCurrentSection() {
   if (target === 'site') {
     preview.value = false
     backgroundUpload.value = null
+    editorResetToken.value++
   }
   if (target === 'schedule' || target === 'links' || target === 'quotes') editorResetToken.value++
   pending = null
@@ -179,6 +189,7 @@ function resetCurrentSection() {
 const navigation = useTemplateRef('navigation')
 const editorResetToken = ref(0)
 const editorLocateToken = ref(0)
+const editorLocateIndex = ref<number>()
 const showActions = ref(false)
 const actionsPanel = useTemplateRef<HTMLElement>('actionsPanel')
 const showFeedback = ref(false)
@@ -239,7 +250,6 @@ function themeFromMenu() {
   themeControl.toggleTheme()
   showActions.value = false
 }
-const sourceManager = useTemplateRef('sourceManager')
 const dirty = computed(
   () =>
     !!draft.value &&
@@ -317,19 +327,28 @@ async function locate(error: string) {
               (module, index) => module.id === item || String(index) === item,
             )?.id
           : undefined
+  const sourceId =
+    field === 'integrations'
+      ? draft.value?.integrations.find(
+          (source, index) => source.id === item || String(index) === item,
+        )?.id
+      : undefined
   await openSection(
     module || field === 'modules' ? 'modules' : field === 'integrations' ? field : 'site',
     module,
+    sourceId,
   )
-  if (field === 'integrations') sourceManager.value?.expandAll()
-  if (field === 'modules' && path.includes('.fields')) {
-    const acl = document.querySelector<HTMLDetailsElement>('.admin-module-editor .admin-details')
-    if (acl) acl.open = true
-  }
-  editorLocateToken.value++
   await nextTick()
+  editorLocateIndex.value =
+    (field === 'quotes' || field === 'links') && item && /^\d+$/.test(item)
+      ? Number(item)
+      : undefined
+  editorLocateToken.value++
+  if (editorLocateIndex.value !== undefined) return
   const group = document.querySelector<HTMLElement>(
-    '.admin-form > fieldset:not([style*="display: none"])',
+    module || sourceId
+      ? '.admin-edit-dialog-body'
+      : '.admin-form > fieldset:not([style*="display: none"])',
   )
   const input = [...(group?.querySelectorAll<HTMLElement>('input:not(:disabled)') ?? [])].find(
     (el) => el.getClientRects().length,
@@ -369,7 +388,13 @@ async function save() {
     errors.value = parsed.error.issues.map((i) => i.path.join('.') + '：' + i.message)
     message.value = '未保存，请检查以下字段'
     await nextTick()
-    document.querySelector<HTMLElement>('.admin-feedback')?.focus()
+    document
+      .querySelector<HTMLElement>(
+        selectedModule.value || selectedSource.value
+          ? '.admin-edit-dialog .admin-editor-save-state'
+          : '.admin-feedback',
+      )
+      ?.focus()
     return
   }
   const signature = canonical(parsed.data)
@@ -598,6 +623,7 @@ onBeforeRouteLeave((to, from) => {
         </div>
       </header>
       <VarPopup
+        v-if="!selectedModule && !selectedSource"
         v-model:show="showFeedback"
         position="bottom"
         class="admin-feedback-popup"
@@ -640,25 +666,9 @@ onBeforeRouteLeave((to, from) => {
           </p>
           <div class="admin-section-heading">
             <div class="admin-section-title">
-              <VarButton
-                v-if="activeModule"
-                text
-                round
-                class="admin-icon-button"
-                aria-label="返回模块列表"
-                @click="openSection('modules')"
-                ><CommonAppIcon name="ArrowBackRound"
-              /></VarButton>
-              <CommonAppIcon v-if="activeModule" :name="MODULE_ICONS[activeModule.id]" :size="24" />
               <h2 ref="sectionHeading" tabindex="-1">
-                {{ activeModule?.title || currentSection.label }}
+                {{ currentSection.label }}
               </h2>
-              <VarSwitch
-                v-if="activeModule"
-                v-model="activeModule.enabled"
-                :disabled="readOnly"
-                :aria-label="`启用 ${activeModule.id}`"
-              />
             </div>
             <VarButton
               text
@@ -668,7 +678,7 @@ onBeforeRouteLeave((to, from) => {
               :disabled="busy || readOnly"
               :aria-label="`重置${currentReset.label}为默认设置`"
               title="重置为默认设置"
-              @click="requestReset"
+              @click="requestReset()"
             >
               <CommonAppIcon name="restore" />
             </VarButton>
@@ -682,61 +692,115 @@ onBeforeRouteLeave((to, from) => {
           />
           <fieldset v-show="section === 'site'" :disabled="readOnly">
             <legend class="sr-only">站点外观</legend>
-            <AdminText v-model="draft.site.siteName" label="站点名称" :max="100" />
-            <div class="palette-presets">
-              <VarButton
-                v-for="preset in COLOR_PRESETS"
-                :key="preset.color"
-                text
-                round
-                :aria-label="`共享配色 ${preset.name}`"
-                :aria-pressed="draft.site.appearance.sourceColor === preset.color"
-                :style="{ '--swatch': preset.color }"
-                @click="draft.site.appearance.sourceColor = preset.color"
-                ><span class="palette-swatch"
-                  ><CommonAppIcon
-                    v-if="draft.site.appearance.sourceColor === preset.color"
-                    name="check"
-                    :size="20" /></span
-              ></VarButton>
-            </div>
-            <AdminText
-              v-model="draft.site.appearance.sourceColor"
-              label="共享主题源色 HEX / RGB"
-              :max="40"
-            /><label
-              ><VarSwitch
-                v-model="preview"
-                aria-label="预览共享外观"
-              />预览共享外观（不保存个人偏好）</label
-            ><AdminBackgroundEditor
+            <section class="admin-appearance-group">
+              <h3>站点信息</h3>
+              <AdminText v-model="draft.site.siteName" label="站点名称" :max="100" />
+            </section>
+            <section class="admin-appearance-group">
+              <h3>主题配色</h3>
+              <div class="palette-presets">
+                <VarButton
+                  v-for="preset in COLOR_PRESETS"
+                  :key="preset.color"
+                  text
+                  round
+                  :aria-label="`共享配色 ${preset.name}`"
+                  :aria-pressed="draft.site.appearance.sourceColor === preset.color"
+                  :style="{ '--swatch': preset.color }"
+                  @click="draft.site.appearance.sourceColor = preset.color"
+                  ><span class="palette-swatch"
+                    ><CommonAppIcon
+                      v-if="draft.site.appearance.sourceColor === preset.color"
+                      name="check"
+                      :size="20" /></span
+                ></VarButton>
+              </div>
+              <AdminText
+                v-model="draft.site.appearance.sourceColor"
+                label="共享主题源色 HEX / RGB"
+                :max="40"
+              />
+              <AdminSettingSwitch v-model="preview" label="预览当前修改" />
+            </section>
+            <AdminBackgroundEditor
+              :key="editorResetToken"
               v-model="draft.site.background"
               v-model:upload="backgroundUpload"
               :disabled="busy"
+              :preview="preview"
               @processing="backgroundProcessing = $event"
             />
           </fieldset>
-          <fieldset v-if="section === 'modules'" :disabled="!!activeModule && readOnly">
+          <fieldset v-if="section === 'modules'">
             <legend class="sr-only">主页模块</legend>
-            <AdminModuleEditor
-              v-if="activeModule"
-              :key="activeModule.id"
-              v-model="draft.modules[activeModuleIndex]!"
-              :draft="draft"
-              :reset-token="editorResetToken"
-              :locate-token="editorLocateToken"
-            />
             <AdminModuleList
-              v-else
               :modules="draft.modules"
               :read-only="readOnly"
               @edit="openSection('modules', $event)"
             />
+            <AdminSourceDialog
+              v-model:show="moduleDialog"
+              :title="activeModule?.title || '主页模块'"
+              editor
+            >
+              <template #icon>
+                <CommonAppIcon
+                  v-if="activeModule"
+                  :name="MODULE_ICONS[activeModule.id]"
+                  :size="24"
+                />
+              </template>
+              <template #headerActions>
+                <VarButton
+                  v-if="activeModule && moduleResets[activeModule.id]"
+                  text
+                  round
+                  :disabled="busy || readOnly"
+                  :aria-label="`重置${moduleResets[activeModule.id]?.label}为默认设置`"
+                  @click="requestReset(moduleResets[activeModule.id])"
+                  ><CommonAppIcon name="restore"
+                /></VarButton>
+                <VarSwitch
+                  v-if="activeModule"
+                  v-model="activeModule.enabled"
+                  :disabled="readOnly || busy"
+                  :aria-label="`启用 ${activeModule.id}`"
+                />
+              </template>
+              <fieldset
+                v-if="activeModule"
+                class="admin-dialog-fields"
+                :disabled="readOnly || busy"
+              >
+                <AdminModuleEditor
+                  :key="activeModule.id"
+                  v-model="draft.modules[activeModuleIndex]!"
+                  :draft="draft"
+                  :reset-token="editorResetToken"
+                  :locate-token="editorLocateToken"
+                  :locate-index="editorLocateIndex"
+                />
+              </fieldset>
+              <template v-if="activeModule" #footer>
+                <AdminEditorSave
+                  :message="message"
+                  :errors="errors.map(errorLabel)"
+                  :busy="busy"
+                  :blocked="readOnly || savedNeedsReload || backgroundProcessing"
+                  :reload="conflict || savedNeedsReload"
+                  :dirty="dirty"
+                  @save="save"
+                  @reload="loadLatest"
+                  @locate="
+                    (label) => locate(errors.find((error) => errorLabel(error) === label) ?? label)
+                  "
+                />
+              </template>
+            </AdminSourceDialog>
           </fieldset>
           <fieldset v-show="section === 'integrations'" :disabled="readOnly">
             <legend class="sr-only">来源接入</legend>
             <AdminSourceManager
-              ref="sourceManager"
               v-model="draft.integrations"
               :saved="baseline?.integrations ?? []"
               :expected-version="baseline!.site.configVersion"
@@ -744,7 +808,28 @@ onBeforeRouteLeave((to, from) => {
               :quotes="draft.quotes"
               :timezone="draft.site.timezone"
               :read-only="readOnly"
-            />
+              :busy="busy"
+              :editor-id="selectedSource"
+              :reset-token="editorResetToken"
+              @edit="openSection('integrations', undefined, $event)"
+              @close-editor="closeEditor"
+            >
+              <template #footer>
+                <AdminEditorSave
+                  :message="message"
+                  :errors="errors.map(errorLabel)"
+                  :busy="busy"
+                  :blocked="readOnly || savedNeedsReload || backgroundProcessing"
+                  :reload="conflict || savedNeedsReload"
+                  :dirty="dirty"
+                  @save="save"
+                  @reload="loadLatest"
+                  @locate="
+                    (label) => locate(errors.find((error) => errorLabel(error) === label) ?? label)
+                  "
+                />
+              </template>
+            </AdminSourceManager>
           </fieldset>
         </form>
       </div>

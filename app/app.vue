@@ -28,6 +28,13 @@ useHead(() => ({
   title: shared.value?.site.siteName ?? 'Nozoki',
 }))
 const displayMode = useState<'dashboard' | 'wallpaper'>('nozoki-display-mode', () => 'dashboard')
+const route = useRoute()
+const sceneBackground = computed(() => {
+  const background = effective.value.background
+  const fullPage =
+    route.name === 'login' || (route.name === 'index' && displayMode.value === 'wallpaper')
+  return fullPage ? { ...background, layout: 'page' as const } : background
+})
 provide('resetPersonalAppearance', resetPersonal)
 let refreshing: Promise<void> | undefined
 let refreshAgain = false
@@ -73,9 +80,7 @@ if (import.meta.dev) provide('dxDevelopment', { dx, dxMounted })
     class="nozoki-app"
     :data-color-mode="dark ? 'dark' : 'light'"
     data-preset="m3"
-    :data-background-layout="
-      effective.background.source === 'off' ? 'off' : effective.background.layout
-    "
+    :data-background-layout="sceneBackground.source === 'off' ? 'off' : sceneBackground.layout"
     :style="{
       '--card-alpha': `${effective.background.cardOpacity}%`,
       '--card-blur': effective.background.cardBlur
@@ -87,7 +92,7 @@ if (import.meta.dev) provide('dxDevelopment', { dx, dxMounted })
     :data-display-mode="displayMode"
   >
     <a v-show="displayMode === 'dashboard'" class="skip-link" href="#main-content">跳到看板内容</a>
-    <LayoutBackgroundScene :config="effective.background" />
+    <LayoutBackgroundScene :config="sceneBackground" />
     <div class="dashboard-stage"><NuxtPage /></div>
     <LayoutAppearanceDialog
       ref="settings"

@@ -284,7 +284,7 @@ export async function exerciseHomeSummary(
   tooMany.config.links.push({ ...tooMany.config.links[0], id: 'link-fifth', sortOrder: 4 })
   assert.equal((await save(tooMany)).status, 400)
   assert.equal((await input()).expectedVersion, actual.expectedVersion)
-  await page.getByRole('button', { name: '返回模块列表', exact: true }).click()
+  await page.getByRole('button', { name: '关闭对话框', exact: true }).click()
   await page.locator('[data-edit-module="links"] .admin-item-toggle').click()
   await expect(page.getByRole('button', { name: '添加链接', exact: true })).toBeDisabled()
   // Deselect every service: an explicit empty list persists; new monitors do not fill it.

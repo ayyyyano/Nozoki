@@ -354,10 +354,18 @@ test(
         await exerciseSectionResets(page, context, origin)
         await page.getByRole('button', { name: '来源接入', exact: true }).click()
         const item = (id) => page.locator('[data-source-id="' + id + '"]')
+        const sourceEditor = page.locator('.admin-edit-dialog:visible')
+        const closeEditor = async () => {
+          await sourceEditor.getByRole('button', { name: '关闭对话框', exact: true }).click()
+          await expect(sourceEditor).toBeHidden()
+        }
         await item('saved-accounts').locator('.admin-item-toggle').click()
-        await expect(page.getByLabel('协议版本', { exact: true })).toHaveCount(0)
+        await expect(sourceEditor).toBeVisible()
+        await expect(sourceEditor.getByLabel('协议版本', { exact: true })).toHaveCount(0)
+        await closeEditor()
         await item('saved-legacy').locator('.admin-item-toggle').click()
-        await expect(item('saved-legacy').getByText(/旧协议暂不支持编辑/)).toBeVisible()
+        await expect(sourceEditor.getByText(/旧协议暂不支持编辑/)).toBeVisible()
+        await closeEditor()
         await page.getByRole('button', { name: '添加来源', exact: true }).click()
         await page
           .getByRole('dialog', { name: '选择数据源类型', exact: true })
@@ -416,22 +424,24 @@ test(
         )
         await page.reload()
         const verifyProbeTime = async (expected, timezone) => {
-          await page.getByRole('button', { name: '来源接入', exact: true }).click()
-          const source = item('saved-accounts')
-          if ((await source.locator('.admin-item-toggle').getAttribute('aria-expanded')) !== 'true')
-            await source.locator('.admin-item-toggle').click()
-          await source
+          if (!(await sourceEditor.isVisible())) {
+            await page.getByRole('button', { name: '来源接入', exact: true }).click()
+            await item('saved-accounts').locator('.admin-item-toggle').click()
+          }
+          await sourceEditor
             .getByRole('textbox', { name: '实例 HTTPS 地址' })
             .fill('https://codex.example.com/')
-          await source.locator('input[aria-label="Management Key"]').fill('fixture-management-key')
-          await source.getByRole('button', { name: '测试并确认访问', exact: true }).click()
-          await expect(source.locator('time')).toHaveText(expected)
-          await expect(source.locator('time')).toHaveAttribute('datetime', collectedAt)
-          await expect(source.getByRole('status').filter({ hasText: '测试时间' })).toContainText(
-            '（' + timezone + '）',
-          )
+          await sourceEditor
+            .locator('input[aria-label="Management Key"]')
+            .fill('fixture-management-key')
+          await sourceEditor.getByRole('button', { name: '测试并批准', exact: true }).click()
+          const result = sourceEditor.getByRole('status').filter({ hasText: '测试时间' })
+          await expect(result.locator('time')).toHaveText(expected)
+          await expect(result.locator('time')).toHaveAttribute('datetime', collectedAt)
+          await expect(result).toContainText('（' + timezone + '）')
         }
         await verifyProbeTime('2026-11-02 13:02', 'Asia/Shanghai')
+        await closeEditor()
         const timezoneDraft = editableConfig(await read())
         timezoneDraft.site.timezone = 'America/New_York'
         timezoneDraft.site.schedule.timezone = 'America/New_York'
@@ -440,8 +450,10 @@ test(
         await verifyProbeTime('2026-11-02 00:02', 'America/New_York')
         collectedAt = '2026-07-02T05:02:48.141Z'
         await verifyProbeTime('2026-07-02 01:02', 'America/New_York')
+        await closeEditor()
         await page.reload()
         await verifyResetSave(page, context, origin)
+        await closeEditor()
         await page.getByRole('button', { name: '更多管理操作', exact: true }).click()
         await page.getByRole('menuitem', { name: '注销', exact: true }).click()
         await page.waitForURL(origin + '/login')

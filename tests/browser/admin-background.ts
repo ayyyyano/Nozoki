@@ -4,7 +4,7 @@ import { expect } from 'playwright/test'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { backgroundFixture } from '../fixtures/background.ts'
-import { select, settings } from './support.ts'
+import { select, settings, settle } from './support.ts'
 import {
   backgroundImageHash,
   decodeBackgroundImage,
@@ -74,6 +74,20 @@ export async function exerciseSharedBackground(
   assert.equal(dto.site.background.url, path)
   assert.ok(!JSON.stringify(dto).includes(backgroundFixture))
   await page.reload()
+  const appearance = page.locator('.admin-form')
+  for (const name of ['站点信息', '主题配色', '背景图片', '卡片效果']) {
+    await expect(appearance.getByRole('heading', { name, exact: true })).toBeVisible()
+  }
+  const preferencesBefore = await page.evaluate(() => localStorage.getItem('nozoki-appearance-v2'))
+  const preview = appearance.getByRole('switch', { name: '预览当前修改' })
+  await preview.click()
+  await expect(appearance.getByRole('img', { name: '看板背景与卡片效果预览' })).toBeVisible()
+  await preview.click()
+  await expect(appearance.getByRole('img', { name: '看板背景与卡片效果预览' })).toHaveCount(0)
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem('nozoki-appearance-v2')),
+    preferencesBefore,
+  )
   const png = await page.evaluate(() => {
     const canvas = document.createElement('canvas')
     canvas.width = 128
@@ -168,5 +182,43 @@ export async function exerciseSharedBackground(
   await expect(action).toHaveCSS('backdrop-filter', 'none')
   await expectMatchingColor()
   await guest.close()
+
+  const fresh = await browser.newContext()
+  const home = await fresh.newPage()
+  const login = await fresh.newPage()
+  for (const [fit, viewport] of [
+    ['cover', { width: 1440, height: 900 }],
+    ['contain', { width: 390, height: 844 }],
+  ] as const) {
+    const banner = await input()
+    Object.assign(banner.config.site.background, { layout: 'banner', fit, x: 30, y: 65 })
+    assert.equal((await save(banner)).status, 200)
+    await home.setViewportSize(viewport)
+    await login.setViewportSize(viewport)
+    await home.goto(origin)
+    await settle(home)
+    await expect(home.locator('.banner-wave')).toBeVisible()
+    await home.getByRole('button', { name: '显示纯壁纸', exact: true }).click()
+    await expect(home.locator('.dashboard-container')).toBeHidden()
+    await login.goto(`${origin}/login`)
+    await expect(login.getByRole('heading', { name: '管理员登录' })).toBeVisible()
+    for (const view of [home, login]) {
+      await expect(view.locator('.nozoki-app')).toHaveAttribute('data-background-layout', 'page')
+      await expect(view.locator('.banner-wave')).toHaveCount(0)
+      const scene = view.locator('.background-scene')
+      await expect(scene).toHaveAttribute('data-background', 'loaded')
+      await expect(scene.locator('img')).toHaveCSS('object-fit', fit)
+      await expect(scene.locator('img')).toHaveCSS('object-position', '30% 65%')
+      const width = await view
+        .locator('body')
+        .evaluate((body) => body.getBoundingClientRect().width)
+      for (const layer of [scene, scene.locator('img')]) {
+        assert.deepEqual(await layer.boundingBox(), { x: 0, y: 0, width, height: viewport.height })
+      }
+    }
+    await home.getByRole('button', { name: '恢复看板', exact: true }).click()
+    await expect(home.locator('.banner-wave')).toBeVisible()
+  }
+  await fresh.close()
   assert.deepEqual(errors, [])
 }

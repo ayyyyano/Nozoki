@@ -9,7 +9,7 @@ export async function exerciseItemDisplay(
   { browser, db, snapshots, origin, request, input, save, evidence },
 ) {
   await mkdir(evidence, { recursive: true })
-  page.setDefaultTimeout(8000)
+  page.setDefaultTimeout(15000)
   const errors = []
   page.on('pageerror', (error) => errors.push(error.message))
   page.on('console', (message) => {
@@ -23,8 +23,13 @@ export async function exerciseItemDisplay(
     await page.goto(origin + '/admin?section=modules&module=' + id)
     await expect(editor(id).getByRole('heading', { name: '首页展示' })).toBeVisible()
   }
+  const modal = page.locator('.admin-edit-dialog:visible')
+  const closeEditor = async () => {
+    await modal.getByRole('button', { name: '关闭对话框' }).click()
+    await expect(modal).toHaveCount(0)
+  }
   const go = async (id) => {
-    await page.getByRole('button', { name: '返回模块列表' }).click()
+    await closeEditor()
     await page.locator(`[data-edit-module="${id}"] button`).first().click()
     await expect(editor(id)).toBeVisible()
   }
@@ -32,7 +37,7 @@ export async function exerciseItemDisplay(
   const aliasInput = () =>
     page.getByRole('textbox', { name: '显示别名（留空使用来源名称）', exact: true })
   const dialog = page.getByRole('dialog', { name: '编辑展示', exact: true })
-  const saveButton = page.getByRole('button', { name: '保存配置', exact: true })
+  const saveButton = modal.getByRole('button', { name: '保存配置', exact: true })
   const editRow = (id) => idRow(id).getByRole('button', { name: /^编辑 / })
   const changeAlias = async (id, name, icon?) => {
     await editRow(id).click()
@@ -123,7 +128,7 @@ export async function exerciseItemDisplay(
     return route.continue()
   })
   await saveButton.click()
-  await expect(page.getByText(/未能确认保存结果/)).toBeVisible()
+  await expect(modal.getByText(/未能确认保存结果/)).toBeVisible()
   await expect(idRow('device-0')).toContainText('零电量手机')
   const put = () =>
     page.waitForResponse(
@@ -134,7 +139,7 @@ export async function exerciseItemDisplay(
   const savedResponse = await firstSave
   assert.equal(savedResponse.status(), 200)
   assert.equal((await savedResponse.json()).collection, 'not_needed')
-  await expect(page.getByText(/已保存并确认持久化|配置已保存/)).toBeVisible()
+  await expect(modal.getByText(/已保存并确认持久化|配置已保存/)).toBeVisible()
   assert.ok(keys[0])
   assert.equal(keys[0], keys[1])
   const saved = await input()
@@ -185,9 +190,11 @@ export async function exerciseItemDisplay(
   await saveButton.click()
   assert.equal((await conflict).status(), 409)
   await expect(idRow('flare-fixture/service-0')).not.toContainText('<b>个人主页</b>')
+  await closeEditor()
   await page.getByRole('button', { name: '更多管理操作' }).click()
   await page.getByRole('menuitem', { name: '放弃修改' }).click()
   await page.getByRole('button', { name: '确认放弃' }).click()
+  await page.locator('[data-edit-module="services"] button').first().click()
   await expect(idRow('flare-fixture/service-0')).toContainText('<b>个人主页</b>')
 
   const policy = await input()

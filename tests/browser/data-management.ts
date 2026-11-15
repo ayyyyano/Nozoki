@@ -66,7 +66,7 @@ export async function exerciseDataManagement(page, { request, input, save, evide
   })
   await choose(backup)
   await expect(preview.getByRole('button', { name: '导入到草稿', exact: true })).toBeDisabled()
-  await preview.getByRole('button', { name: '测试并确认访问', exact: true }).click()
+  await preview.getByRole('button', { name: '测试并批准', exact: true }).click()
   await expect(preview.locator('[data-test-status="ok"]')).toBeVisible()
   await expect(preview.getByRole('button', { name: '导入到草稿', exact: true })).toBeEnabled()
   await preview.getByRole('button', { name: '导入到草稿', exact: true }).click()

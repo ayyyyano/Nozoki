@@ -84,7 +84,7 @@ const series = computed(() => {
         <div class="section-heading"><h3>近 7 日剩余余额</h3></div>
         <div class="balance-bars"><i v-for="n in 7" :key="n" /></div>
       </div>
-      <span class="balance-private-label">登录后查看余额</span>
+      <span class="balance-private-label">登录后查看</span>
     </div>
     <template v-else>
       <DashboardDataState

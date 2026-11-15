@@ -11,6 +11,8 @@ import {
   type IntegrationPreset,
 } from '../../../shared/integration-presets'
 import { sourceGuides, type SourceGuide } from './source-guides'
+import { sourceConnection } from '../../../shared/integration-presets/connection'
+import { formatTimestamp } from '../../../shared/domain/format'
 const model = defineModel<IntegrationDraft[]>({ required: true })
 const props = defineProps<{
   saved: IntegrationSettings[]
@@ -19,14 +21,29 @@ const props = defineProps<{
   quotes: ConfigWrite['quotes']
   timezone: string
   readOnly: boolean
+  busy: boolean
+  editorId?: string
+  resetToken: number
 }>()
+const emit = defineEmits<{ edit: [id: string]; closeEditor: [] }>()
 const root = useTemplateRef<HTMLElement>('root')
-const open = ref<Record<string, boolean>>({}),
-  probes = ref<Record<string, ProbeResult | null>>({})
-const draftProbes = ref<Record<string, boolean>>({})
-function tested(id: string, result: ProbeResult | null, draft = false) {
-  probes.value[id] = result
-  draftProbes.value[id] = draft
+const sourceIndex = computed(() => model.value.findIndex((source) => source.id === props.editorId))
+const activeSource = computed(() => model.value[sourceIndex.value])
+const editorOpen = computed({
+  get: () => !!activeSource.value,
+  set: (show) => {
+    if (!show) emit('closeEditor')
+  },
+})
+const failedProbes = reactive<Record<string, boolean>>({})
+watch(
+  () => props.resetToken,
+  () => {
+    for (const id of Object.keys(failedProbes)) delete failedProbes[id]
+  },
+)
+function tested(id: string, result: ProbeResult | null) {
+  failedProbes[id] = !!result?.code
 }
 const candidate = ref<IntegrationDraft | null>(null)
 const adding = ref(false)
@@ -67,7 +84,6 @@ function addCandidate() {
   const source = candidate.value
   source.enabled = true
   model.value.push(source)
-  open.value[source.id] = true
   createdId = source.id
   adding.value = false
   candidate.value = null
@@ -112,7 +128,7 @@ function afterPicker() {
   const card = [...(root.value?.querySelectorAll<HTMLElement>('[data-source-id]') ?? [])].find(
     (e) => e.dataset.sourceId === createdId,
   )
-  card?.querySelector<HTMLElement>('input,.admin-item-toggle')?.focus()
+  card?.querySelector<HTMLElement>('.admin-item-toggle')?.focus()
   createdId = ''
 }
 function saved(source: IntegrationDraft) {
@@ -131,26 +147,39 @@ function title(source: IntegrationDraft) {
   return integrationPreset(source)?.name ?? '旧数据源'
 }
 function hint(source: IntegrationDraft) {
-  const p = integrationPreset(source),
-    probe = probes.value[source.id]
-  if (probe && draftProbes.value[source.id])
-    return probe.code
-      ? '草稿测试未通过'
-      : probe.protocolMatched
-        ? '草稿测试通过 · 未保存'
-        : '草稿连接尚未确认'
-  if (probe)
-    return probe.code ? '测试未通过' : probe.protocolMatched ? '连接协议已确认' : '连接尚未确认'
+  const p = integrationPreset(source)
+  const previous = saved(source)
+  if (failedProbes[source.id]) return '最近验证失败'
+  if (source.connectionProof)
+    return Number(source.connectionProof.split('.')[0]) > clock.value
+      ? '验证成功 · 待保存'
+      : '需重新验证'
   if (!p) return '旧配置 · 只读'
-  if (p.builtin) return '内置 · 无需凭据'
+  if (previous) {
+    try {
+      if (sourceConnection(previous) !== sourceConnection(source)) return '目标已修改，需重新验证'
+    } catch {
+      return '目标已修改，需重新验证'
+    }
+  }
   if (!source.baseUrl) return '待填写实例地址'
-  if (source.credential.operation === 'clear') return '凭据待清除 · 未保存'
-  if (source.credential.operation === 'replace') return '凭据待更新 · 未保存'
+  if (source.credential.operation !== 'keep') return '凭据已修改，需重新验证'
   const needsSecret =
     p.authentication !== 'none' ||
     (source.access?.mode !== 'legacy' && source.access?.authentication === 'bearer')
-  if (needsSecret && !saved(source)?.credentialState.configured) return '待配置凭据'
-  return p.authentication === 'none' ? '无需凭据 · 未验证' : '已配置 · 未验证'
+  if (needsSecret && !previous?.credentialState.configured) return '待配置凭据'
+  if (previous?.verification) {
+    if (
+      !previous.verification.current ||
+      source.access?.mode !== 'public' ||
+      !source.access.approved
+    )
+      return '需重新验证'
+    return (
+      '上次验证成功 · ' + formatTimestamp(previous.verification.verifiedAt, props.timezone).slice(5)
+    )
+  }
+  return p.builtin ? '内置 · 尚未验证' : '尚未验证'
 }
 const removing = ref(false),
   removingId = ref(''),
@@ -186,6 +215,7 @@ function confirmRemoval() {
   if (props.readOnly || removalBlocked.value) return
   const index = model.value.findIndex((s) => s.id === removingId.value)
   if (index >= 0) {
+    if (props.editorId === removingId.value) emit('closeEditor')
     model.value[index]!.credential = { operation: 'keep' }
     delete model.value[index]!.identityCredential
     model.value.splice(index, 1)
@@ -195,60 +225,80 @@ function confirmRemoval() {
 function afterRemoval() {
   if (!target.value) root.value?.querySelector<HTMLButtonElement>('.admin-add-button')?.focus()
 }
-defineExpose({
-  expandAll: () => {
-    model.value.forEach((s) => {
-      open.value[s.id] = true
-    })
-  },
-})
 </script>
 <template>
-  <div ref="root" class="source-manager">
-    <AdminEditorItem
-      v-for="(source, index) in model"
+  <div ref="root" class="admin-record-list">
+    <AdminListItem
+      v-for="source in model"
       :key="source.id"
-      v-model:open="open[source.id]"
       class="source-card"
       :data-source-id="source.id"
       :title="title(source)"
       :description="hint(source)"
       :icon="integrationPreset(source)?.icon ?? 'server'"
+      :edit-label="`编辑 ${title(source)}`"
+      @edit="$emit('edit', source.id)"
     >
-      <template v-if="guideFor(source)" #beforeToggle>
+      <VarSwitch
+        v-model="source.enabled"
+        :disabled="readOnly || busy"
+        :aria-label="`启用 ${title(source)}`"
+      />
+    </AdminListItem>
+    <AdminSourceDialog
+      v-model:show="editorOpen"
+      :title="activeSource ? title(activeSource) : '来源接入'"
+      editor
+      compact
+    >
+      <template #icon>
+        <CommonAppIcon
+          v-if="activeSource"
+          :name="integrationPreset(activeSource)?.icon ?? 'server'"
+          :size="24"
+        />
+      </template>
+      <template #headerActions>
         <VarButton
+          v-if="activeSource && guideFor(activeSource)"
           text
           round
           class="source-guide-button"
           aria-haspopup="dialog"
-          :aria-label="`查看 ${title(source)} 配置说明`"
+          :aria-label="`查看 ${title(activeSource)} 配置说明`"
           title="配置说明"
-          @click="openSavedGuide(source)"
+          @click="openSavedGuide(activeSource)"
           ><CommonAppIcon name="HelpOutlineRound" :size="20"
         /></VarButton>
       </template>
-      <template #actions
-        ><div class="source-enable">
-          <VarSwitch
-            v-model="source.enabled"
-            :aria-label="`启用 ${title(source)}`"
-            :title="`启用或停用 ${title(source)}`"
-          /></div
-      ></template>
-      <AdminIntegrationEditor
-        v-model="model[index]!"
-        :timezone="timezone"
-        :saved="saved(source)"
-        :expected-version="expectedVersion"
-        :quote-symbols="testSymbols(source)"
-        @tested="(result, draft) => tested(source.id, result, draft)"
-      />
-      <div class="source-danger-zone">
-        <VarButton type="danger" tonal @click="requestRemoval(source)"
+      <fieldset
+        v-if="activeSource"
+        class="admin-dialog-fields source-candidate-fields"
+        :disabled="readOnly || busy"
+      >
+        <AdminIntegrationEditor
+          :key="activeSource.id"
+          v-model="model[sourceIndex]!"
+          :timezone="timezone"
+          :saved="saved(activeSource)"
+          :expected-version="expectedVersion"
+          :quote-symbols="testSymbols(activeSource)"
+          :recent-failure="failedProbes[activeSource.id]"
+          @tested="(result) => tested(activeSource!.id, result)"
+        />
+      </fieldset>
+      <template v-if="activeSource" #footer>
+        <VarButton
+          class="source-remove-action"
+          type="danger"
+          tonal
+          :disabled="readOnly || busy"
+          @click="requestRemoval(activeSource)"
           ><CommonAppIcon name="DeleteRound" :size="18" />删除来源</VarButton
         >
-      </div>
-    </AdminEditorItem>
+        <slot name="footer" />
+      </template>
+    </AdminSourceDialog>
     <p v-if="!model.length" class="admin-note">尚未添加数据源。选择一种类型开始配置。</p>
     <VarButton
       class="admin-add-button"

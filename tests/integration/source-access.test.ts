@@ -66,7 +66,8 @@ test(
     const folder = await mkdtemp(resolve('.wrangler/source-access-test-')),
       evidence = process.env.NOZOKI_SOURCE_UI_EVIDENCE ?? resolve(folder, 'evidence')
     if (process.env.NOZOKI_TEST_BROWSER === '1') await mkdir(evidence, { recursive: true })
-    const origin = 'http://127.0.0.1:8808',
+    const port = Number(process.env.NOZOKI_SOURCE_TEST_PORT ?? 8808)
+    const origin = 'http://127.0.0.1:' + port,
       password = 'Synthetic-' + randomToken()
     const env = {
       AUTH_ORIGIN: origin,
@@ -142,7 +143,7 @@ test(
       },
     }
     const options = convertV4MiniflareOptions({
-      port: 8808,
+      port,
       host: '127.0.0.1',
       workers: [
         {
@@ -295,18 +296,31 @@ test(
           const { credentialState: _, ...flareSource } = presentationSources().find(
             (item) => item.provider === 'uptimeflare',
           )
-          fixture.config.integrations.push({ ...flareSource, credential: { operation: 'keep' } })
+          const { credentialState: _sleepyState, ...sleepySource } = source('sleepy')
+          const longSource = createIntegrationDraft('cliproxy', fixture.config.integrations, 'test')
+          longSource.baseUrl = 'https://example.invalid/service/'
+          longSource.access = { mode: 'legacy' }
+          fixture.config.integrations.push(
+            { ...flareSource, credential: { operation: 'keep' } },
+            { ...sleepySource, id: 'sleepy-fixture', credential: { operation: 'keep' } },
+            longSource,
+          )
           const services = fixture.config.modules.find((module) => module.id === 'services')
           services.sources = { main: { sourceId: flareSource.id, subject: 'default' } }
-          assert.equal((await saveConfig(db, fixture, { actor: { kind: 'system' } })).success, true)
-          const snapshot = presentationSnapshots().services
-          await upsertSnapshot(db, {
-            sourceId: flareSource.id,
-            moduleId: 'services',
-            subject: 'default',
-            snapshot,
-            updatedAt: snapshot.collectedAt,
-          })
+          const seeded = await saveConfig(db, fixture, { actor: { kind: 'system' } })
+          assert.equal(seeded.success, true, JSON.stringify(seeded))
+          const snapshots = presentationSnapshots()
+          snapshots.devices.data.devices[1].name = '带有特别长名称的测试设备'.repeat(3)
+          for (const moduleId of ['services', 'devices'] as const) {
+            const snapshot = snapshots[moduleId]
+            await upsertSnapshot(db, {
+              sourceId: snapshot.sourceId,
+              moduleId,
+              subject: 'default',
+              snapshot,
+              updatedAt: snapshot.collectedAt,
+            })
+          }
         }
         await page.goto(origin + '/admin')
         await settle(page)
@@ -749,6 +763,20 @@ test(
       ).refreshInterval,
       process.env.NOZOKI_TEST_BROWSER === '1' ? 75 : refreshBeforeBrowser,
     )
+    await db.prepare('DELETE FROM login_limits').run()
+    const verificationInput = await input()
+    await prove(verificationInput, ['fixture'])
+    const verificationKey = crypto.randomUUID()
+    assert.equal((await save(verificationInput, verificationKey)).status, 200)
+    assert.equal((await (await save(verificationInput, verificationKey)).json()).replayed, true)
+    const readVerification = async () =>
+      (await (await request('/api/admin/config')).json()).integrations.find(
+        (s) => s.id === 'fixture',
+      ).verification
+    const verification = await readVerification()
+    assert.equal(verification.current, true)
+    const publicDashboard = await request('/api/dashboard', 'GET', undefined, { Cookie: '' })
+    assert.ok(!(await publicDashboard.text()).includes('"verifiedAt"'))
     const beforeMismatch = upstream.length
     await mf.dispose()
     const changed = convertV4MiniflareOptions({
@@ -760,6 +788,7 @@ test(
     changed.resourcePersistencePath = folder
     mf = new Miniflare(changed)
     dash = await mf.getWorker()
+    assert.deepEqual(await readVerification(), verification)
     assert.deepEqual(await (await request('/api/admin/source-connector')).json(), {
       configured: true,
       publicMode: 'worker',

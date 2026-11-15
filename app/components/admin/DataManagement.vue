@@ -145,23 +145,14 @@ async function download() {
   <div class="data-management">
     <section class="data-management-card">
       <h3><CommonAppIcon name="FileDownloadRound" />数据导出</h3>
-      <p>下载已保存的站点、外观、模块、日程、行情、链接及来源配置，包含已上传的共享背景。</p>
-      <p class="admin-note">
-        不包含当前草稿、登录密钥、数据源密钥和采集历史。文件包含服务地址与权限设置，请妥善保管。
-      </p>
+      <p>导出已保存的共享配置和上传的背景，不含凭据与采集历史。文件含服务地址和权限设置。</p>
       <VarButton type="primary" tonal :loading="working" :disabled="working" @click="download"
         >导出配置</VarButton
       >
     </section>
     <section class="data-management-card">
       <h3><CommonAppIcon name="FileUploadRound" />数据导入</h3>
-      <p>
-        选择 Nozoki 导出的 JSON
-        文件，确认预览后加入草稿。新增或更改地址的来源须先测试，再点击顶栏“保存配置”生效。
-      </p>
-      <p class="admin-note">
-        同地址的现有密钥可继续使用；其他来源需重新填写密钥。备份未包含的现有来源会停用并保留。
-      </p>
+      <p>选择 Nozoki 导出的 JSON 文件，检查后加入草稿。保存配置后生效。</p>
       <input
         ref="fileInput"
         class="sr-only"
@@ -177,12 +168,7 @@ async function download() {
     </section>
     <section class="data-management-card">
       <h3><CommonAppIcon name="restore" />重置全局默认设置</h3>
-      <p>
-        恢复默认站点、外观、模块、日程、行情和常用链接。自建来源停用，保留其密钥与历史；现有且已批准的腾讯来源恢复启用。
-      </p>
-      <p class="admin-note">
-        不会删除数据库、采集历史或退出登录，不会重新添加已删除的来源。确认后替换当前草稿，保存配置后生效。
-      </p>
+      <p>恢复共享配置默认值，保留凭据和采集历史。</p>
       <VarButton type="danger" tonal :disabled="disabled || working" @click="resetting = true"
         >恢复全局默认设置</VarButton
       >
@@ -210,7 +196,7 @@ async function download() {
           {{ plan.restrictedModules.join('、') }} 设为仅管理员可见，请在保存后检查权限。
         </p>
         <p v-if="dirty" class="source-warning">导入将替换当前未保存修改。</p>
-        <p v-if="tests.length">请完成以下来源测试，或选择暂不导入。测试不会保存配置或采集快照。</p>
+        <p v-if="tests.length">请先验证以下来源，或选择暂不导入。新目标需重新填写凭据。</p>
         <section v-for="source in tests" :key="source.id" class="data-import-source">
           <h3>{{ integrationPreset(source)?.name ?? '旧来源' }}</h3>
           <AdminIntegrationEditor
@@ -241,9 +227,8 @@ async function download() {
       :blocked="disabled"
       @confirm="reset"
     >
-      <p>
-        恢复站点及所有模块的默认设置，移除自定义日程和链接，撤下已上传背景。自建来源停用，密钥、历史记录和登录状态保留。
-      </p>
+      <p>恢复站点、外观、模块和行情默认值，移除自定义日程、链接和旧版高级限制，撤下已上传背景。</p>
+      <p>自建来源停用，已批准的腾讯行情恢复启用。凭据、采集历史和登录状态保留。</p>
       <p v-if="dirty" class="source-warning">当前未保存修改也会被替换。</p>
       <p>这一步只修改草稿，点击顶栏“保存配置”后生效。</p>
     </AdminSourceDialog>

@@ -5,7 +5,12 @@ import { SOURCE_MODULES } from '../../../shared/integration-presets/bindings'
 import { moduleEditors } from './module-editors'
 
 const model = defineModel<ModuleSettings>({ required: true })
-const props = defineProps<{ draft: ConfigWrite; resetToken: number; locateToken: number }>()
+const props = defineProps<{
+  draft: ConfigWrite
+  resetToken: number
+  locateToken: number
+  locateIndex?: number
+}>()
 const editor = computed(() => moduleEditors[model.value.id])
 const hasSource = computed(() => Object.values(SOURCE_MODULES).includes(model.value.id))
 const sourceNames = computed(() =>
@@ -44,12 +49,14 @@ const sourceNames = computed(() =>
           :integrations="draft.integrations"
           :reset-token="resetToken"
           :locate-token="locateToken"
+          :locate-index="locateIndex"
         />
         <AdminLinkSettingsEditor
           v-if="model.id === 'links'"
           v-model="draft.links"
           :reset-token="resetToken"
           :locate-token="locateToken"
+          :locate-index="locateIndex"
         />
       </template>
       <template v-if="editor?.guest" #guest>

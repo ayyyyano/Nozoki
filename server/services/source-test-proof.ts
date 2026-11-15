@@ -9,6 +9,7 @@ export { requiresSourceTest } from '../../shared/integration-presets/connection.
 import { mac, hex, unhex, verifyMac } from './auth-crypto.ts'
 
 type Draft = z.infer<typeof IntegrationWriteSchema>
+const PROOF_TTL = 10 * 60 * 1000
 async function parts(
   draft: Draft,
   old: StoredIntegration | undefined,
@@ -44,12 +45,12 @@ export async function issueSourceTestProof(
   version: number,
   now = Date.now(),
 ) {
-  const expires = String(now + 10 * 60 * 1000)
+  const expires = String(now + PROOF_TTL)
   const message = await parts(draft, old, session, version, expires)
   if (!message) return undefined
   return expires + '.' + hex(await mac(session.settings.rateKey, message))
 }
-export async function verifySourceTestProof(
+export async function sourceTestVerifiedAt(
   draft: Draft,
   old: StoredIntegration | undefined,
   session: AuthSession,
@@ -57,7 +58,12 @@ export async function verifySourceTestProof(
   now = Date.now(),
 ) {
   const match = /^(\d{13})\.([a-f0-9]{64})$/.exec(draft.connectionProof ?? '')
-  if (!match || Number(match[1]) <= now || Number(match[1]) > now + 10 * 60 * 1000) return false
+  if (!match || Number(match[1]) <= now || Number(match[1]) > now + PROOF_TTL) return
   const message = await parts(draft, old, session, version, match[1]!)
-  return !!message && verifyMac(session.settings.rateKey, message, unhex(match[2]!))
+  if (message && (await verifyMac(session.settings.rateKey, message, unhex(match[2]!))))
+    return new Date(Number(match[1]) - PROOF_TTL).toISOString()
+}
+
+export async function verifySourceTestProof(...args: Parameters<typeof sourceTestVerifiedAt>) {
+  return !!(await sourceTestVerifiedAt(...args))
 }

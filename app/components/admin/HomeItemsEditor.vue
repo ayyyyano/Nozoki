@@ -186,22 +186,24 @@ function apply() {
         :data-item-id="row.itemId"
         :data-selected="row.index >= 0"
       >
-        <input
-          type="checkbox"
-          :aria-label="`在首页显示 ${row.alias ?? row.name}`"
-          :checked="row.index >= 0"
-          :disabled="row.index < 0 && (!row.discovered || selected.length >= limit)"
-          @change="toggle(row, ($event.target as HTMLInputElement).checked)"
-        />
-        <span class="home-item-label">
-          <strong :title="row.alias ?? row.name">{{ row.alias ?? row.name }}</strong>
-          <small :title="`${row.sourceId} · ${row.itemId}`">
-            {{ row.sourceId }} · {{ row.itemId }}
-          </small>
-          <small v-if="!row.discovered">{{
-            sourceIds.has(row.sourceId) ? '当前未发现' : '当前未绑定此来源'
-          }}</small>
-        </span>
+        <label class="home-item-choice">
+          <input
+            type="checkbox"
+            :aria-label="`在首页显示 ${row.alias ?? row.name}`"
+            :checked="row.index >= 0"
+            :disabled="row.index < 0 && (!row.discovered || selected.length >= limit)"
+            @change="toggle(row, ($event.target as HTMLInputElement).checked)"
+          />
+          <span class="home-item-label">
+            <strong :title="row.alias ?? row.name">{{ row.alias ?? row.name }}</strong>
+            <small :title="`${row.sourceId} · ${row.itemId}`">
+              {{ row.sourceId }} · {{ row.itemId }}
+            </small>
+            <small v-if="!row.discovered">{{
+              sourceIds.has(row.sourceId) ? '当前未发现' : '当前未绑定此来源'
+            }}</small>
+          </span>
+        </label>
         <VarButton
           text
           round

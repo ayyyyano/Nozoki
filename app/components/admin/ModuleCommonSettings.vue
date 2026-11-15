@@ -29,6 +29,7 @@ function makePrivate() {
         <VarOption label="管理员" value="admin" />
       </VarSelect>
       <VarSelect
+        v-if="model.id !== 'deepseek'"
         v-model="model.guestBehavior"
         :aria-label="`${model.id} 访客行为`"
         placeholder="访客行为"
@@ -40,5 +41,4 @@ function makePrivate() {
     </div>
     <slot name="guest" />
   </section>
-  <AdminFieldEditor v-model="model" />
 </template>

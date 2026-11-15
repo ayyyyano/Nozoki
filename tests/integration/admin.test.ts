@@ -75,6 +75,9 @@ test('phase 04 atomic HTTP-save core in real D1/workerd', async (t) => {
         ),
       )
     const before = (await db.prepare('select * from integration_audit order by id').all()).results
+    const privateRules = (
+      await db.prepare('SELECT id,fields_json FROM dashboard_modules ORDER BY id').all()
+    ).results
     const legacyOrder = JSON.stringify([
       { sourceId: 'flare', monitorId: 'flare/second' },
       { sourceId: 'flare', monitorId: 'flare/first' },
@@ -93,6 +96,10 @@ test('phase 04 atomic HTTP-save core in real D1/workerd', async (t) => {
       before,
     )
     assert.deepEqual((await db.prepare('pragma foreign_key_check').all()).results, [])
+    assert.deepEqual(
+      (await db.prepare('SELECT id,fields_json FROM dashboard_modules ORDER BY id').all()).results,
+      privateRules,
+    )
     assert.equal(
       (
         await db

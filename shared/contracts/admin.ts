@@ -24,7 +24,12 @@ export function editableConfig(config: Config): ConfigWrite {
     ...(JSON.parse(JSON.stringify(config)) as Config),
     modules: canonicalModules(JSON.parse(JSON.stringify(config.modules))),
     integrations: config.integrations.map(
-      ({ credentialState: _state, identityConfigured: _identity, ...i }) => ({
+      ({
+        credentialState: _state,
+        identityConfigured: _identity,
+        verification: _verified,
+        ...i
+      }) => ({
         ...JSON.parse(JSON.stringify(i)),
         credential: { operation: 'keep' as const },
       }),

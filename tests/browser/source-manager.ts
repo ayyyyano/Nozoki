@@ -51,17 +51,25 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
     } else await page.getByRole('button', { name: '来源接入', exact: true }).click()
   }
   const card = (id) => page.locator(`[data-source-id="${id}"]`)
+  const editor = page.locator('.admin-edit-dialog:visible')
+  const close = async () => {
+    await editor.getByRole('button', { name: '关闭对话框', exact: true }).click()
+    await expect(editor).toBeHidden()
+  }
   const expand = async (id) => {
-    const c = card(id)
-    if ((await c.locator('.admin-item-toggle').getAttribute('aria-expanded')) !== 'true')
-      await c.locator('.admin-item-toggle').click()
-    return c
+    if (await editor.isVisible()) {
+      if (new URL(page.url()).searchParams.get('source') === id) return editor
+      await close()
+    }
+    await card(id).locator('.admin-item-toggle').click()
+    await expect(editor).toBeVisible()
+    return editor
   }
   const commit = async () => {
     const response = page.waitForResponse(
       (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
     )
-    await page.getByRole('button', { name: '保存配置', exact: true }).click()
+    await editor.getByRole('button', { name: '保存配置', exact: true }).click()
     const r = await response
     assert.equal(r.status(), 200, await r.text())
     await expect(page.getByText(/^(?:已保存并确认持久化|配置已保存，)/).first()).toBeVisible()
@@ -71,10 +79,10 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   await measure('desktop-list')
   await page.screenshot({ path: resolve(evidence, 'sources-desktop.png'), fullPage: true })
   await page.getByRole('button', { name: '更多管理操作', exact: true }).click()
-  await page.getByRole('menuitem', { name: '切换到暗色模式', exact: true }).click()
+  await page.getByRole('menuitem', { name: '暗色模式', exact: true }).click()
   await page.screenshot({ path: resolve(evidence, 'sources-desktop-dark.png'), fullPage: true })
   await page.getByRole('button', { name: '更多管理操作', exact: true }).click()
-  await page.getByRole('menuitem', { name: '切换到亮色模式', exact: true }).click()
+  await page.getByRole('menuitem', { name: '浅色模式', exact: true }).click()
   for (const label of [
     'Provider',
     '协议版本',
@@ -94,23 +102,19 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   await expect(page.getByRole('button', { name: '添加来源', exact: true })).toBeFocused()
   assert.deepEqual((await input()).config.integrations, initial.config.integrations)
 
-  const collapsedDeep = card(deepId)
-  const deepGuide = collapsedDeep.getByRole('button', { name: '查看 DeepSeek 配置说明' })
+  const deep = await expand(deepId)
+  const deepGuide = deep.getByRole('button', { name: '查看 DeepSeek 配置说明' })
   await deepGuide.click()
   await expect(page.getByRole('dialog', { name: 'DeepSeek 配置说明' })).toContainText('创建密钥')
-  await expect(collapsedDeep.locator('.admin-item-toggle')).toHaveAttribute(
-    'aria-expanded',
-    'false',
-  )
   await page.keyboard.press('Escape')
   await expect(deepGuide).toBeFocused()
 
-  const first = await expand('fixture')
-  await first.getByRole('switch').click()
-  await expect(first.getByRole('switch')).not.toBeChecked()
-  await expect(first.locator('.source-enable-copy')).toHaveCount(0)
-  await first.getByRole('switch').click()
-  const deep = await expand(deepId)
+  await close()
+  const fixtureToggle = card('fixture').getByRole('switch')
+  await fixtureToggle.click()
+  await expect(fixtureToggle).not.toBeChecked()
+  await fixtureToggle.click()
+  await expand(deepId)
   await expect(deep.getByText('已配置', { exact: true })).toBeVisible()
   await expect(deep.locator('.source-credential input')).toHaveCount(0)
   await deep.getByRole('button', { name: '编辑', exact: true }).click()
@@ -127,12 +131,12 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   await deep.getByRole('button', { name: '编辑', exact: true }).click()
   const prove = async () => {
     await db.prepare('DELETE FROM login_limits').run()
-    await deep.getByRole('button', { name: '测试并确认访问', exact: true }).click()
+    await deep.getByRole('button', { name: '测试并批准', exact: true }).click()
     await expect(deep.locator('[data-test-status="ok"]')).toBeVisible()
   }
   const newKey = 'SYNTHETIC-UI-REPLACEMENT'
   await deep.locator('input[aria-label="新 API Key"]').fill(newKey)
-  await expect(deep.getByRole('button', { name: '测试并确认访问', exact: true })).toBeEnabled()
+  await expect(deep.getByRole('button', { name: '测试并批准', exact: true })).toBeEnabled()
   await expect(deep.locator('input[aria-label="新 API Key"]')).toHaveAttribute('type', 'password')
   await deep.getByRole('button', { name: '显示新API Key', exact: true }).click()
   await expect(deep.locator('input[aria-label="新 API Key"]')).toHaveAttribute('type', 'text')
@@ -144,16 +148,16 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   const conflict = page.waitForResponse(
     (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
   )
-  await page.getByRole('button', { name: '保存配置', exact: true }).click()
+  await deep.getByRole('button', { name: '保存配置', exact: true }).click()
   assert.equal((await conflict).status(), 409)
   await expect(deep.locator('input[aria-label="新 API Key"]')).toHaveValue(newKey)
-  await page.getByRole('button', { name: '读取服务器最新配置', exact: true }).click()
+  await deep.getByRole('button', { name: '读取服务器最新配置', exact: true }).click()
   await page
     .getByRole('dialog', { name: '服务器最新配置', exact: true })
     .getByRole('button', { name: '保留草稿', exact: true })
     .click()
   await expect(deep.locator('input[aria-label="新 API Key"]')).toHaveValue(newKey)
-  await page.getByRole('button', { name: '读取服务器最新配置', exact: true }).click()
+  await deep.getByRole('button', { name: '读取服务器最新配置', exact: true }).click()
   await page
     .getByRole('dialog', { name: '服务器最新配置', exact: true })
     .getByRole('button', { name: '放弃草稿并载入最新', exact: true })
@@ -165,9 +169,19 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   await commit()
   await expect(deep.locator('.source-credential input')).toHaveCount(0)
   assert.ok(!JSON.stringify(await input()).includes(newKey))
+  const verification = () =>
+    page.request
+      .get(new URL('/api/admin/config', page.url()).href)
+      .then(
+        async (response) =>
+          (await response.json()).integrations.find((source) => source.id === deepId).verification,
+      )
+  const verified = await verification()
+  assert.equal(verified.current, true)
   await deep.getByRole('button', { name: '删除API Key', exact: true }).click()
   await clear.getByRole('button', { name: '确认清除', exact: true }).click()
   await commit()
+  assert.deepEqual(await verification(), { ...verified, current: false })
   assert.equal(
     (await input()).config.integrations.find((s) => s.id === deepId).credential.operation,
     'keep',
@@ -182,6 +196,8 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
   await expect(removal.getByRole('button', { name: '删除来源', exact: true })).toBeDisabled()
   await expect(removal.getByText(/受保护的历史数据/)).toBeVisible()
   await page.keyboard.press('Escape')
+  await expect(removal).toBeHidden()
+  await close()
 
   // Existing singleton types are disabled; unadded types open cancellable local forms.
   for (const [name, label] of [
@@ -200,9 +216,10 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
     await expect(page.getByRole('button', { name: '添加来源', exact: true })).toBeFocused()
   }
   // Both saved scopes now use human-readable presets; the existing ID stays unchanged.
-  await expand('fixture')
+  const first = await expand('fixture')
   await first.locator('input[aria-label="刷新间隔（秒）"]').fill('75')
   await commit()
+  await close()
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 900 })
     await page.getByRole('button', { name: '添加来源', exact: true }).click()
@@ -222,6 +239,7 @@ export async function exerciseSourceManager(page, { input, save, deepId, evidenc
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     await measure('source-editor')
     await page.screenshot({ path: resolve(evidence, `source-editor-${width}.png`) })
+    await close()
   }
   assert.deepEqual(errors, [])
   await writeFile(

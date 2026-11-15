@@ -19,11 +19,17 @@ import {
   splitModulePresentation,
 } from '../../shared/contracts/module-presentation.ts'
 import type { ItemDisplayModule } from '../../shared/domain/item-display.ts'
+import {
+  StoredVerificationSchema,
+  sourceVerificationFingerprint,
+  type StoredVerification,
+} from '../services/source-verification.ts'
 export interface StoredIntegration {
   revision?: string
   identityEnvelope?: CredentialEnvelope | null
   settings: Omit<IntegrationSettings, 'credentialState'>
   envelope: CredentialEnvelope | null
+  verification?: StoredVerification
 }
 export interface StoredState {
   storageMode?: StorageMode
@@ -58,7 +64,7 @@ export async function readStoredState(
       results[5]!.results.some((c) => c.name === 'home_services_json') &&
       results[5]!.results.some((c) => c.name === 'presentation_json') &&
       results[5]!.results.some((c) => c.name === 'item_display_json') &&
-      ['access_json', 'identity_envelope_json'].every((name) =>
+      ['access_json', 'identity_envelope_json', 'verification_json'].every((name) =>
         results[6]!.results.some((c) => c.name === name),
       )
         ? 'ready'
@@ -109,6 +115,9 @@ export async function readStoredState(
       identityEnvelope: i.identity_envelope_json
         ? CredentialEnvelopeSchema.parse(JSON.parse(String(i.identity_envelope_json)))
         : null,
+      ...(i.verification_json == null
+        ? {}
+        : { verification: StoredVerificationSchema.parse(parseJson(i.verification_json)) }),
       envelope:
         i.credential_ciphertext === null
           ? null
@@ -160,11 +169,24 @@ export async function readStoredState(
         enabled: q.enabled === 1,
         refreshInterval: q.refresh_interval,
       })),
-      integrations: integrations.map((i) => ({
-        ...i.settings,
-        credentialState: credentialState(i.envelope),
-        ...(i.identityEnvelope ? { identityConfigured: true } : {}),
-      })),
+      integrations: await Promise.all(
+        integrations.map(async (i) => ({
+          ...i.settings,
+          credentialState: credentialState(i.envelope),
+          ...(i.identityEnvelope ? { identityConfigured: true } : {}),
+          ...(i.verification
+            ? {
+                verification: {
+                  verifiedAt: i.verification.verifiedAt,
+                  current:
+                    !!i.verification.fingerprint &&
+                    i.verification.fingerprint ===
+                      (await sourceVerificationFingerprint(i.settings, i.envelope)),
+                },
+              }
+            : {}),
+        })),
+      ),
     })
     const bound = bindSources(config)
     const refs = bound.modules
@@ -273,8 +295,8 @@ export async function commitConfig(
     statements.push(
       db
         .prepare(
-          `INSERT INTO integrations(id,provider,protocol_version,base_url,enabled,refresh_interval,field_mappings_json,capabilities_json,credential_ciphertext,credential_iv,credential_key_version,credential_algorithm,credential_updated_at,access_json,identity_envelope_json)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,protocol_version=excluded.protocol_version,base_url=excluded.base_url,enabled=excluded.enabled,refresh_interval=excluded.refresh_interval,field_mappings_json=excluded.field_mappings_json,capabilities_json=excluded.capabilities_json,credential_ciphertext=excluded.credential_ciphertext,credential_iv=excluded.credential_iv,credential_key_version=excluded.credential_key_version,credential_algorithm=excluded.credential_algorithm,credential_updated_at=excluded.credential_updated_at,access_json=excluded.access_json,identity_envelope_json=excluded.identity_envelope_json`,
+          `INSERT INTO integrations(id,provider,protocol_version,base_url,enabled,refresh_interval,field_mappings_json,capabilities_json,credential_ciphertext,credential_iv,credential_key_version,credential_algorithm,credential_updated_at,access_json,identity_envelope_json,verification_json)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,protocol_version=excluded.protocol_version,base_url=excluded.base_url,enabled=excluded.enabled,refresh_interval=excluded.refresh_interval,field_mappings_json=excluded.field_mappings_json,capabilities_json=excluded.capabilities_json,credential_ciphertext=excluded.credential_ciphertext,credential_iv=excluded.credential_iv,credential_key_version=excluded.credential_key_version,credential_algorithm=excluded.credential_algorithm,credential_updated_at=excluded.credential_updated_at,access_json=excluded.access_json,identity_envelope_json=excluded.identity_envelope_json,verification_json=excluded.verification_json`,
         )
         .bind(
           i.settings.id,
@@ -292,6 +314,7 @@ export async function commitConfig(
           i.envelope?.updatedAt ?? null,
           JSON.stringify(i.settings.access ?? { mode: 'legacy' }),
           i.identityEnvelope ? JSON.stringify(i.identityEnvelope) : null,
+          i.verification ? JSON.stringify(i.verification) : null,
         ),
     )
   // Only allow-list SQL is constructed here; every dynamic ID/value remains bound.

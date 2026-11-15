@@ -258,6 +258,7 @@ const IntegrationSettingsBaseSchema = z.strictObject({
   capabilities: z.record(IdSchema, CapabilitySchema),
   credentialState: CredentialStateSchema,
   identityConfigured: z.boolean().optional(),
+  verification: z.strictObject({ verifiedAt: UtcSchema, current: z.boolean() }).optional(),
 })
 const validAccess = (i: {
   baseUrl: string | null
@@ -280,6 +281,7 @@ export const IntegrationSettingsSchema = IntegrationSettingsBaseSchema.refine(
 export const IntegrationWriteSchema = IntegrationSettingsBaseSchema.omit({
   credentialState: true,
   identityConfigured: true,
+  verification: true,
 })
   .extend({
     credential: CredentialOperationSchema,

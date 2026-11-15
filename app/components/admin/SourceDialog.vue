@@ -7,6 +7,8 @@ const props = defineProps<{
   busy?: boolean
   blocked?: boolean
   back?: boolean
+  editor?: boolean
+  compact?: boolean
 }>()
 const emit = defineEmits<{ confirm: []; closed: []; back: [] }>()
 const titleId = useId(),
@@ -26,22 +28,29 @@ function closed() {
   <VarPopup
     v-model:show="show"
     position="center"
+    :class="{ 'admin-edit-popup': editor, 'admin-edit-popup--compact': editor && compact }"
+    :overlay-class="editor ? 'admin-edit-scrim' : undefined"
     :default-style="false"
-    :close-on-key-escape="!busy && !back"
+    role="presentation"
+    :aria-modal="undefined"
+    :close-on-key-escape="false"
     :close-on-click-overlay="!busy && !back"
+    @key-escape="dismiss"
     @closed="closed"
   >
     <section
       ref="panel"
       class="admin-confirm source-dialog"
+      :class="{ 'admin-edit-dialog': editor }"
       role="dialog"
       aria-modal="true"
       :aria-labelledby="titleId"
       tabindex="-1"
-      @keydown.esc="dismiss"
     >
       <header class="source-dialog-heading">
-        <h2 :id="titleId">{{ title }}</h2>
+        <h2 :id="titleId">
+          <slot name="icon" /><span :title="editor ? title : undefined">{{ title }}</span>
+        </h2>
         <div class="source-dialog-heading-actions">
           <slot name="headerActions" />
           <VarButton
@@ -55,8 +64,10 @@ function closed() {
           /></VarButton>
         </div>
       </header>
-      <slot />
-      <div v-if="confirm" class="admin-actions source-dialog-actions">
+      <div v-if="editor" class="admin-edit-dialog-body"><slot /></div>
+      <slot v-else />
+      <footer v-if="$slots.footer" class="admin-edit-dialog-footer"><slot name="footer" /></footer>
+      <div v-else-if="confirm" class="admin-actions source-dialog-actions">
         <VarButton text :disabled="busy" @click="show = false">取消</VarButton
         ><VarButton
           :type="danger ? 'danger' : 'primary'"

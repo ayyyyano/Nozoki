@@ -431,9 +431,10 @@ const overrideEnd = computed({
           variant="outlined"
           ><VarOption label="拒绝不明确时间" value="reject" /><VarOption
             label="选择较早一次"
-            value="earlier" /><VarOption label="选择较晚一次" value="later" /></VarSelect
-        ><label><VarSwitch v-model="overrideEnabled" aria-label="临时状态覆盖" />临时显示</label
-        ><template v-if="custom.override"
+            value="earlier" /><VarOption label="选择较晚一次" value="later"
+        /></VarSelect>
+        <AdminSettingSwitch v-model="overrideEnabled" label="临时显示" aria-label="临时状态覆盖" />
+        <template v-if="custom.override"
           ><AdminText v-model="custom.override.text" label="临时状态文字" :max="200" />
           <div class="admin-fields">
             <AdminText v-model="overrideStart" label="临时开始 UTC（可选）" :max="24" /><AdminText

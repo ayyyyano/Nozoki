@@ -145,6 +145,7 @@ export async function testIntegrationDraft(
     } else if (
       !response.code &&
       response.protocolMatched &&
+      (access.authentication === 'none' || response.authentication === 'accepted') &&
       ['ok', 'stale', 'offline'].includes(response.status)
     ) {
       response.connectionProof = await issueSourceTestProof(
@@ -152,6 +153,7 @@ export async function testIntegrationDraft(
         old,
         session,
         expectedVersion,
+        now.getTime(),
       )
     }
   } catch (e) {

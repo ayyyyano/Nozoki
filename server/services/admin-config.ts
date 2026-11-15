@@ -1,4 +1,4 @@
-import { requiresSourceTest, verifySourceTestProof } from './source-test-proof.ts'
+import { requiresSourceTest, sourceTestVerifiedAt } from './source-test-proof.ts'
 import { duplicateSourceType } from '../../shared/integration-presets/bindings.ts'
 import { savedRequest } from '../repositories/config-requests.ts'
 import type { AuthSession } from './sessions.ts'
@@ -64,12 +64,13 @@ export async function saveAdminConfig(
       fieldErrors: ['integrations'],
       reason: 'SOURCE_TYPE_DUPLICATE' as const,
     }
+  const verifiedSources = new Map<string, string>()
   for (const source of parsed.data.config.integrations) {
     const old = current.config.integrations.find((i) => i.id === source.id)
 
     const issue = integrationWriteIssue(
       { ...source, baseUrl: normalizeServiceTarget(source.baseUrl) },
-      current.config.integrations.find((i) => i.id === source.id),
+      old,
     )
     if (issue)
       return {
@@ -78,21 +79,23 @@ export async function saveAdminConfig(
         fieldErrors: ['integrations.' + source.id],
         reason: issue,
       }
-    if (
-      requiresSourceTest(source, old) &&
-      !(await verifySourceTestProof(
-        source,
-        current.integrations.find((i) => i.settings.id === source.id),
-        session,
-        parsed.data.expectedVersion,
-      ))
-    )
+    const verifiedAt = source.connectionProof
+      ? await sourceTestVerifiedAt(
+          source,
+          current.integrations.find((i) => i.settings.id === source.id),
+          session,
+          parsed.data.expectedVersion,
+        )
+      : undefined
+    if (requiresSourceTest(source, old) && !verifiedAt)
       return {
         success: false as const,
         code: 'VALIDATION_ERROR' as const,
         fieldErrors: ['integrations.' + source.id],
         reason: 'SOURCE_TEST_REQUIRED' as const,
       }
+    if (verifiedAt && source.access?.mode === 'public' && source.access.approved)
+      verifiedSources.set(source.id, verifiedAt)
   }
   let keys
   if (
@@ -217,5 +220,6 @@ export async function saveAdminConfig(
     keys,
     request,
     verifiedIdentityImports,
+    verifiedSources,
   })
 }

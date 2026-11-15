@@ -435,7 +435,7 @@ async function projectDashboard(state: StoredState, now = new Date(), admin = fa
     if (!m.enabled) continue
     // Redact before reading/projecting values. Placeholders carry no data-dependent heights,
     // tooltips, timestamps, capabilities or collection status, even for an admin-only module.
-    if (!admin && m.id === 'deepseek' && m.guestBlur) {
+    if (!admin && m.id === 'deepseek' && (m.visibility === 'admin' || m.guestBlur)) {
       const { sourceId: _sourceId, ...safe } = snapshot('ok', { masked: true })
       modules.push({
         id: m.id,
