@@ -1,0 +1,53 @@
+:root {
+  --vp-c-brand-1: #155aa6;
+  --vp-c-brand-2: #194e91;
+  --vp-c-brand-3: #124b88;
+  --vp-c-brand-soft: rgb(35 103 185 / 12%);
+}
+
+.dark {
+  --vp-c-brand-1: #a8c8ff;
+  --vp-c-brand-2: #7caeff;
+  --vp-c-brand-3: #1d5499;
+  --vp-c-brand-soft: rgb(123 174 255 / 16%);
+}
+
+.nozoki-docs-home .VPHero .container {
+  display: grid;
+  align-items: center;
+  gap: 24px;
+}
+
+.nozoki-docs-home .VPHero .main {
+  order: 0;
+  width: auto;
+}
+
+.nozoki-docs-home .VPHero .image {
+  margin: 0;
+  min-height: 0;
+}
+
+.nozoki-docs-home .VPHero .image-container {
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  transform: none;
+}
+
+.nozoki-docs-home .VPHero .image-src {
+  position: static;
+  width: 100%;
+  max-width: none;
+  height: auto;
+  max-height: none;
+  border-radius: 12px;
+  transform: none;
+}
+
+@media (min-width: 960px) {
+  .nozoki-docs-home .VPHero .container {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 48px;
+  }
+}

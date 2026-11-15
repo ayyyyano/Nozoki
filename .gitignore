@@ -60,5 +60,6 @@ __pycache__/
 /nozoki-backup-*/
 /nozoki-docs-archive-*/
 
-# Local test evidence (screenshots, measurements, logs) kept outside version control
-/docs/
+# VitePress output
+/docs/.vitepress/dist/
+/docs/.vitepress/cache/

@@ -1,5 +1,11 @@
 packages:
   - .
+  - docs
 allowBuilds:
   esbuild: true
   workerd: true
+packageExtensions:
+  # Nuxt's published schema imports Vite types without declaring a runtime dependency.
+  '@nuxt/schema@4.6.2':
+    dependencies:
+      vite: 8.3.5

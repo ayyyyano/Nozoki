@@ -3,6 +3,12 @@ name: Deploy to Cloudflare Workers
 on:
   push:
     branches: ['**']
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'README_EN.md'
+      - 'AGENTS.md'
+      - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
 permissions:
