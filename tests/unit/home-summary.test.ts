@@ -7,7 +7,7 @@ import {
   monitorHomeIds,
   serviceSummary,
   quoteUpdates,
-  monitorStale,
+  monitorDisplayState,
 } from '../../shared/domain/home-summary.ts'
 import { projectGuestDashboard } from '../../server/services/dashboard.ts'
 import { fieldPointer } from '../../shared/contracts/field-paths.ts'
@@ -72,8 +72,13 @@ test('quote times merge only when all meanings and delays match; stale checks ne
   const services = createFixture('complete').services
   const monitor = services.data!.monitors[0]!
   monitor.checkedAt = '2026-11-01T00:00:00.000Z'
-  assert.ok(monitorStale(monitor, services, Date.parse('2026-11-09T00:00:00.000Z')))
+  const now = Date.parse('2026-11-09T00:00:00.000Z')
+  assert.equal(monitorDisplayState(monitor, services, now), 'stale')
   assert.equal(monitor.state, 'up')
+  assert.equal(
+    monitorDisplayState({ ...monitor, state: 'unknown', checkedAt: null }, services, now),
+    'unknown',
+  )
 })
 test('home selection follows field ACL and cannot leak private IDs or telemetry through summary or details', async () => {
   const config = createDefaultConfig(),

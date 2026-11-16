@@ -237,6 +237,11 @@ export async function commitCollection(
         )
         .bind(c.plan.source.id, usageCutoff(new Date(now))),
     )
+  const finishedAt = Date.parse(now)
+  const scheduledAt = Date.parse(c.scheduledAt)
+  // Keep successful runs aligned with cron even when collection finishes after the tick.
+  const scheduleAnchor =
+    Number.isFinite(scheduledAt) && scheduledAt <= finishedAt ? scheduledAt : finishedAt
   // Queue reads happen under this lease. A rejected/failed atomic commit loses the popped batch:
   // upstream offers neither acknowledgement nor replay; never retry this batch independently.
   statements.push(
@@ -248,14 +253,11 @@ export async function commitCollection(
         now,
         c.plan.source.provider === 'deepseek'
           ? nextBalanceCollection(
-              Date.parse(now),
+              finishedAt,
               c.plan.source.refreshInterval,
               c.plan.timezone ?? 'UTC',
             )
-          : successfulSchedule(
-              Date.parse(c.plan.scheduledCodexQuota ? c.scheduledAt : now),
-              c.plan.source.refreshInterval,
-            ),
+          : successfulSchedule(scheduleAnchor, c.plan.source.refreshInterval),
         c.plan.source.id,
       ),
     db

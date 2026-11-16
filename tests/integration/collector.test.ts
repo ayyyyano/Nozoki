@@ -202,7 +202,7 @@ async function reset(spec = [['fixture', 'sleepy', 'devices']]) {
         ...settings,
         id,
         baseUrl:
-          provider === 'sleepy'
+          provider === 'sleepy' || provider === 'uptimeflare'
             ? s.baseUrl
             : provider === 'deepseek'
               ? 'https://api.deepseek.com/'
@@ -347,6 +347,55 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
       assert.equal((await rows('collection_runs')).length, 1)
     },
   )
+  await check(
+    'successful service collections stay due on consecutive five-minute ticks',
+    async () => {
+      await reset([['uptimeflare', 'uptimeflare', 'services']])
+      await save((c) => {
+        c.integrations[0].refreshInterval = 300
+      })
+      const interval = 300_000
+      // The commit trigger also checks leases against D1's real clock.
+      const firstTick = Math.ceil(Date.now() / interval) * interval
+      const serviceState = () =>
+        db.prepare("SELECT * FROM collection_state WHERE source_id='uptimeflare'").first()
+      for (const tick of [firstTick, firstTick + interval]) {
+        const claim = await h1.acquire(tick, 'uptimeflare')
+        assert.ok(claim && claim !== 'null', `Expected a claim exactly at ${iso(tick)}`)
+        assert.equal(await h1.finish(claim, tick + 34_000), 'success')
+        const state = await serviceState()
+        assert.equal(state.status, 'ok')
+        assert.equal(state.last_scheduled_at, iso(tick))
+        assert.equal(state.last_success_at, iso(tick + 34_000))
+        assert.equal(state.next_run_at, iso(tick + interval))
+        assert.equal(await h2.acquire(tick + interval - 1, 'uptimeflare'), null)
+      }
+      const runs = await rows('collection_runs')
+      assert.deepEqual(
+        runs.map((run) => run.status),
+        ['success', 'success'],
+      )
+      const view = await db
+        .prepare("SELECT snapshot_json FROM integration_snapshot_views WHERE module_id='services'")
+        .first()
+      const snapshot = JSON.parse(view.snapshot_json)
+      assert.equal(snapshot.status, 'ok')
+      assert.equal(snapshot.data.monitors.find((m) => m.id === 'uptimeflare/web').state, 'up')
+    },
+  )
+  await check('invalid or future scheduling anchors fall back to the completion time', async () => {
+    const finishedAt = at + 1_000
+    for (const scheduledAt of ['invalid', iso(finishedAt + 1)]) {
+      await reset()
+      const raw = await h1.acquire(at, 'fixture')
+      assert.ok(raw && raw !== 'null')
+      const claim = JSON.parse(raw)
+      claim.scheduledAt = scheduledAt
+      assert.equal(await h1.finish(JSON.stringify(claim), finishedAt), 'success')
+      const [state] = await rows('collection_state')
+      assert.equal(state.next_run_at, iso(finishedAt + 300_000))
+    }
+  })
   await check(
     'expired lease takeover rejects the original owner and completion cannot replay',
     async () => {

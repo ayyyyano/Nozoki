@@ -19,7 +19,7 @@ import { runAdapter } from '../../server/adapters/registry.ts'
 import { AdapterError } from '../../server/adapters/types.ts'
 import type { AdapterRead } from '../../server/adapters/types.ts'
 import { sleepyDevicesFixture } from '../fixtures/devices0511.ts'
-import { balance } from '../fixtures/adapters.ts'
+import { balance, flare } from '../fixtures/adapters.ts'
 import { snapshot, unavailableCapability } from '../../shared/domain/dashboard.ts'
 interface Env extends Record<string, unknown> {
   DB: Database
@@ -38,12 +38,16 @@ async function fixture(
     balanceValue.balance_infos[0]!.total_balance = '109.000000000000000001'
     balanceValue.balance_infos[0]!.topped_up_balance = '99.000000000000000001'
   }
+  const response =
+    plan.source.provider === 'uptimeflare'
+      ? { ...flare, updatedAt: now.getTime() / 1000 - 60 }
+      : plan.source.provider === 'deepseek'
+        ? balanceValue
+        : payload
   const result = await runAdapter({
     source: plan.source,
     now,
-    transport: responseTransport(plan.source, async () =>
-      Response.json(plan.source.provider === 'deepseek' ? balanceValue : payload),
-    ),
+    transport: responseTransport(plan.source, async () => Response.json(response)),
   })
   if (multi) {
     const codex = snapshot(

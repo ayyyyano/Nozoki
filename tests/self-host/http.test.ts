@@ -296,6 +296,54 @@ test(
       },
     )
     await t.test(
+      'service monitor rows distinguish expired observations from unknown states',
+      { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
+      async () => {
+        const { launch, settle } = await import('../browser/support.ts')
+        const { expect } = await import('playwright/test')
+        const { fixture, fixed } = await import('../fixtures/layout.ts')
+        const dashboard = await fixture({ only: ['services'] })
+        const servicesModule = dashboard.modules.find((m) => m.id === 'services')
+        assert.ok(servicesModule?.kind === 'data')
+        const services = servicesModule.snapshot
+        const data = services.data
+        assert.ok(data && typeof data === 'object' && 'monitors' in data)
+        assert.ok(Array.isArray(data.monitors) && data.monitors.length >= 2)
+        services.status = 'ok'
+        services.collectedAt = fixed.toISOString()
+        services.expiresAt = new Date(fixed.getTime() + 600_000).toISOString()
+        const [expired, unknown] = data.monitors
+        data.monitors = [
+          { ...expired, state: 'up', checkedAt: new Date(fixed.getTime() - 600_001).toISOString() },
+          { ...unknown, state: 'unknown', checkedAt: null },
+        ]
+
+        const monitorBrowser = await launch()
+        try {
+          const page = await monitorBrowser.newPage()
+          await page.clock.setFixedTime(fixed)
+          await page.route('**/api/dashboard', (route) => route.fulfill({ json: dashboard }))
+          await page.goto(origin)
+          await settle(page)
+          await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+          const rows = page.locator('[data-module="services"] .monitor-row')
+          const staleRow = rows.filter({ has: page.locator('[data-state="stale"]') })
+          const unknownRow = rows.filter({ has: page.locator('[data-state="unknown"]') })
+          await expect(staleRow.locator('.monitor-state')).toHaveText('数据过期')
+          await expect(unknownRow.locator('.monitor-state')).toHaveText('未知')
+          const unknownColor = await unknownRow
+            .locator('.monitor-indicator')
+            .evaluate((dot) => getComputedStyle(dot).backgroundColor)
+          await expect(staleRow.locator('.monitor-indicator')).toHaveCSS(
+            'background-color',
+            unknownColor,
+          )
+        } finally {
+          await monitorBrowser.close()
+        }
+      },
+    )
+    await t.test(
       'real browser restores admin, saves a draft and logs out on Node SSR',
       { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
       async () => {
