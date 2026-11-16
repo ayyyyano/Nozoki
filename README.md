@@ -6,9 +6,9 @@ Nozoki 是一个基于 [Nuxt 4](https://nuxt.com/)，以自部署和便捷管理
 
 [**在线演示**](https://nozoki.nekro.top/) | [**用户文档**](https://ayyyyano.github.io/Nozoki/)  
 
-[![Node.js 24.21.0](https://img.shields.io/badge/node.js-24.21.0-brightgreen)](https://nodejs.org/)
-[![pnpm >= 9](https://img.shields.io/badge/pnpm-%3E%3D9-blue)](https://pnpm.io/)
-[![Nuxt](https://img.shields.io/badge/nuxt-5.15.3-green)](https://nuxt.com/)
+[![Node.js 24.21.0](https://img.shields.io/badge/Node.js-24.21.0-brightgreen)](https://nodejs.org/)
+[![pnpm 12.15.0](https://img.shields.io/badge/pnpm-12.15.0-blue)](https://pnpm.io/)
+[![Nuxt](https://img.shields.io/badge/Nuxt-4.6.4-green)](https://nuxt.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9.3-blue)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/MIT-red.svg?logo=mit)](https://opensource.org/licenses/mit/)
 
@@ -35,11 +35,11 @@ Nozoki 是一个基于 [Nuxt 4](https://nuxt.com/)，以自部署和便捷管理
 
 ## 快速开始
 
-- [GitHub Actions 自动部署](https://ayyyyano.github.io/Nozoki/deploy/github-actions.html) [推荐]
-- [Cloudflare Workers 初始化](https://ayyyyano.github.io/Nozoki/deploy/cloudflare.html)
-- [Workers Builds](https://ayyyyano.github.io/Nozoki/deploy/cloudflare-builds.html)
+- [推荐: GitHub Actions 自动部署](https://ayyyyano.github.io/Nozoki/deploy/github-actions.html)
 - [Node.js 自部署](https://ayyyyano.github.io/Nozoki/deploy/node.html)
 - [Agent 快速部署](https://ayyyyano.github.io/Nozoki/deploy/agent.html)
+- [Cloudflare Workers 初始化](https://ayyyyano.github.io/Nozoki/deploy/cloudflare.html)
+- [Workers Builds](https://ayyyyano.github.io/Nozoki/deploy/cloudflare-builds.html)
 - [本地运行](https://ayyyyano.github.io/Nozoki/deploy/local.html)
 
 ## 常见问题
