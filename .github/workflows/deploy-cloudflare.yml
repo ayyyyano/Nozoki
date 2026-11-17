@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   deploy:
-    if: ${{ github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch && vars.CLOUDFLARE_ACCOUNT_ID != '' }}
+    if: ${{ github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch }}
     runs-on: ubuntu-latest
     environment: production
     concurrency:
@@ -26,6 +26,55 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Resolve Cloudflare account
+        env:
+          ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo '::error::Add CLOUDFLARE_API_TOKEN under Settings → Environments → production. Grant account-level Workers Scripts Edit and D1 Edit permissions.'
+            exit 1
+          fi
+          if [[ -n "$ACCOUNT_ID" ]]; then
+            echo 'Using repository variable'
+          else
+            accounts=()
+            page=1
+            while :; do
+              if ! response=$(curl --silent --show-error --fail --get \
+                --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                --data-urlencode 'per_page=50' --data-urlencode "page=$page" \
+                'https://api.cloudflare.com/client/v4/accounts'); then
+                echo '::error::Unable to list Cloudflare accounts. Check the token and account access.'
+                exit 1
+              fi
+              if ! jq -e '.success == true and (.result | type == "array" and all(.[]; .id | type == "string" and test("^[a-fA-F0-9]{32}$"))) and (.result_info.total_pages | type == "number" and . >= 0 and floor == .)' >/dev/null <<< "$response"; then
+                echo '::error::Cloudflare returned an invalid account list. Check the token and account access.'
+                exit 1
+              fi
+              while IFS= read -r id; do
+                [[ -n "$id" ]] && accounts+=("$id")
+              done < <(jq -r '.result[].id // ""' <<< "$response")
+              total_pages=$(jq -r '.result_info.total_pages' <<< "$response")
+              (( page >= total_pages )) && break
+              (( page += 1 ))
+            done
+            if (( ${#accounts[@]} == 0 )); then
+              echo '::error::No Cloudflare accounts found. Check the token account access permissions.'
+              exit 1
+            elif (( ${#accounts[@]} > 1 )); then
+              echo '::error::Multiple accounts found. Set repository variable CLOUDFLARE_ACCOUNT_ID to one of these account IDs:'
+              printf '%s\n' "${accounts[@]}"
+              exit 1
+            fi
+            ACCOUNT_ID="${accounts[0]}"
+            echo "Resolved Cloudflare account ID: $ACCOUNT_ID"
+          fi
+          if [[ ! "$ACCOUNT_ID" =~ ^[a-fA-F0-9]{32}$ ]]; then
+            echo '::error::Invalid Cloudflare account ID. Check CLOUDFLARE_ACCOUNT_ID or account access.'
+            exit 1
+          fi
+          echo "CLOUDFLARE_ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
@@ -36,7 +85,6 @@ jobs:
         run: pnpm build
       - name: Apply D1 migrations and deploy Worker
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then

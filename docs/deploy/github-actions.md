@@ -5,11 +5,10 @@ Fork 后，先在自己的仓库打开 **Actions** 并启用工作流。Worker �
 ## 配置 Worker 发布
 
 1. 准备自己的 Worker、D1 数据库和站点地址，并更新 `wrangler.jsonc`。参见[账户与数据库配置](./cloudflare.md#创建数据库和设置域名)。
-2. 在 Cloudflare 创建限定到目标账户的 API Token，赋予账户级 **Workers Scripts Edit** 和 **D1 Edit**。如由 Wrangler 管理自定义域名或路由，按实际配置添加对应区域权限。
-3. 在 Fork 的 **Settings → Environments** 创建 `production`，将允许部署的分支限制到默认分支。在该环境添加 Secret `CLOUDFLARE_API_TOKEN`。
-4. 在 **Settings → Secrets and variables → Actions → Variables** 添加仓库变量 `CLOUDFLARE_ACCOUNT_ID`。未设置账户 ID 时 Worker 部署作业会跳过。
-5. 将自己的 `wrangler.jsonc` 推送到 Fork 默认分支。查看 **Actions → Deploy to Cloudflare Workers**。也可以从同一工作流手动选择默认分支运行。
-6. 首次部署成功后，去 Cloudflare 设置[运行时 Secret](./cloudflare.md#设置运行时-secret)。检查登录、保存和采集。如果同一 Worker 已连接 Workers Builds，改用 Actions 时由站点所有者停用原 Git 自动构建。
+2. 创建限定到目标账户的 Cloudflare API Token，赋予账户级 **Workers Scripts Edit** 和 **D1 Edit**。如由 Wrangler 管理自定义域名或路由，按实际配置添加对应区域权限。在 Fork 的 **Settings → Environments** 创建 `production`，将允许部署的分支限制到默认分支，并添加环境 Secret `CLOUDFLARE_API_TOKEN`。
+3. 将配置推送到 Fork 默认分支，在 **Actions → Deploy to Cloudflare Workers** 查看部署。也可以从同一工作流手动选择默认分支运行。首次部署成功后，设置[运行时 Secret](./cloudflare.md#设置运行时-secret)，检查登录、保存和采集。如果同一 Worker 已连接 Workers Builds，改用 Actions 时由站点所有者停用原 Git 自动构建。
+
+工作流会通过 Token 自动解析单个账户的 ID。若检测到多个账户，或希望固定使用某个账户，在 **Settings → Secrets and variables → Actions → Variables** 设置仓库变量 `CLOUDFLARE_ACCOUNT_ID`。未配置 Token、Token 无法列出账户或存在多个账户但未指定 ID 时，工作流会失败并提示处理方法。默认分支限制仍由工作流和环境共同执行，数据库迁移失败会终止发布。
 
 仅修改 `docs/`、README 或文档工作流会跳过 Worker 部署。同步包含根锁文件或工作区配置的提交可能同时触发两条工作流。只部署 Worker 时，可在 Fork 的 **Actions → Deploy documentation to GitHub Pages** 菜单中选择 **Disable workflow**。如果文档工作流已触发但 Pages 尚未启用，该次文档发布可能失败，Worker 工作流仍独立运行。
 
