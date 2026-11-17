@@ -95,7 +95,7 @@ test('differential quote writes, targeted refresh and repeated saves preserve re
 })
 
 test(
-  'standalone Node retains a save-triggered task after the HTTP response',
+  'standalone Node leaves changed sources for the scheduled collector',
   { timeout: 30000 },
   async (t) => {
     const directory = await mkdtemp(resolve('.wrangler/config-refresh-http-'))
@@ -191,21 +191,25 @@ test(
     assert.equal(result.collection, 'scheduled')
     const check = new SqliteDatabase(path)
     try {
-      let row
-      for (let n = 0; n < 100; n++) {
-        row = await check
-          .prepare("SELECT status FROM collection_state WHERE source_id='sleepy'")
-          .first()
-        if (
-          row?.status === 'error' ||
-          row?.status === 'unsupported' ||
-          (row?.status === 'unconfigured' && output.includes('nozoki-collection-after-save'))
-        )
-          break
-        await new Promise((r) => setTimeout(r, 50))
-      }
-      assert.ok(row)
-      assert.ok(output.includes('nozoki-collection-after-save'))
+      assert.equal(
+        (
+          await check
+            .prepare("SELECT count(*) AS n FROM collection_runs WHERE source_id='sleepy'")
+            .first()
+        ).n,
+        0,
+      )
+      assert.equal(output.includes('nozoki-collection-after-save'), false)
+      let requests = 0
+      const time = Date.now()
+      const report = await runCollection(check, { COLLECTOR_EPOCH: '1' }, time, {
+        reader: async () => {
+          requests++
+          throw new AdapterError('UPSTREAM_UNAVAILABLE')
+        },
+      })
+      assert.ok(report.selected > 0)
+      assert.equal(requests, 1)
     } finally {
       check.close()
     }

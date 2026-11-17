@@ -4,7 +4,7 @@ import { getDatabase } from '../../utils/database.ts'
 import { saveAdminConfig } from '../../services/admin-config.ts'
 import { CONFIG_BODY_LIMIT } from '../../../shared/contracts/admin.ts'
 import { readStoredState } from '../../repositories/config.ts'
-import { changedCollectionSources, collectAfterSave } from '../../collection/after-save.ts'
+import { changedCollectionSources } from '../../collection/after-save.ts'
 export default authEndpoint(async (event) => {
   const session = await requireAdminMutation(event)
   setResponseHeader(event, 'Cache-Control', 'private, no-store')
@@ -41,13 +41,7 @@ export default authEndpoint(async (event) => {
   if (result.changed !== false && !result.replayed) {
     try {
       const ids = changedCollectionSources(before, await readStoredState(db))
-      if (ids.length) {
-        const waitUntil = event.context.waitUntil as undefined | ((task: Promise<unknown>) => void)
-        if (waitUntil) {
-          waitUntil(collectAfterSave(db, environment(event), ids))
-          collection = 'scheduled'
-        } else collection = 'deferred'
-      }
+      if (ids.length) collection = 'scheduled'
     } catch {
       collection = 'deferred'
     }

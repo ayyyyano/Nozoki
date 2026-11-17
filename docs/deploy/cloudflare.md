@@ -44,6 +44,6 @@ pnpm exec wrangler secret put INTEGRATION_ENCRYPTION_KEY --config wrangler.jsonc
 
 ## 定时采集
 
-根配置的 `*/5 * * * *` 每五分钟唤起采集。每个来源按自身的刷新间隔检查，到期且被已启用模块使用的来源才会采集。保存相关配置后也会安排采集。执行情况可从该 Worker 的日志查看。
+根配置的 `*/5 * * * *` 每五分钟唤起采集。每个来源按自身的刷新间隔检查，到期且被已启用模块使用的来源才会采集。保存影响采集的配置后，更新通常在下一个采集周期开始，失败重试或任务积压可能延长等待。执行情况可从该 Worker 的日志查看。
 
 Cloudflare 使用 Worker 的版本元数据管理采集环境。旧双 Worker 安装迁移后，由站点所有者清理旧 Collector 的 Cron 和构建连接。见[升级与迁移](/operations/migrations.md)。

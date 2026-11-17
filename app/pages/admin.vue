@@ -284,7 +284,7 @@ function clearSecrets() {
     }
 }
 function applyConfigTransfer(plan: ConfigImportPlan, action: 'import' | 'reset') {
-  if (busy.value || readOnly.value) return
+  if (busy.value || readOnly.value || backgroundProcessing.value || savedNeedsReload.value) return
   clearSecrets()
   draft.value = plan.config
   backgroundUpload.value = plan.backgroundUpload ?? null
@@ -292,10 +292,8 @@ function applyConfigTransfer(plan: ConfigImportPlan, action: 'import' | 'reset')
   pending = null
   preview.value = false
   errors.value = []
-  message.value =
-    action === 'import'
-      ? '配置已导入草稿，保存配置后生效'
-      : '已恢复全局默认设置草稿，保存配置后生效'
+  if (action === 'import') message.value = '配置已导入草稿，保存配置后生效'
+  else void save()
 }
 function accept(config: Config) {
   backgroundUpload.value = null
@@ -421,7 +419,7 @@ async function save() {
     await reloadDashboard()
     message.value =
       result.collection === 'scheduled'
-        ? '配置已保存，已安排数据更新；结果将在采集完成后显示'
+        ? '配置已保存，数据更新已排队，通常在下一个采集周期开始'
         : result.collection === 'deferred'
           ? '配置已保存，数据更新将由定时任务重试'
           : '已保存并确认持久化'
@@ -686,7 +684,7 @@ onBeforeRouteLeave((to, from) => {
           <AdminDataManagement
             v-if="section === 'data' && baseline"
             :baseline="baseline"
-            :disabled="busy || readOnly || savedNeedsReload"
+            :disabled="busy || readOnly || savedNeedsReload || backgroundProcessing"
             :dirty="dirty"
             @apply="applyConfigTransfer"
           />

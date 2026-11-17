@@ -110,20 +110,18 @@ export async function exerciseDataManagement(page, { request, input, save, evide
     assert.deepEqual(await input(), saved)
   }
   await page.setViewportSize({ width: 1440, height: 1000 })
-  await page.getByRole('button', { name: '恢复全局默认设置', exact: true }).click()
-  await page
-    .getByRole('dialog', { name: '恢复全局默认设置？' })
-    .getByRole('button', { name: '确认恢复默认', exact: true })
-    .click()
-  assert.deepEqual(await input(), saved)
   // The reset still uses the same compare-and-swap save boundary.
   const competing = await input()
   competing.config.site.siteName = 'Concurrent fixture'
   assert.equal((await save(competing)).status, 200)
+  await page.getByRole('button', { name: '恢复全局默认设置', exact: true }).click()
   const conflict = page.waitForResponse(
     (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
   )
-  await page.getByRole('button', { name: '保存配置', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: '恢复全局默认设置？' })
+    .getByRole('button', { name: '确认恢复默认', exact: true })
+    .click()
   assert.equal((await conflict).status(), 409)
   await page.getByRole('button', { name: '读取服务器最新配置', exact: true }).click()
   await page
@@ -131,11 +129,14 @@ export async function exerciseDataManagement(page, { request, input, save, evide
     .getByRole('button', { name: '放弃草稿并载入最新', exact: true })
     .click()
   await page.getByRole('button', { name: '恢复全局默认设置', exact: true }).click()
+  const resetSaved = page.waitForResponse(
+    (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
+  )
   await page
     .getByRole('dialog', { name: '恢复全局默认设置？' })
     .getByRole('button', { name: '确认恢复默认', exact: true })
     .click()
-  await commit()
+  assert.equal((await resetSaved).status(), 200)
   const reset = await input()
   assert.equal(reset.config.site.siteName, 'Nozoki')
   assert.equal(reset.config.integrations.find((s) => s.id === 'sleepy').enabled, false)

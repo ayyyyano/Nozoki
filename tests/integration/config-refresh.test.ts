@@ -24,7 +24,7 @@ async function walk(dir) {
 }
 
 test(
-  'saved config collects immediately without Cron; browser polls and synchronizes tabs',
+  'saved config waits for Cron; browser polls and synchronizes tabs',
   { timeout: 180000 },
   async (t) => {
     const origin = 'http://127.0.0.1:8814',
@@ -134,8 +134,14 @@ test(
       response = await put(value, key)
     assert.equal(response.status, 200)
     assert.equal((await response.json()).collection, 'scheduled')
-    // HTTP returned while the provider was deliberately blocked: save does not await collection.
+    assert.equal(requests, 0, 'saving must not contact the provider')
+    const waiting = (await (await request('/api/dashboard')).json()).modules.find(
+      (module) => module.id === 'quotes',
+    ).snapshot
+    assert.equal(waiting.status, 'unconfigured')
+    const collector = await mf.getWorker()
     release()
+    await collector.scheduled({ scheduledTime: Date.now(), cron: '*/5 * * * *' })
     await expect
       .poll(async () =>
         Number((await db.prepare('SELECT count(*) n FROM integration_snapshot_views').first()).n),
@@ -167,6 +173,7 @@ test(
     value.config.quotes[0].refreshInterval++
     limited = true
     await put(value)
+    await collector.scheduled({ scheduledTime: Date.now() + 1, cron: '*/5 * * * *' })
     await expect
       .poll(
         async () =>
@@ -181,6 +188,7 @@ test(
     value = await input()
     value.config.quotes[0].refreshInterval++
     await put(value)
+    await collector.scheduled({ scheduledTime: Date.now() + 2, cron: '*/5 * * * *' })
     await expect
       .poll(
         async () =>

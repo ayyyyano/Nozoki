@@ -230,7 +230,7 @@ async function download() {
       <p>恢复站点、外观、模块和行情默认值，移除自定义日程、链接和旧版高级限制，撤下已上传背景。</p>
       <p>自建来源停用，已批准的腾讯行情恢复启用。凭据、采集历史和登录状态保留。</p>
       <p v-if="dirty" class="source-warning">当前未保存修改也会被替换。</p>
-      <p>这一步只修改草稿，点击顶栏“保存配置”后生效。</p>
+      <p>确认后立即保存并生效。</p>
     </AdminSourceDialog>
   </div>
 </template>

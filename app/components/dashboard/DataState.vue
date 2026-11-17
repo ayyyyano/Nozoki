@@ -49,7 +49,7 @@ const notes: Partial<Record<DataStatus, string>> = {
             : status === 'unconfigured' && configured
               ? errorCode === 'NOT_CONFIGURED'
                 ? '来源配置尚未完成'
-                : '来源已匹配，等待采集结果'
+                : '数据更新已排队，等待采集结果'
               : labels[status]
       }}</span
       ><small v-if="!compact && notes[status]">{{ notes[status] }}</small
