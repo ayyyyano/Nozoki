@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { editableConfig } from '../../../shared/contracts/admin'
+import { canonical, editableConfig } from '../../../shared/contracts/admin'
 import type { Config } from '../../../shared/contracts/config'
 import type { ConfigBackup } from '../../../shared/contracts/config-backup'
+import type { CsrfDto } from '../../../shared/contracts/auth'
+import type { ProbeResult } from '../../../shared/contracts/adapter'
 import { BACKUP_FILE_LIMIT } from '../../../shared/contracts/config-backup'
 import {
   prepareConfigImport,
@@ -11,6 +13,11 @@ import {
 import { requiresSourceTest } from '../../../shared/integration-presets/connection'
 import { integrationPreset } from '../../../shared/integration-presets'
 import { bindSources } from '../../../shared/integration-presets/bindings'
+import {
+  planImportCredentialTests,
+  applyImportCredentialTest,
+  summarizeImportCredentialTests,
+} from '../../../shared/domain/import-credential-tests'
 
 const props = defineProps<{ baseline: Config; disabled: boolean; dirty: boolean }>()
 const emit = defineEmits<{ apply: [ConfigImportPlan, 'import' | 'reset'] }>()
@@ -18,8 +25,15 @@ const fileInput = useTemplateRef<HTMLInputElement>('fileInput')
 const importing = ref(false),
   resetting = ref(false),
   working = ref(false)
+const includeCredentials = ref(false)
 const plan = ref<ConfigImportPlan | null>(null),
   error = ref('')
+const importResults = ref<Record<string, string>>({})
+const importProgress = ref('')
+const importOutcomes = ref<Record<string, { proof?: string }>>({})
+const importSummary = computed(() =>
+  summarizeImportCredentialTests(Object.values(importOutcomes.value)),
+)
 const clock = useLocalClock()
 let generation = 0
 function wipe() {
@@ -30,6 +44,9 @@ function wipe() {
     delete source.identityCredential
   }
   plan.value = null
+  importResults.value = {}
+  importProgress.value = ''
+  importOutcomes.value = {}
 }
 onBeforeUnmount(wipe)
 const tests = computed(
@@ -47,14 +64,40 @@ const canApply = computed(
     !props.disabled &&
     !working.value &&
     tests.value.every(
-      (s) => !!s.connectionProof && Number(s.connectionProof.split('.')[0]) > clock.value,
+      (s) =>
+        s.credential.operation === 'replace' ||
+        (!!s.connectionProof && Number(s.connectionProof.split('.')[0]) > clock.value),
     ),
+)
+const pendingCredentialTests = computed(() =>
+  plan.value
+    ? planImportCredentialTests(plan.value.config.integrations, props.baseline).some((item) => {
+        const proof = plan.value?.config.integrations.find((s) => s.id === item.id)?.connectionProof
+        return item.needsTest && (!proof || Number(proof.split('.')[0]) <= clock.value)
+      })
+    : false,
 )
 const importErrors: Record<string, string> = {
   BACKUP_TOO_LARGE: '配置文件过大，请减少配置内容或压缩背景图片后重试。',
   BACKUP_INVALID_IMAGE: '备份中的背景图片缺失或校验不通过。',
   BACKUP_DUPLICATE_SOURCE: '备份包含重复的数据源类型，请整理后重试。',
   BACKUP_UNSUPPORTED_SOURCE: '备份包含当前站点无法兼容的旧协议来源。',
+  BACKUP_IDENTITY_CONFLICT: '目标来源已有身份密钥或来源标识不同，无法安全导入身份密钥。',
+}
+const testFailureReasons: Record<string, string> = {
+  AUTH_REQUIRED: '认证失败',
+  CREDENTIAL_INVALID: '凭据无效',
+  CONNECTOR_UNAVAILABLE: '连接环境不可用',
+  DESTINATION_BLOCKED: '目标未通过安全检查',
+  RATE_LIMITED: '来源限流',
+  TEST_LIMITED: '测试次数受限',
+  TEST_BUSY: '测试繁忙',
+  TIMEOUT: '连接超时',
+  NOT_FOUND: '接口不存在',
+  INVALID_RESPONSE: '响应格式不匹配',
+  CONFIG_CONFLICT: '配置已被其他窗口修改',
+  TEST_UNAVAILABLE: '网络或测试服务不可用',
+  TEST_FAILED: '测试未通过',
 }
 async function chooseFile(event: Event) {
   const input = event.target as HTMLInputElement
@@ -70,6 +113,10 @@ async function chooseFile(event: Event) {
     const prepared = await prepareConfigImport(await file.text(), props.baseline)
     if (revision !== generation) return
     plan.value = prepared
+    for (const action of planImportCredentialTests(prepared.config.integrations, props.baseline)) {
+      if (action.reason === 'imported_credential' && !action.needsTest)
+        importResults.value[action.id] = '凭据可在保存后迁移；访问状态保持未批准。'
+    }
     importing.value = true
   } catch (e) {
     if (revision === generation)
@@ -77,6 +124,7 @@ async function chooseFile(event: Event) {
         importErrors[(e as Error).message] ?? '无法读取此配置文件。请检查文件格式、版本及配置内容。'
   } finally {
     working.value = false
+    importProgress.value = ''
   }
 }
 function skipSource(id: string) {
@@ -98,9 +146,79 @@ function symbols(id: string) {
     ? values.map(({ market, symbol }) => ({ market, symbol }))
     : [{ market: 'US', symbol: 'QQQM' }]
 }
-function applyImport() {
+function importSourceName(id: string) {
+  const source = plan.value?.config.integrations.find((item) => item.id === id)
+  return (source && integrationPreset(source)?.name) || id
+}
+async function applyImport() {
   if (!plan.value || !canApply.value) return
   const prepared = plan.value
+  const actions = planImportCredentialTests(prepared.config.integrations, props.baseline).filter(
+    (item) => {
+      const proof = prepared.config.integrations.find((s) => s.id === item.id)?.connectionProof
+      return item.needsTest && (!proof || Number(proof.split('.')[0]) <= clock.value)
+    },
+  )
+  if (actions.length) {
+    const revision = generation
+    working.value = true
+    try {
+      for (const [index, action] of actions.entries()) {
+        if (revision !== generation || !plan.value) return
+        const source = prepared.config.integrations.find((item) => item.id === action.id)!
+        importProgress.value = `正在验证来源 ${index + 1} / ${actions.length}：${integrationPreset(source)?.name ?? source.id}`
+        const { identityCredential: _identity, connectionProof: _proof, ...draft } = source
+        const submitted = canonical(draft)
+        let proof: string | undefined
+        let reason = 'TEST_UNAVAILABLE'
+        try {
+          const csrf = await $fetch<CsrfDto>('/api/auth/csrf')
+          const response = await $fetch<ProbeResult>(
+            `/api/admin/integrations/${encodeURIComponent(source.id)}/test`,
+            {
+              method: 'POST',
+              headers: { 'X-Nozoki-CSRF': csrf.token },
+              timeout: 30000,
+              body: {
+                draft,
+                expectedVersion: props.baseline.site.configVersion,
+                quoteSymbols: symbols(source.id),
+              },
+            },
+          )
+          proof = response.connectionProof
+          reason = response.code ?? 'TEST_FAILED'
+        } catch (e) {
+          const code = (e as { data?: { code?: string } }).data?.code
+          reason = code && /^[A-Z_]{1,48}$/.test(code) ? code : 'TEST_UNAVAILABLE'
+        }
+        if (revision !== generation || !plan.value) return
+        const position = prepared.config.integrations.findIndex((item) => item.id === action.id)
+        if (position < 0) continue
+        const {
+          identityCredential: _currentIdentity,
+          connectionProof: _currentProof,
+          ...currentDraft
+        } = prepared.config.integrations[position]!
+        if (canonical(currentDraft) !== submitted) {
+          importResults.value[action.id] = '配置已变更，请重新验证。'
+          continue
+        }
+        prepared.config.integrations[position] = applyImportCredentialTest(source, {
+          proof,
+          reason,
+        })
+        importOutcomes.value[action.id] = { proof }
+        importResults.value[action.id] = proof
+          ? '凭据验证通过，保存后迁移；访问尚未批准。'
+          : `凭据未迁移：${testFailureReasons[reason] ?? '测试未通过'}`
+      }
+    } finally {
+      working.value = false
+      importProgress.value = ''
+    }
+    return
+  }
   plan.value = null
   emit('apply', prepared, 'import')
   importing.value = false
@@ -123,7 +241,9 @@ async function download() {
   working.value = true
   error.value = ''
   try {
-    const backup = await $fetch<ConfigBackup>('/api/admin/data/export')
+    const backup = await $fetch<ConfigBackup>('/api/admin/data/export', {
+      query: includeCredentials.value ? { credentials: '1' } : undefined,
+    })
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }),
     )
@@ -134,8 +254,11 @@ async function download() {
     link.click()
     link.remove()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
-  } catch {
-    error.value = '导出失败，请确认登录状态后重试；配置变化时请重新导出。'
+  } catch (e) {
+    error.value =
+      (e as { data?: { code?: string } }).data?.code === 'CREDENTIAL_DECRYPT_FAILED'
+        ? '无法解密全部来源凭据，请检查此部署的密钥环后重试。'
+        : '导出失败，请确认登录状态后重试；配置变化时请重新导出。'
   } finally {
     working.value = false
   }
@@ -145,7 +268,11 @@ async function download() {
   <div class="data-management">
     <section class="data-management-card">
       <h3><CommonAppIcon name="FileDownloadRound" />数据导出</h3>
-      <p>导出已保存的共享配置和上传的背景，不含凭据与采集历史。文件含服务地址和权限设置。</p>
+      <p>导出已保存的共享配置和上传的背景，不含采集历史。文件含服务地址和权限设置。</p>
+      <VarCheckbox v-model="includeCredentials">包含凭据（明文，迁移用）</VarCheckbox>
+      <p v-if="includeCredentials" class="source-warning">
+        文件含明文机密，请妥善保管并在导入完成后删除。
+      </p>
       <VarButton type="primary" tonal :loading="working" :disabled="working" @click="download"
         >导出配置</VarButton
       >
@@ -174,15 +301,17 @@ async function download() {
       >
     </section>
     <p v-if="error" role="alert" class="source-warning">{{ error }}</p>
+    <p v-if="importProgress" role="status">{{ importProgress }}</p>
     <AdminSourceDialog
       v-model:show="importing"
       title="导入配置预览"
-      confirm="导入到草稿"
+      :confirm="pendingCredentialTests ? '验证并继续' : '导入到草稿'"
       :blocked="!canApply"
       @confirm="applyImport"
       @closed="wipe"
     >
       <template v-if="plan">
+        <p v-if="importProgress" role="status">{{ importProgress }}</p>
         <p>站点：{{ plan.config.site.siteName }}</p>
         <p>
           {{ plan.config.modules.length }} 个模块 · {{ plan.config.links.length }} 个链接 ·
@@ -196,7 +325,13 @@ async function download() {
           {{ plan.restrictedModules.join('、') }} 设为仅管理员可见，请在保存后检查权限。
         </p>
         <p v-if="dirty" class="source-warning">导入将替换当前未保存修改。</p>
-        <p v-if="tests.length">请先验证以下来源，或选择暂不导入。新目标需重新填写凭据。</p>
+        <p v-if="importSummary.passed || importSummary.failed" role="status">
+          验证通过 {{ importSummary.passed }} 项 · 凭据未迁移 {{ importSummary.failed }} 项
+        </p>
+        <p v-for="(message, id) in importResults" :key="id" role="status">
+          {{ importSourceName(id) }}：{{ message }}
+        </p>
+        <p v-if="tests.length">请先验证以下来源，或选择暂不导入。</p>
         <section v-for="source in tests" :key="source.id" class="data-import-source">
           <h3>{{ integrationPreset(source)?.name ?? '旧来源' }}</h3>
           <AdminIntegrationEditor

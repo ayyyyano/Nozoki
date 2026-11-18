@@ -209,7 +209,7 @@ test(
     assert.ok(!stored.includes('synthetic-balance-key'))
     assert.ok(!JSON.stringify(admin).includes('synthetic-balance-key'))
     guest = await (await app.fetch(origin + '/api/dashboard')).json()
-    assert.equal(guest.modules.find((m) => m.id === 'deepseek').kind, 'login_required')
+    assert.deepEqual(guest.modules.find((m) => m.id === 'deepseek').snapshot.data, { masked: true })
     const before = outgoing.length
     assert.equal((await app.fetch(origin + '/collect')).status, 404)
     assert.equal((await app.fetch(origin + '/cdn-cgi/handler/scheduled')).status, 404)

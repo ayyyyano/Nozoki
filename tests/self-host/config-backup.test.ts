@@ -11,7 +11,9 @@ import { saveAdminConfig } from '../../server/services/admin-config.ts'
 import { exportConfigBackup } from '../../server/services/config-backup.ts'
 import { authSettings } from '../../server/services/auth-settings.ts'
 import { randomToken } from '../../server/services/auth-crypto.ts'
-import { importCredentialKey } from '../../server/services/credentials.ts'
+import { decryptCredential, importCredentialKey } from '../../server/services/credentials.ts'
+import { readStoredState } from '../../server/repositories/config.ts'
+import { collectionPlans } from '../../server/collection/plans.ts'
 import { editableConfig } from '../../shared/contracts/admin.ts'
 import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
 import { globalDefaultConfig, prepareConfigImport } from '../../shared/domain/config-backup.ts'
@@ -21,6 +23,82 @@ import {
   decodeBackgroundImage,
   backgroundImageHash,
 } from '../../shared/contracts/background-image.ts'
+
+test('portable credentials migrate between independent encryption keys', async () => {
+  const directory = await mkdtemp(resolve('.wrangler/config-backup-'))
+  const a = new SqliteDatabase(resolve(directory, 'a.sqlite'))
+  const b = new SqliteDatabase(resolve(directory, 'b.sqlite'))
+  try {
+    await migrateDatabase(a, 'migrations', resolve(directory, 'backups-a'))
+    await migrateDatabase(b, 'migrations', resolve(directory, 'backups-b'))
+    const secretA = randomToken(),
+      secretB = randomToken()
+    const keysA = await importCredentialKey('a', Buffer.from(secretA, 'base64url'))
+    const keysB = await importCredentialKey('b', Buffer.from(secretB, 'base64url'))
+    const baseA = await readConfig(a)
+    const config = editableConfig(baseA)
+    const source = createIntegrationDraft('cliproxy', config.integrations, 'fixture')
+    source.baseUrl = 'https://fixture.example.com/'
+    source.credential = { operation: 'replace', value: 'synthetic-secret' }
+    config.integrations.push(source)
+    assert.equal(
+      (
+        await saveConfig(
+          a,
+          { expectedVersion: baseA.site.configVersion, config },
+          { actor: { kind: 'system' }, keys: keysA },
+        )
+      ).success,
+      true,
+    )
+    const env = { INTEGRATION_ENCRYPTION_KEY: secretA, INTEGRATION_KEY_VERSION: 'a' }
+    const ordinary = await exportConfigBackup(a)
+    assert.ok(!JSON.stringify(ordinary).includes('synthetic-secret'))
+    await assert.rejects(
+      exportConfigBackup(a, { includeCredentials: true }),
+      /CREDENTIAL_DECRYPT_FAILED/,
+    )
+    const backup = await exportConfigBackup(a, { includeCredentials: true }, env)
+    const incoming = await prepareConfigImport(JSON.stringify(backup), await readConfig(b))
+    assert.equal(
+      (
+        await saveConfig(
+          b,
+          { expectedVersion: incoming.config.site.configVersion, config: incoming.config },
+          { actor: { kind: 'system' }, keys: keysB },
+        )
+      ).success,
+      true,
+    )
+    const storedA = (await readStoredState(a)).integrations.find(
+      (i) => i.settings.id === source.id,
+    )!
+    const storedB = (await readStoredState(b)).integrations.find(
+      (i) => i.settings.id === source.id,
+    )!
+    assert.equal(
+      await decryptCredential(source.id, source.provider, storedB.envelope, keysB),
+      'synthetic-secret',
+    )
+    assert.equal(
+      await decryptCredential(
+        source.id,
+        source.provider + ':identity',
+        storedA.identityEnvelope,
+        keysA,
+      ),
+      await decryptCredential(
+        source.id,
+        source.provider + ':identity',
+        storedB.identityEnvelope,
+        keysB,
+      ),
+    )
+  } finally {
+    a.close()
+    b.close()
+  }
+})
 
 test('configuration export, import and reset retain ciphertext/history and remain fenced by CAS and probe approval', async () => {
   const directory = await mkdtemp(resolve('.wrangler/config-backup-'))
@@ -160,6 +238,26 @@ test('configuration export, import and reset retain ciphertext/history and remai
       'SOURCE_TEST_REQUIRED',
     )
     assert.deepEqual(await readConfig(db), latest)
+    added.access.approved = false
+    added.access.approvedTarget = null
+    assert.equal(
+      (
+        await saveAdminConfig(
+          db,
+          { expectedVersion: latest.site.configVersion, config: incoming.config },
+          randomUUID(),
+          session,
+          env,
+        )
+      ).success,
+      true,
+    )
+    const state = await readStoredState(db)
+    assert.equal(state.integrations.find((i) => i.settings.id === sleepy.id)?.envelope, null)
+    assert.equal(
+      collectionPlans(state).some((p) => p.source.id === sleepy.id),
+      false,
+    )
   } finally {
     db.close()
   }

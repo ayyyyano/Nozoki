@@ -11,6 +11,7 @@ import {
   globalDefaultConfig,
 } from '../../shared/domain/config-backup.ts'
 import { BACKUP_FILE_LIMIT } from '../../shared/contracts/config-backup.ts'
+import { ConfigBackupSchema } from '../../shared/contracts/config-backup.ts'
 import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
 import { requiresSourceTest } from '../../shared/integration-presets/connection.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
@@ -39,6 +40,26 @@ function add(config: Config, kind: string) {
   config.integrations.push(source)
   return source
 }
+test('optional portable credentials are validated and become import operations', async () => {
+  const config = createDefaultConfig()
+  const source = add(config, 'cliproxy')
+  const identity = 'a'.repeat(43)
+  const backup = createConfigBackup(
+    config,
+    undefined,
+    new Date(),
+    new Map([[source.id, { credentialPlain: 'fixture-secret', identityPlain: identity }]]),
+  )
+  const imported = await prepareConfigImport(JSON.stringify(backup), createDefaultConfig())
+  const item = imported.config.integrations.find((s) => s.id === source.id)!
+  assert.deepEqual(item.credential, { operation: 'replace', value: 'fixture-secret' })
+  assert.deepEqual(item.identityCredential, { operation: 'import', value: identity })
+  assert.equal(item.access?.mode === 'public' && item.access.approved, false)
+  assert.equal('credentialPlain' in item, false)
+  assert.equal('identityPlain' in item, false)
+  backup.config.integrations.find((s) => s.id === source.id)!.identityPlain = 'invalid'
+  assert.equal(ConfigBackupSchema.safeParse(backup).success, false)
+})
 test('backup is versioned, allowlisted, and never includes credential state, approval or capabilities', async () => {
   const config = createDefaultConfig()
   add(config, 'deepseek')
@@ -68,7 +89,7 @@ test('backup is versioned, allowlisted, and never includes credential state, app
     ),
   )
 })
-test('new source imports require testing and conservatively reset instance-specific permissions', async () => {
+test('new unapproved source imports reset instance-specific permissions', async () => {
   const exported = createDefaultConfig()
   const source = add(exported, 'sleepy')
   source.id = 'old-sleepy'
@@ -86,7 +107,7 @@ test('new source imports require testing and conservatively reset instance-speci
   const next = plan.config.integrations.find((s) => s.provider === 'sleepy')!
   assert.equal(next.id, 'sleepy')
   assert.equal(next.access?.mode === 'public' && next.access.approved, false)
-  assert.equal(requiresSourceTest(next), true)
+  assert.equal(requiresSourceTest(next), false)
   const devices = plan.config.modules.find((m) => m.id === 'devices')!
   assert.equal(devices.visibility, 'admin')
   assert.deepEqual(devices.fields, {
@@ -108,7 +129,7 @@ test('address changes cannot inherit authorization or a saved secret; omitted so
   const changed = plan.config.integrations.find((s) => s.id === sleepy.id)!
   assert.equal(changed.credential.operation, 'clear')
   assert.equal(changed.access?.mode === 'public' && changed.access.approved, false)
-  assert.equal(requiresSourceTest(changed, sleepy), true)
+  assert.equal(requiresSourceTest(changed, sleepy), false)
   assert.equal(sleepy.baseUrl, 'https://fixture.example.com/')
 })
 

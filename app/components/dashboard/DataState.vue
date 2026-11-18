@@ -35,7 +35,15 @@ const notes: Partial<Record<DataStatus, string>> = {
       (status !== 'stale' && (status !== 'ok' || empty) && !(hasData && summaryStatus(status)))
     "
     class="data-state"
-    :class="{ compact }"
+    :class="{
+      compact,
+      'data-state--waiting':
+        !loading &&
+        status === 'unconfigured' &&
+        configured &&
+        errorCode !== 'SOURCE_DISABLED' &&
+        errorCode !== 'NOT_CONFIGURED',
+    }"
     :data-status="status"
     role="status"
     :aria-busy="loading"
@@ -49,7 +57,7 @@ const notes: Partial<Record<DataStatus, string>> = {
             : status === 'unconfigured' && configured
               ? errorCode === 'NOT_CONFIGURED'
                 ? '来源配置尚未完成'
-                : '数据更新已排队，等待采集结果'
+                : '等待采集'
               : labels[status]
       }}</span
       ><small v-if="!compact && notes[status]">{{ notes[status] }}</small

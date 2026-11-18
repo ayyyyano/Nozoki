@@ -30,6 +30,7 @@ export function createConfigBackup(
   config: Config,
   backgroundImage?: string,
   now = new Date(),
+  credentials?: ReadonlyMap<string, { credentialPlain?: string; identityPlain?: string }>,
 ): ConfigBackup {
   const { configVersion: _version, ...site } = config.site
   return ConfigBackupSchema.parse({
@@ -47,6 +48,7 @@ export function createConfigBackup(
         enabled: source.enabled,
         refreshInterval: source.refreshInterval,
         fieldMappings: source.fieldMappings,
+        ...credentials?.get(source.id),
       })),
     },
     ...(backgroundImage !== undefined ? { backgroundImage } : {}),
@@ -67,7 +69,8 @@ export async function prepareConfigImport(
   const sources = imported.integrations.map((item): IntegrationDraft => {
     if (used.has(item.id)) throw new Error('BACKUP_DUPLICATE_SOURCE')
     used.add(item.id)
-    const preset = integrationPreset(item)
+    const { credentialPlain, identityPlain, ...portable } = item
+    const preset = integrationPreset(portable)
     const old =
       baseline.integrations.find(
         (s) =>
@@ -76,12 +79,14 @@ export async function prepareConfigImport(
           s.protocolVersion === item.protocolVersion,
       ) ?? baseline.integrations.find((s) => preset && integrationPreset(s)?.id === preset.id)
     const id = old?.id ?? preset?.id ?? item.id
+    if (identityPlain && (id !== item.id || old?.identityConfigured))
+      throw new Error('BACKUP_IDENTITY_CONFLICT')
     remap.set(item.id, id)
     const original = oldDraft.integrations.find((s) => s.id === old?.id)
     if (!preset) {
       if (
         !original ||
-        canonical({ ...item, id }) !==
+        canonical({ ...portable, id }) !==
           canonical({
             id: original.id,
             provider: original.provider,
@@ -93,10 +98,11 @@ export async function prepareConfigImport(
           })
       )
         throw new Error('BACKUP_UNSUPPORTED_SOURCE')
+      if (credentialPlain || identityPlain) throw new Error('BACKUP_UNSUPPORTED_SOURCE')
       return original
     }
     const next: IntegrationDraft = {
-      ...item,
+      ...portable,
       id,
       capabilities: old?.capabilities ?? {},
       credential: { operation: 'keep' },
@@ -116,6 +122,13 @@ export async function prepareConfigImport(
       next.credential = { operation: 'clear' }
       changed.add(id)
     }
+    if (credentialPlain !== undefined) {
+      next.credential = { operation: 'replace', value: credentialPlain }
+      if (next.access?.mode === 'public')
+        next.access = { ...next.access, approved: false, approvedTarget: null }
+    }
+    if (identityPlain !== undefined)
+      next.identityCredential = { operation: 'import', value: identityPlain }
     const issue = integrationWriteIssue(
       next,
       baseline.integrations.find((s) => s.id === id),

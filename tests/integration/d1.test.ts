@@ -447,8 +447,8 @@ test('phase 02 uses real local workerd D1, not an SQLite mock', async (t) => {
       ])
         assert.ok(!wire.includes(value), value)
       const hint = result.modules.find((m) => m.id === 'deepseek')
-      assert.deepEqual(Object.keys(hint).sort(), ['id', 'kind', 'sortOrder', 'title'])
-      assert.equal(hint.kind, 'login_required')
+      assert.equal(hint.kind, 'data')
+      assert.deepEqual(hint.snapshot.data, { masked: true })
       assert.ok(!result.modules.some((m) => m.id === 'services' || m.id === 'codex'))
       assert.deepEqual(result.summary, {})
       const old = result.configVersion

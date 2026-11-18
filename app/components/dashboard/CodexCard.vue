@@ -53,6 +53,14 @@ const details = computed(
     :has-data="home.length > 0"
   >
     <DashboardDataState
+      v-if="
+        !(
+          snapshot.status === 'unconfigured' &&
+          snapshot.sourceConfigured &&
+          snapshot.errorCode !== 'SOURCE_DISABLED' &&
+          snapshot.errorCode !== 'NOT_CONFIGURED'
+        )
+      "
       :configured="snapshot.sourceConfigured"
       :error-code="snapshot.errorCode"
       :status="snapshot.status"

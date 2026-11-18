@@ -13,7 +13,7 @@ import { MODULE_IDS } from './dashboard.ts'
 
 const fields = IntegrationWriteSchema.shape
 const { configVersion: _version, ...siteFields } = SiteSettingsSchema.shape
-// Approval, capabilities, secrets and transport instructions are never trusted from a backup.
+// Approval, capabilities and transport instructions are never trusted from a backup.
 export const BackupSourceSchema = z.strictObject({
   id: fields.id,
   provider: fields.provider,
@@ -22,6 +22,8 @@ export const BackupSourceSchema = z.strictObject({
   enabled: fields.enabled,
   refreshInterval: fields.refreshInterval,
   fieldMappings: fields.fieldMappings,
+  credentialPlain: fields.credential.options[2].shape.value.optional(),
+  identityPlain: fields.identityCredential.unwrap().shape.value.optional(),
 })
 export const ConfigBackupSchema = z.strictObject({
   format: z.literal('nozoki-config'),

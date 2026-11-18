@@ -15,6 +15,14 @@ export function sourceConnection(source: Draft | IntegrationSettings) {
   ])
 }
 export function requiresSourceTest(next: Draft, old?: IntegrationSettings) {
+  // An unapproved source with no credential cannot collect; it can be saved for later setup.
+  if (
+    next.credential.operation === 'clear' &&
+    next.access &&
+    next.access.mode !== 'legacy' &&
+    !next.access.approved
+  )
+    return false
   try {
     if (!old || sourceConnection(next) !== sourceConnection(old)) return true
   } catch {

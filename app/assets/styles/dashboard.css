@@ -379,6 +379,14 @@ p {
   min-height: 44px;
   text-align: center;
 }
+.module-card > .module-body:has(> .data-state--waiting) {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
 .module-login-required .module-body > a {
   display: grid;
   min-height: 44px;

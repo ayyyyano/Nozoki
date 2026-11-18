@@ -10,6 +10,8 @@ import { SqliteDatabase } from '../../platform/node/sqlite.mjs'
 import { readConfig, saveConfig } from '../../server/services/config.ts'
 import { editableConfig, CONFIG_BODY_LIMIT } from '../../shared/contracts/admin.ts'
 import { bindSources } from '../../shared/integration-presets/bindings.ts'
+import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
+import { importCredentialKey } from '../../server/services/credentials.ts'
 
 async function portNumber() {
   const server = createServer()
@@ -290,6 +292,65 @@ test(
         const db = new SqliteDatabase(backup)
         try {
           assert.equal((await readConfig(db)).site.siteName, saved.site.siteName)
+        } finally {
+          db.close()
+        }
+      },
+    )
+    await t.test(
+      'configuration export only includes secrets on explicit request and fails closed',
+      async () => {
+        const db = new SqliteDatabase(env.NOZOKI_SQLITE_PATH)
+        try {
+          const current = await readConfig(db)
+          const config = editableConfig(current)
+          const source = createIntegrationDraft('deepseek', config.integrations, 'export-fixture')
+          source.enabled = false
+          source.credential = { operation: 'replace', value: 'synthetic-export-secret' }
+          config.integrations.push(source)
+          const keys = await importCredentialKey(
+            'v1',
+            Buffer.from(env.INTEGRATION_ENCRYPTION_KEY, 'base64url'),
+          )
+          assert.equal(
+            (
+              await saveConfig(
+                db,
+                { config, expectedVersion: current.site.configVersion },
+                { actor: { kind: 'system' }, keys },
+              )
+            ).success,
+            true,
+          )
+          const ordinary = await fetchJson('/api/admin/data/export', {
+            headers: { Cookie: cookie },
+          })
+          assert.match(ordinary.response.headers.get('cache-control'), /no-store/)
+          assert.ok(!JSON.stringify(ordinary.value).includes('synthetic-export-secret'))
+          const portable = await fetchJson('/api/admin/data/export?credentials=1', {
+            headers: { Cookie: cookie },
+          })
+          assert.equal(portable.response.status, 200)
+          assert.equal(
+            portable.value.config.integrations.find((i) => i.id === source.id).credentialPlain,
+            'synthetic-export-secret',
+          )
+          assert.match(portable.response.headers.get('cache-control'), /no-store/)
+          await db
+            .prepare('UPDATE integrations SET credential_key_version=? WHERE id=?')
+            .bind('missing', source.id)
+            .run()
+          const failed = await fetchJson('/api/admin/data/export?credentials=1', {
+            headers: { Cookie: cookie },
+          })
+          assert.equal(failed.response.status, 500)
+          assert.equal(failed.value.code, 'CREDENTIAL_DECRYPT_FAILED')
+          assert.ok(!JSON.stringify(failed.value).includes('synthetic-export-secret'))
+          assert.equal(failed.response.headers.get('content-disposition'), null)
+          await db
+            .prepare('UPDATE integrations SET credential_key_version=? WHERE id=?')
+            .bind('v1', source.id)
+            .run()
         } finally {
           db.close()
         }

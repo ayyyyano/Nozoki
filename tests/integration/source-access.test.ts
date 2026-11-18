@@ -670,6 +670,7 @@ test(
         .first()
     ).identity_envelope_json
     assert.ok(identity)
+    await collector.fetch(origin + '/collect')
     await expect
       .poll(
         async () =>
@@ -698,6 +699,7 @@ test(
     }
     await prove(value, ['codex-fixture'])
     assert.equal((await save(value)).status, 200)
+    await collector.fetch(origin + '/collect')
     assert.equal(
       (
         await db

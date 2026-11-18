@@ -50,7 +50,31 @@ export async function exerciseDataManagement(page, { request, input, save, evide
   await page.keyboard.press('Escape')
   await expect(preview).toBeHidden()
   assert.deepEqual(await input(), initial)
-  // A new imported source cannot enter the draft before a real protocol probe succeeds.
+  const credentialBackup = structuredClone(backup)
+  const deepseek = createIntegrationDraft('deepseek', [], 'fixture')
+  const cliproxy = createIntegrationDraft('cliproxy', [], 'fixture')
+  for (const [source, baseUrl] of [
+    [deepseek, deepseek.baseUrl],
+    [cliproxy, 'https://blocked.example.com/'],
+  ]) {
+    const { credential: _c, access: _a, capabilities: _caps, ...portableSource } = source
+    credentialBackup.config.integrations.push({
+      ...portableSource,
+      enabled: true,
+      baseUrl,
+      credentialPlain: 'synthetic-import-key',
+    })
+  }
+  await choose(credentialBackup)
+  await expect(preview).toBeVisible()
+  await preview.getByRole('button', { name: '验证并继续', exact: true }).click()
+  await expect(preview).toContainText('凭据验证通过')
+  await expect(preview).toContainText('凭据未迁移')
+  await expect(preview.getByRole('button', { name: '导入到草稿', exact: true })).toBeEnabled()
+  await page.keyboard.press('Escape')
+  await expect(preview).toBeHidden()
+  assert.deepEqual(await input(), initial)
+  // A new source with cleared credentials remains unapproved until separately tested.
   const sleepy = createIntegrationDraft('sleepy', [], 'fixture')
   const {
     credential: _credential,
@@ -65,9 +89,6 @@ export async function exerciseDataManagement(page, { request, input, save, evide
     baseUrl: 'https://imported.example.com/',
   })
   await choose(backup)
-  await expect(preview.getByRole('button', { name: '导入到草稿', exact: true })).toBeDisabled()
-  await preview.getByRole('button', { name: '测试并批准', exact: true }).click()
-  await expect(preview.locator('[data-test-status="ok"]')).toBeVisible()
   await expect(preview.getByRole('button', { name: '导入到草稿', exact: true })).toBeEnabled()
   await preview.getByRole('button', { name: '导入到草稿', exact: true }).click()
   await expect(preview).toBeHidden()
