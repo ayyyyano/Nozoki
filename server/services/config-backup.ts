@@ -10,10 +10,11 @@ import { DataLayerError } from '../types/database.ts'
 import { readStoredState } from '../repositories/config.ts'
 import { credentialKeys } from './credential-keys.ts'
 import { decryptCredential } from './credentials.ts'
+import type { BackupHistory } from '../../shared/contracts/config-backup.ts'
 
 export async function exportConfigBackup(
   db: Database,
-  options: { includeCredentials?: boolean } = {},
+  options: { includeCredentials?: boolean; includeHistory?: boolean } = {},
   env: Record<string, unknown> = {},
 ) {
   const state = await readStoredState(db)
@@ -73,5 +74,95 @@ export async function exportConfigBackup(
   }
   if ((await readConfig(db)).site.configVersion !== config.site.configVersion)
     throw new AuthError(409, 'CONFIG_CONFLICT')
-  return createConfigBackup(config, image, undefined, credentials)
+  const history = options.includeHistory ? await readCollectedHistory(db) : undefined
+  return createConfigBackup(config, image, undefined, credentials, history)
+}
+
+/** Aggregated, non-secret history rows only; raw snapshots and credentials never join the archive. */
+async function readCollectedHistory(db: Database): Promise<BackupHistory> {
+  const balances = (
+    await db
+      .prepare(
+        'SELECT source_id,series_revision,currency,observed_at,collected_at,total,granted,topped_up FROM balance_observations ORDER BY collected_at LIMIT 20000',
+      )
+      .all()
+  ).results as {
+    source_id: string
+    series_revision: string
+    currency: string
+    observed_at: string | null
+    collected_at: string
+    total: string
+    granted: string
+    topped_up: string
+  }[]
+  const usage = (
+    await db
+      .prepare(
+        'SELECT source_id,day,timezone,currency,dimension,amount,updated_at FROM daily_usage ORDER BY day LIMIT 20000',
+      )
+      .all()
+  ).results as {
+    source_id: string
+    day: string
+    timezone: string
+    currency: string
+    dimension: string
+    amount: string
+    updated_at: string
+  }[]
+  const codex = (
+    await db
+      .prepare(
+        'SELECT source_id,day,input,output,reasoning,cached,total,requests,failed,updated_at FROM codex_usage_days ORDER BY day LIMIT 20000',
+      )
+      .all()
+  ).results as {
+    source_id: string
+    day: string
+    input: number
+    output: number
+    reasoning: number
+    cached: number
+    total: number
+    requests: number
+    failed: number
+    updated_at: string
+  }[]
+  if (balances.length >= 20000 || usage.length >= 20000 || codex.length >= 20000)
+    throw new DataLayerError('CONFIG_BASELINE_INVALID')
+  return {
+    exportedAt: new Date().toISOString(),
+    balanceObservations: balances.map((r) => ({
+      sourceId: r.source_id,
+      seriesRevision: r.series_revision,
+      currency: r.currency,
+      observedAt: r.observed_at,
+      collectedAt: r.collected_at,
+      total: r.total,
+      granted: r.granted,
+      toppedUp: r.topped_up,
+    })),
+    dailyUsage: usage.map((r) => ({
+      sourceId: r.source_id,
+      day: r.day,
+      timezone: r.timezone,
+      currency: r.currency,
+      dimension: r.dimension,
+      amount: r.amount,
+      updatedAt: r.updated_at,
+    })),
+    codexUsageDays: codex.map((r) => ({
+      sourceId: r.source_id,
+      day: r.day,
+      input: r.input,
+      output: r.output,
+      reasoning: r.reasoning,
+      cached: r.cached,
+      total: r.total,
+      requests: r.requests,
+      failed: r.failed,
+      updatedAt: r.updated_at,
+    })),
+  }
 }

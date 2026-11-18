@@ -100,7 +100,7 @@ test('portable credentials migrate between independent encryption keys', async (
   }
 })
 
-test('configuration export, import and reset retain ciphertext/history and remain fenced by CAS and probe approval', async () => {
+test('configuration export, import and the destructive reset clear ciphertext/history and remain fenced by CAS and probe approval', async () => {
   const directory = await mkdtemp(resolve('.wrangler/config-backup-'))
   const db = new SqliteDatabase(resolve(directory, 'test.sqlite'))
   try {
@@ -186,7 +186,11 @@ test('configuration export, import and reset retain ciphertext/history and remai
     )
     const current = await readConfig(db)
     const reset = globalDefaultConfig(current)
-    const resetRequest = { expectedVersion: current.site.configVersion, config: reset }
+    const resetRequest = {
+      expectedVersion: current.site.configVersion,
+      config: reset,
+      purgeCollectedData: true as const,
+    }
     await db
       .prepare(
         "CREATE TRIGGER fail_reset BEFORE INSERT ON integration_audit WHEN NEW.actor_kind='admin' BEGIN SELECT RAISE(ABORT,'fixture rollback'); END",
@@ -203,7 +207,8 @@ test('configuration export, import and reset retain ciphertext/history and remai
       true,
     )
     assert.equal((await readConfig(db)).site.siteName, 'Nozoki')
-    assert.equal((await db.prepare('SELECT count(*) n FROM balance_observations').first()).n, 1)
+    // The destructive reset clears collected history and the source's stored credential.
+    assert.equal((await db.prepare('SELECT count(*) n FROM balance_observations').first()).n, 0)
     assert.equal((await db.prepare('SELECT count(*) n FROM site_background_images').first()).n, 0)
     assert.equal(
       (
@@ -212,7 +217,7 @@ test('configuration export, import and reset retain ciphertext/history and remai
           .bind(source.id)
           .first()
       ).credential_ciphertext,
-      ciphertext,
+      null,
     )
     const latest = await readConfig(db)
     const file = await exportConfigBackup(db)

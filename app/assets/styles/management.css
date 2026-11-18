@@ -1056,6 +1056,11 @@
   flex-wrap: wrap;
   gap: 8px 16px;
 }
+.data-purge-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--color-on-surface-variant);
+}
 .admin-list-item > header {
   gap: clamp(2px, 1.4vw, 12px);
 }

@@ -1,6 +1,8 @@
 import {
   ConfigBackupSchema,
   BACKUP_FILE_LIMIT,
+  BACKUP_HISTORY_FILE_LIMIT,
+  type BackupHistory,
   type ConfigBackup,
 } from '../contracts/config-backup.ts'
 import {
@@ -31,6 +33,7 @@ export function createConfigBackup(
   backgroundImage?: string,
   now = new Date(),
   credentials?: ReadonlyMap<string, { credentialPlain?: string; identityPlain?: string }>,
+  history?: BackupHistory,
 ): ConfigBackup {
   const { configVersion: _version, ...site } = config.site
   return ConfigBackupSchema.parse({
@@ -52,6 +55,7 @@ export function createConfigBackup(
       })),
     },
     ...(backgroundImage !== undefined ? { backgroundImage } : {}),
+    ...(history !== undefined ? { history } : {}),
   })
 }
 /** This parser never performs network requests or grants access to an imported address. */
@@ -59,8 +63,12 @@ export async function prepareConfigImport(
   text: string,
   baseline: Config,
 ): Promise<ConfigImportPlan> {
-  if (new TextEncoder().encode(text).length > BACKUP_FILE_LIMIT) throw new Error('BACKUP_TOO_LARGE')
-  const backup = ConfigBackupSchema.parse(JSON.parse(text))
+  if (new TextEncoder().encode(text).length > BACKUP_HISTORY_FILE_LIMIT)
+    throw new Error('BACKUP_TOO_LARGE')
+  const parsed = JSON.parse(text)
+  if (parsed && typeof parsed === 'object' && 'history' in (parsed as Record<string, unknown>))
+    throw new Error('BACKUP_HISTORY_NOT_IMPORTABLE')
+  const backup = ConfigBackupSchema.parse(parsed)
   const oldDraft = editableConfig(baseline)
   const imported = backup.config
   const remap = new Map<string, string>()
@@ -212,7 +220,8 @@ export async function prepareConfigImport(
     throw new Error('BACKUP_TOO_LARGE')
   return { config, backgroundUpload, retainedSources: retained.length, restrictedModules }
 }
-/** Restore UI defaults without deleting source identities, secrets, protected history or sessions. */
+/** Restore UI defaults. The destructive reset clears source credentials and identity keys;
+ * non-default sources are disabled. Login sessions and the collection schedule are untouched. */
 export function globalDefaultConfig(baseline: Config): ConfigWrite {
   const defaults = editableConfig(createDefaultConfig())
   defaults.site.configVersion = baseline.site.configVersion
@@ -222,6 +231,8 @@ export function globalDefaultConfig(baseline: Config): ConfigWrite {
       integrationPreset(source)?.id === 'tencent' &&
       source.access?.mode === 'public' &&
       source.access.approved,
+    credential: { operation: 'clear' as const },
+    identityCredential: undefined,
   }))
   return ConfigWriteSchema.parse(bindSources(defaults))
 }

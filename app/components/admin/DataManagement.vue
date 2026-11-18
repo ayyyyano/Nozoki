@@ -4,7 +4,14 @@ import type { Config } from '../../../shared/contracts/config'
 import type { ConfigBackup } from '../../../shared/contracts/config-backup'
 import type { CsrfDto } from '../../../shared/contracts/auth'
 import type { ProbeResult } from '../../../shared/contracts/adapter'
-import { BACKUP_FILE_LIMIT } from '../../../shared/contracts/config-backup'
+import { BACKUP_HISTORY_FILE_LIMIT } from '../../../shared/contracts/config-backup'
+type CollectedHistoryCounts = {
+  balanceObservations: number
+  dailyUsage: number
+  codexUsageDays: number
+  collectionRuns: number
+  snapshotViews: number
+}
 import {
   prepareConfigImport,
   globalDefaultConfig,
@@ -23,9 +30,9 @@ const props = defineProps<{ baseline: Config; disabled: boolean; dirty: boolean 
 const emit = defineEmits<{ apply: [ConfigImportPlan, 'import' | 'reset'] }>()
 const fileInput = useTemplateRef<HTMLInputElement>('fileInput')
 const importing = ref(false),
-  resetting = ref(false),
   working = ref(false)
 const includeCredentials = ref(false)
+const includeHistory = ref(false)
 const plan = ref<ConfigImportPlan | null>(null),
   error = ref('')
 const importResults = ref<Record<string, string>>({})
@@ -83,6 +90,7 @@ const importErrors: Record<string, string> = {
   BACKUP_DUPLICATE_SOURCE: '备份包含重复的数据源类型，请整理后重试。',
   BACKUP_UNSUPPORTED_SOURCE: '备份包含当前站点无法兼容的旧协议来源。',
   BACKUP_IDENTITY_CONFLICT: '目标来源已有身份密钥或来源标识不同，无法安全导入身份密钥。',
+  BACKUP_HISTORY_NOT_IMPORTABLE: '备份包含采集历史，仅用于归档；请使用不含历史的导出重新导入。',
 }
 const testFailureReasons: Record<string, string> = {
   AUTH_REQUIRED: '认证失败',
@@ -109,7 +117,7 @@ async function chooseFile(event: Event) {
   working.value = true
   error.value = ''
   try {
-    if (file.size > BACKUP_FILE_LIMIT) throw new Error('BACKUP_TOO_LARGE')
+    if (file.size > BACKUP_HISTORY_FILE_LIMIT) throw new Error('BACKUP_TOO_LARGE')
     const prepared = await prepareConfigImport(await file.text(), props.baseline)
     if (revision !== generation) return
     plan.value = prepared
@@ -223,8 +231,24 @@ async function applyImport() {
   emit('apply', prepared, 'import')
   importing.value = false
 }
+const resetting = ref(false)
+const resetConfirm = ref('')
+const historyCounts = ref<CollectedHistoryCounts | null>(null)
+async function openReset() {
+  if (props.disabled || working.value) return
+  resetting.value = true
+  resetConfirm.value = ''
+  try {
+    historyCounts.value = await $fetch<CollectedHistoryCounts>('/api/admin/data/history-counts', {
+      timeout: 15000,
+    })
+  } catch {
+    historyCounts.value = null
+  }
+}
+const canConfirmReset = computed(() => resetConfirm.value === '重置')
 function reset() {
-  if (props.disabled) return
+  if (props.disabled || !canConfirmReset.value) return
   emit(
     'apply',
     {
@@ -241,9 +265,10 @@ async function download() {
   working.value = true
   error.value = ''
   try {
-    const backup = await $fetch<ConfigBackup>('/api/admin/data/export', {
-      query: includeCredentials.value ? { credentials: '1' } : undefined,
-    })
+    const query: Record<string, string> = {}
+    if (includeCredentials.value) query.credentials = '1'
+    if (includeHistory.value) query.history = '1'
+    const backup = await $fetch<ConfigBackup>('/api/admin/data/export', { query })
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }),
     )
@@ -269,11 +294,15 @@ async function download() {
     <section class="data-management-card">
       <h3><CommonAppIcon name="FileDownloadRound" />数据导出</h3>
       <div class="data-export-options">
-        <p>导出配置和背景，不含采集历史。</p>
+        <p>导出配置和背景。</p>
         <VarCheckbox v-model="includeCredentials">包含凭据</VarCheckbox>
+        <VarCheckbox v-model="includeHistory">包含采集历史</VarCheckbox>
       </div>
       <p v-if="includeCredentials" class="source-warning">
         文件含明文机密，请妥善保管并在导入完成后删除。
+      </p>
+      <p v-if="includeHistory" class="admin-note">
+        采集历史仅用于归档，无法导入新部署；如需保留请在重置前导出。
       </p>
       <VarButton type="primary" tonal :loading="working" :disabled="working" @click="download"
         >导出配置</VarButton
@@ -297,8 +326,8 @@ async function download() {
     </section>
     <section class="data-management-card">
       <h3><CommonAppIcon name="restore" />重置全局默认设置</h3>
-      <p>恢复共享配置默认值，保留凭据和采集历史。</p>
-      <VarButton type="danger" tonal :disabled="disabled || working" @click="resetting = true"
+      <p>恢复共享配置默认值，并清除全部来源凭据与采集历史。</p>
+      <VarButton type="danger" tonal :disabled="disabled || working" @click="openReset"
         >恢复全局默认设置</VarButton
       >
     </section>
@@ -361,12 +390,24 @@ async function download() {
       title="恢复全局默认设置？"
       confirm="确认恢复默认"
       danger
-      :blocked="disabled"
+      :blocked="disabled || !canConfirmReset"
       @confirm="reset"
     >
       <p>恢复站点、外观、模块和行情默认值，移除自定义日程、链接和旧版高级限制，撤下已上传背景。</p>
-      <p>自建来源停用，已批准的腾讯行情恢复启用。凭据、采集历史和登录状态保留。</p>
+      <p>自建来源停用并清除其凭据；腾讯行情恢复默认。</p>
+      <p class="source-warning">将一并清除（不可恢复）：</p>
+      <ul v-if="historyCounts" class="data-purge-list">
+        <li>余额观测 {{ historyCounts.balanceObservations }} 条</li>
+        <li>每日用量 {{ historyCounts.dailyUsage }} 条</li>
+        <li>Codex 日用量 {{ historyCounts.codexUsageDays }} 条</li>
+        <li>采集记录 {{ historyCounts.collectionRuns }} 条</li>
+        <li>快照 {{ historyCounts.snapshotViews }} 份</li>
+      </ul>
+      <p v-else class="admin-note">统计暂时不可用，清除范围与上一致。</p>
+      <p>需要保留时请先返回导出「包含采集历史」的备份。</p>
       <p v-if="dirty" class="source-warning">当前未保存修改也会被替换。</p>
+      <p>输入「重置」以确认：</p>
+      <VarInput v-model="resetConfirm" placeholder="重置" aria-label="输入重置确认文字" />
       <p>确认后立即保存并生效。</p>
     </AdminSourceDialog>
   </div>

@@ -369,6 +369,8 @@ export const SaveConfigSchema = z
       .min(1)
       .max(Math.ceil(BACKGROUND_IMAGE_LIMIT / 3) * 4)
       .optional(),
+    /** Explicit opt-in for the global reset's destructive data purge. */
+    purgeCollectedData: z.literal(true).optional(),
   })
   .refine(
     (v) => v.expectedVersion === v.config.site.configVersion,

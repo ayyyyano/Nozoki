@@ -18,6 +18,7 @@ import {
 import type { Database } from '../types/database.ts'
 import { integrationWriteIssue } from '../../shared/integration-presets/index.ts'
 import { normalizeServiceTarget } from './service-target.ts'
+import { purgeCollectedHistory } from './data-purge.ts'
 
 export async function saveAdminConfig(
   db: Database,
@@ -215,11 +216,18 @@ export async function saveAdminConfig(
       }
     }
   }
-  return saveConfig(db, parsed.data, {
+  const saved = await saveConfig(db, parsed.data, {
     actor: { kind: 'admin', id: actor },
     keys,
     request,
     verifiedIdentityImports,
     verifiedSources,
   })
+  // The global reset's destructive purge runs only after the configuration commit succeeded,
+  // so a failed reset never destroys history, and a replayed request purges only once.
+  if (saved.success && parsed.data.purgeCollectedData) {
+    if (!saved.replayed) await purgeCollectedHistory(db)
+    return { ...saved, purgedCollectedData: true } as const
+  }
+  return saved
 }

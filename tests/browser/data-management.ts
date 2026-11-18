@@ -141,6 +141,10 @@ export async function exerciseDataManagement(page, { request, input, save, evide
   )
   await page
     .getByRole('dialog', { name: '恢复全局默认设置？' })
+    .getByLabel('输入重置确认文字')
+    .fill('重置')
+  await page
+    .getByRole('dialog', { name: '恢复全局默认设置？' })
     .getByRole('button', { name: '确认恢复默认', exact: true })
     .click()
   assert.equal((await conflict).status(), 409)
@@ -153,6 +157,10 @@ export async function exerciseDataManagement(page, { request, input, save, evide
   const resetSaved = page.waitForResponse(
     (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
   )
+  await page
+    .getByRole('dialog', { name: '恢复全局默认设置？' })
+    .getByLabel('输入重置确认文字')
+    .fill('重置')
   await page
     .getByRole('dialog', { name: '恢复全局默认设置？' })
     .getByRole('button', { name: '确认恢复默认', exact: true })

@@ -275,6 +275,8 @@ watch(
 )
 useHead({ title: '站点管理 · Nozoki' })
 let pending: { key: string; signature: string } | null = null
+/** Set by the global reset; consumed once by the next save to purge collected data. */
+let purgeRequested = false
 function clearSecrets() {
   if (draft.value)
     for (const i of draft.value.integrations) {
@@ -286,6 +288,7 @@ function clearSecrets() {
 function applyConfigTransfer(plan: ConfigImportPlan, action: 'import' | 'reset') {
   if (busy.value || readOnly.value || backgroundProcessing.value || savedNeedsReload.value) return
   clearSecrets()
+  purgeRequested = action === 'reset'
   draft.value = plan.config
   backgroundUpload.value = plan.backgroundUpload ?? null
   editorResetToken.value++
@@ -376,6 +379,7 @@ async function save() {
   const parsed = SaveConfigSchema.safeParse({
     expectedVersion: baseline.value!.site.configVersion,
     config: draft.value,
+    ...(purgeRequested ? { purgeCollectedData: true as const } : {}),
     ...(backgroundUpload.value &&
     draft.value.site.background.source === 'uploaded' &&
     draft.value.site.background.url === backgroundUpload.value.url
@@ -410,6 +414,7 @@ async function save() {
     )
     // Release plaintext before any subsequent request; do not retain it in a retry signature.
     clearSecrets()
+    purgeRequested = false
     backgroundUpload.value = null
     pending = null
     savedNeedsReload.value = true
@@ -450,6 +455,7 @@ async function save() {
 }
 function discard() {
   if (baseline.value) accept(baseline.value)
+  purgeRequested = false
   showDiscard.value = false
   message.value = '已放弃未保存修改'
 }

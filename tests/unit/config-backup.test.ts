@@ -10,7 +10,10 @@ import {
   prepareConfigImport,
   globalDefaultConfig,
 } from '../../shared/domain/config-backup.ts'
-import { BACKUP_FILE_LIMIT } from '../../shared/contracts/config-backup.ts'
+import {
+  BACKUP_FILE_LIMIT,
+  BACKUP_HISTORY_FILE_LIMIT,
+} from '../../shared/contracts/config-backup.ts'
 import { ConfigBackupSchema } from '../../shared/contracts/config-backup.ts'
 import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
 import { requiresSourceTest } from '../../shared/integration-presets/connection.ts'
@@ -39,6 +42,10 @@ function add(config: Config, kind: string) {
   source.access.approvedTarget = sourceTargetKey(source, source.access)
   config.integrations.push(source)
   return source
+}
+function backupShape(config: Config) {
+  const backup = createConfigBackup(config)
+  return backup.config
 }
 test('optional portable credentials are validated and become import operations', async () => {
   const config = createDefaultConfig()
@@ -182,11 +189,32 @@ test('invalid versions, secrets, duplicate types, hostile targets and oversized 
     await assert.rejects(prepareConfigImport(JSON.stringify(backup), config))
   }
   await assert.rejects(
-    prepareConfigImport(' '.repeat(BACKUP_FILE_LIMIT + 1), config),
+    prepareConfigImport(' '.repeat(BACKUP_HISTORY_FILE_LIMIT + 1), config),
+    /BACKUP_TOO_LARGE/,
+  )
+  // Large but legal: archives with history may reach the larger budget and get a precise error.
+  await assert.rejects(
+    prepareConfigImport(
+      JSON.stringify({
+        format: 'nozoki-config',
+        version: 1,
+        exportedAt: '2026-11-18T00:00:00.000Z',
+        config: {
+          contractVersion: 1,
+          site: backupShape(config).site,
+          modules: backupShape(config).modules,
+          quotes: config.quotes,
+          links: config.links,
+          integrations: [],
+        },
+        history: 'x'.repeat(BACKUP_HISTORY_FILE_LIMIT + 1),
+      }),
+      config,
+    ),
     /BACKUP_TOO_LARGE/,
   )
 })
-test('global defaults keep source IDs, credentials, history bindings and current CAS version', () => {
+test('global defaults keep source IDs and the current CAS version while clearing credentials', () => {
   const config = createDefaultConfig()
   const sleepy = add(config, 'sleepy')
   config.site.siteName = 'Custom'
@@ -194,8 +222,50 @@ test('global defaults keep source IDs, credentials, history bindings and current
   const reset = globalDefaultConfig(config)
   assert.equal(reset.site.configVersion, 12)
   assert.equal(reset.site.siteName, 'Nozoki')
-  assert.equal(reset.integrations.find((s) => s.id === sleepy.id)!.credential.operation, 'keep')
+  assert.equal(reset.integrations.find((s) => s.id === sleepy.id)!.credential.operation, 'clear')
   assert.equal(reset.integrations.find((s) => s.id === sleepy.id)!.enabled, false)
   config.integrations = []
   assert.deepEqual(globalDefaultConfig(config).integrations, [])
+})
+test('collected history archives ride along with exports but never import back', async () => {
+  const config = createDefaultConfig()
+  const backup = createConfigBackup(config, undefined, new Date(), undefined, {
+    exportedAt: '2026-11-18T00:00:00.000Z',
+    balanceObservations: [
+      {
+        sourceId: 'deepseek-main',
+        seriesRevision: 'rev-1',
+        currency: 'CNY',
+        observedAt: null,
+        collectedAt: '2026-11-17T16:00:00.000Z',
+        total: '9.60',
+        granted: '10.00',
+        toppedUp: '0.00',
+      },
+    ],
+    dailyUsage: [],
+    codexUsageDays: [
+      {
+        sourceId: 'cliproxy',
+        day: '2026-11-17',
+        input: 100,
+        output: 200,
+        reasoning: 0,
+        cached: 0,
+        total: 300,
+        requests: 1,
+        failed: 0,
+        updatedAt: '2026-11-17T00:00:00.000Z',
+      },
+    ],
+  })
+  assert.ok(ConfigBackupSchema.safeParse(backup).success)
+  const withoutHistory = JSON.stringify(backup)
+  await assert.rejects(prepareConfigImport(withoutHistory, config), /BACKUP_HISTORY_NOT_IMPORTABLE/)
+  const plain = createConfigBackup(config)
+  assert.equal('history' in plain, false)
+  assert.equal(JSON.stringify(backup).length > JSON.stringify(plain).length, true)
+  const mutate = backup as unknown as { history: { balanceObservations: unknown[] } }
+  mutate.history.balanceObservations.push({ sourceId: 'x' })
+  assert.equal(ConfigBackupSchema.safeParse(backup).success, false)
 })

@@ -10,7 +10,10 @@ export default authEndpoint(async (event) => {
   setResponseHeader(event, 'X-Content-Type-Options', 'nosniff')
   const backup = await exportConfigBackup(
     getDatabase(event),
-    { includeCredentials: getQuery(event).credentials === '1' },
+    {
+      includeCredentials: getQuery(event).credentials === '1',
+      includeHistory: getQuery(event).history === '1',
+    },
     environment(event),
   )
   setResponseHeader(
