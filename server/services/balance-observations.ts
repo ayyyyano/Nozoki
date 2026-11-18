@@ -30,32 +30,55 @@ export async function readDailyBalances(
   legacySeries?: string,
 ): Promise<DeepSeekData['dailyBalances']> {
   const days = balanceDays(now, timezone)
-  const rows = (
-    await db
+  // Same result as the former window join: per local day and currency, the newest sample.
+  // One narrow index range query per day instead of one OR-scan over the full history.
+  const statements = days.map((d) =>
+    db
       .prepare(
-        `WITH days(day,start_at,end_at) AS (VALUES ${days.map(() => '(?,?,?)').join(',')}), ranked AS (
-    SELECT days.day,b.currency,b.total,b.collected_at,
-      row_number() OVER(PARTITION BY days.day,b.currency ORDER BY b.collected_at DESC) AS position
-    FROM days JOIN balance_observations b ON b.collected_at>=days.start_at AND b.collected_at<days.end_at
-    WHERE b.source_id=? AND (b.account_series=? OR (b.account_series IS NULL AND b.series_revision=?)) AND b.collected_at<=?
-  ) SELECT day,currency,total,collected_at FROM ranked WHERE position=1 ORDER BY day,currency LIMIT 140`,
+        `SELECT ? AS day,currency,total,collected_at FROM (
+    SELECT currency,total,collected_at,
+      row_number() OVER(PARTITION BY currency ORDER BY collected_at DESC) AS position
+    FROM (
+      SELECT currency,total,collected_at FROM balance_observations
+      WHERE source_id=? AND account_series=? AND collected_at>=? AND collected_at<? AND collected_at<=?
+      UNION ALL
+      SELECT currency,total,collected_at FROM balance_observations
+      WHERE source_id=? AND account_series IS NULL AND series_revision=? AND collected_at>=? AND collected_at<? AND collected_at<=?
+    )
+  ) WHERE position=1`,
       )
       .bind(
-        ...days.flatMap((d) => [d.day, d.start, d.end]),
+        d.day,
         sourceId,
         seriesRevision,
-        legacySeries ?? seriesRevision,
+        d.start,
+        d.end,
         now.toISOString(),
-      )
-      .all()
-  ).results
+        sourceId,
+        legacySeries ?? seriesRevision,
+        d.start,
+        d.end,
+        now.toISOString(),
+      ),
+  )
+  const rows = (await db.batch(statements)).flatMap(
+    (r) =>
+      r.results as {
+        day: string
+        currency: string
+        total: string
+        collected_at: string
+      }[],
+  )
+  rows.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.currency < b.currency ? -1 : 1))
   return rows.map((r) => ({
-    day: r.day as string,
-    currency: r.currency as string,
-    total: r.total as string,
-    collectedAt: r.collected_at as string,
+    day: r.day,
+    currency: r.currency,
+    total: r.total,
+    collectedAt: r.collected_at,
   }))
 }
+
 /** Internal, administrator-authorized callers only. Net movements never enter official daily_usage. */
 export async function readBalanceChanges(
   db: Database,

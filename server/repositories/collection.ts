@@ -215,9 +215,22 @@ export async function commitCollection(
       db
         .prepare(
           `INSERT INTO balance_observations(source_id,series_revision,currency,observed_at,collected_at,total,granted,topped_up,account_series)
- SELECT ?,?,json_extract(value,'$.currency'),json_extract(value,'$.observedAt'),json_extract(value,'$.collectedAt'),json_extract(value,'$.total'),json_extract(value,'$.granted'),json_extract(value,'$.toppedUp'),? FROM json_each(?)`,
+ SELECT ?,?,json_extract(value,'$.currency'),json_extract(value,'$.observedAt'),json_extract(value,'$.collectedAt'),json_extract(value,'$.total'),json_extract(value,'$.granted'),json_extract(value,'$.toppedUp'),? FROM json_each(?) v
+ WHERE NOT EXISTS(
+   SELECT 1 FROM balance_observations o
+   WHERE o.source_id=? AND o.currency=json_extract(v.value,'$.currency')
+     AND (o.account_series=? OR (o.account_series IS NULL AND o.series_revision=?))
+     AND substr(o.collected_at,1,13)=substr(json_extract(v.value,'$.collectedAt'),1,13))`,
         )
-        .bind(c.plan.source.id, series, accountSeries, JSON.stringify(balances)),
+        .bind(
+          c.plan.source.id,
+          series,
+          accountSeries,
+          JSON.stringify(balances),
+          c.plan.source.id,
+          accountSeries,
+          series,
+        ),
     )
   if (usage.length)
     statements.push(

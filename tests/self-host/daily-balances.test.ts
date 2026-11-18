@@ -87,6 +87,18 @@ test('daily balance persistence, end-of-day scheduling, seven-day history, accou
     }
     await collect('2099-11-05T15:55:00.000Z')
     await collect('2099-11-05T16:00:00.000Z')
+    // Same-hour samples are throttled: one observation row per currency and UTC hour.
+    const hourCount = (fromIso) =>
+      db
+        .prepare(
+          'SELECT count(*) n FROM balance_observations WHERE account_series IS NOT NULL AND collected_at>=? AND collected_at<?',
+        )
+        .bind(fromIso, new Date(Date.parse(fromIso) + 3600000).toISOString())
+        .first()
+        .then((r) => r.n)
+    assert.equal(await hourCount('2099-11-05T15:00:00.000Z'), 1)
+    await collect('2099-11-05T16:05:00.000Z')
+    assert.equal(await hourCount('2099-11-05T16:00:00.000Z'), 1)
     await db.prepare('UPDATE integrations SET refresh_interval=86400 WHERE id=?').bind(s.id).run()
     await collect('2099-11-06T10:00:00.000Z')
     assert.equal(
