@@ -1,5 +1,6 @@
 import type { Config, ConfigWrite } from '../contracts/config.ts'
 import { requiresSourceTest } from '../integration-presets/connection.ts'
+import { sourceTargetKey } from '../contracts/source-access.ts'
 
 type Source = ConfigWrite['integrations'][number]
 export type CredentialTestPlan = { id: string; needsTest: boolean; reason: string }
@@ -30,7 +31,20 @@ export function applyImportCredentialTest(
   source: Source,
   result: { proof?: string; reason?: string },
 ): Source {
-  if (result.proof) return { ...source, connectionProof: result.proof }
+  if (result.proof) {
+    // Passing the import test is the admin's explicit approval, mirroring the
+    // manual "测试并批准" flow in IntegrationEditor: bind access to the tested target.
+    const access =
+      source.access && source.access.mode !== 'legacy'
+        ? {
+            ...source.access,
+            mode: 'public' as const,
+            approved: true,
+            approvedTarget: sourceTargetKey(source, source.access),
+          }
+        : source.access
+    return { ...source, access, connectionProof: result.proof }
+  }
   const access =
     source.access && source.access.mode !== 'legacy'
       ? { ...source.access, approved: false, approvedTarget: null }

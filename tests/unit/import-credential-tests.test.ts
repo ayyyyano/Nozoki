@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createDefaultConfig } from '../../shared/contracts/config.ts'
 import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
 import { requiresSourceTest } from '../../shared/integration-presets/connection.ts'
+import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import {
   applyImportCredentialTest,
   planImportCredentialTests,
@@ -35,6 +36,9 @@ test('unapproved clear sources are allowed for new and changed targets without a
   const success = applyImportCredentialTest(source, { proof: 'proof' })
   assert.equal(success.connectionProof, 'proof')
   assert.equal(success.credential.operation, 'replace')
+  if (success.access?.mode !== 'public') throw new Error('expected public access')
+  assert.equal(success.access.approved, true)
+  assert.equal(success.access.approvedTarget, sourceTargetKey(source, success.access))
   const failed = applyImportCredentialTest(source, { reason: 'TIMEOUT' })
   assert.deepEqual(failed.credential, { operation: 'clear' })
   assert.equal(failed.access?.mode === 'public' && failed.access.approved, false)

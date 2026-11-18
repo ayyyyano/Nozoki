@@ -210,7 +210,7 @@ async function applyImport() {
         })
         importOutcomes.value[action.id] = { proof }
         importResults.value[action.id] = proof
-          ? '凭据验证通过，保存后迁移；访问尚未批准。'
+          ? '验证通过并批准，保存后采集即可恢复。'
           : `凭据未迁移：${testFailureReasons[reason] ?? '测试未通过'}`
       }
     } finally {
