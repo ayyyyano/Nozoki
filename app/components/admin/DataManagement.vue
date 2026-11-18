@@ -268,8 +268,10 @@ async function download() {
   <div class="data-management">
     <section class="data-management-card">
       <h3><CommonAppIcon name="FileDownloadRound" />数据导出</h3>
-      <p>导出已保存的共享配置和上传的背景，不含采集历史。文件含服务地址和权限设置。</p>
-      <VarCheckbox v-model="includeCredentials">包含凭据（明文，迁移用）</VarCheckbox>
+      <div class="data-export-options">
+        <p>导出配置和背景，不含采集历史。</p>
+        <VarCheckbox v-model="includeCredentials">包含凭据</VarCheckbox>
+      </div>
       <p v-if="includeCredentials" class="source-warning">
         文件含明文机密，请妥善保管并在导入完成后删除。
       </p>
