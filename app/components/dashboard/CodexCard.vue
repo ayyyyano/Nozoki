@@ -54,6 +54,7 @@ const details = computed(
   >
     <DashboardDataState
       v-if="
+        !home.length &&
         !(
           snapshot.status === 'unconfigured' &&
           snapshot.sourceConfigured &&

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 defineProps<{
-  message: string
   errors: string[]
   busy: boolean
   blocked: boolean
@@ -11,13 +10,8 @@ defineEmits<{ save: []; reload: []; locate: [error: string] }>()
 </script>
 
 <template>
-  <div
-    v-show="message || dirty || errors.length"
-    class="admin-editor-save-state"
-    tabindex="-1"
-    role="status"
-  >
-    {{ message || (dirty ? '未保存修改' : '') }}
+  <div v-show="dirty || errors.length" class="admin-editor-save-state" tabindex="-1" role="status">
+    {{ dirty ? '未保存修改' : '' }}
     <ul v-if="errors.length">
       <li v-for="error in errors" :key="error">
         <button type="button" class="admin-error-link" @click="$emit('locate', error)">

@@ -38,6 +38,17 @@ const plan = ref<ConfigImportPlan | null>(null),
 const importResults = ref<Record<string, string>>({})
 const importProgress = ref('')
 const importOutcomes = ref<Record<string, { proof?: string }>>({})
+const exportFeedback = ref('')
+const exportTone = ref<'success' | 'error'>('success')
+const exportFeedbackOpen = ref(false)
+let exportFeedbackTimer: ReturnType<typeof setTimeout> | undefined
+function showExportFeedback(message: string, tone: 'success' | 'error') {
+  exportFeedback.value = message
+  exportTone.value = tone
+  exportFeedbackOpen.value = true
+  if (exportFeedbackTimer) clearTimeout(exportFeedbackTimer)
+  exportFeedbackTimer = setTimeout(() => (exportFeedbackOpen.value = false), 4000)
+}
 const importSummary = computed(() =>
   summarizeImportCredentialTests(Object.values(importOutcomes.value)),
 )
@@ -55,7 +66,10 @@ function wipe() {
   importProgress.value = ''
   importOutcomes.value = {}
 }
-onBeforeUnmount(wipe)
+onBeforeUnmount(() => {
+  wipe()
+  if (exportFeedbackTimer) clearTimeout(exportFeedbackTimer)
+})
 const tests = computed(
   () =>
     plan.value?.config.integrations.filter((source) =>
@@ -279,11 +293,13 @@ async function download() {
     link.click()
     link.remove()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
+    showExportFeedback('导出成功', 'success')
   } catch (e) {
     error.value =
       (e as { data?: { code?: string } }).data?.code === 'CREDENTIAL_DECRYPT_FAILED'
         ? '无法解密全部来源凭据，请检查此部署的密钥环后重试。'
         : '导出失败，请确认登录状态后重试；配置变化时请重新导出。'
+    showExportFeedback('导出失败', 'error')
   } finally {
     working.value = false
   }
@@ -293,8 +309,8 @@ async function download() {
   <div class="data-management">
     <section class="data-management-card">
       <h3><CommonAppIcon name="FileDownloadRound" />数据导出</h3>
+      <p>导出当前配置与背景图片，可按需包含来源凭据与采集历史。</p>
       <div class="data-export-options">
-        <p>导出配置和背景。</p>
         <VarCheckbox v-model="includeCredentials">包含凭据</VarCheckbox>
         <VarCheckbox v-model="includeHistory">包含采集历史</VarCheckbox>
       </div>
@@ -333,6 +349,21 @@ async function download() {
     </section>
     <p v-if="error" role="alert" class="source-warning">{{ error }}</p>
     <p v-if="importProgress" role="status">{{ importProgress }}</p>
+    <VarPopup
+      v-model:show="exportFeedbackOpen"
+      position="bottom"
+      class="admin-feedback-popup"
+      role="status"
+      aria-live="polite"
+      :overlay="false"
+      :lock-scroll="false"
+      :default-style="false"
+      :close-on-key-escape="false"
+    >
+      <p class="admin-feedback-toast data-export-feedback" :data-tone="exportTone">
+        {{ exportFeedback }}
+      </p>
+    </VarPopup>
     <AdminSourceDialog
       v-model:show="importing"
       title="导入配置预览"

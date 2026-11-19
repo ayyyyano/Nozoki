@@ -740,6 +740,14 @@
   background: var(--color-inverse-surface, var(--color-surface-container-high));
   color: var(--color-inverse-on-surface, var(--color-text));
 }
+.data-export-feedback {
+  max-height: none;
+  text-align: center;
+}
+.data-export-feedback[data-tone='error'] {
+  background: var(--color-error, var(--color-danger, #b3261e));
+  color: var(--color-on-error, #fff);
+}
 .admin-feedback p {
   margin: 0;
 }

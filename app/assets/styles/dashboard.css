@@ -379,7 +379,11 @@ p {
   min-height: 44px;
   text-align: center;
 }
-.module-card > .module-body:has(> .data-state--waiting) {
+/* A placeholder status is the card's only meaningful content: center it in the
+   card body, matching the centered "登录后查看" hint. Empty list containers that
+   render alongside it have no height, so the visible text stays centered.
+   Compact inline statuses in detail panels are outside .module-body. */
+.module-card > .module-body:has(> .data-state) {
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;

@@ -2,7 +2,9 @@
 .dx-transition {
   position: fixed;
   inset: 0;
-  z-index: 1800;
+  /* Varlet popups allocate z-index from 2000 upward at runtime; dialogs restored
+     by a deep link must never cover the initial loading animation. */
+  z-index: 2147483000;
   pointer-events: auto;
   contain: strict;
 }

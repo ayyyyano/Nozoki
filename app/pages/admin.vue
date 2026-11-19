@@ -627,7 +627,6 @@ onBeforeRouteLeave((to, from) => {
         </div>
       </header>
       <VarPopup
-        v-if="!selectedModule && !selectedSource"
         v-model:show="showFeedback"
         position="bottom"
         class="admin-feedback-popup"
@@ -787,7 +786,6 @@ onBeforeRouteLeave((to, from) => {
               </fieldset>
               <template v-if="activeModule" #footer>
                 <AdminEditorSave
-                  :message="message"
                   :errors="errors.map(errorLabel)"
                   :busy="busy"
                   :blocked="readOnly || savedNeedsReload || backgroundProcessing"
@@ -820,7 +818,6 @@ onBeforeRouteLeave((to, from) => {
             >
               <template #footer>
                 <AdminEditorSave
-                  :message="message"
                   :errors="errors.map(errorLabel)"
                   :busy="busy"
                   :blocked="readOnly || savedNeedsReload || backgroundProcessing"
