@@ -20,6 +20,7 @@ const expired = computed(
     :last-success-at="snapshot.lastSuccessAt"
     time-label="采集于"
     :details="nodes.length > 0"
+    refreshable
   >
     <DashboardDataState
       :configured="snapshot.sourceConfigured"

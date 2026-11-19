@@ -30,6 +30,7 @@ const expired = computed(() =>
           (m.displayId && m.displayId !== m.name),
       )
     "
+    refreshable
   >
     <DashboardDataState
       :configured="snapshot.sourceConfigured"

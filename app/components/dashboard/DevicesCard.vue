@@ -21,6 +21,7 @@ const home = computed(() => deviceSummary(devices.value, props.snapshot.homeItem
     :last-success-at="snapshot.lastSuccessAt"
     :time-label="snapshot.observedAt ? '观测于' : '采集于'"
     :details="devicesHaveDetails(devices, snapshot.homeItems)"
+    refreshable
   >
     <DashboardDataState
       :configured="snapshot.sourceConfigured"

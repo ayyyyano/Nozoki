@@ -5,9 +5,28 @@ import { moduleRole } from '../../../shared/domain/module-layout'
 import { summaryStatus, additionalSuccess } from '../../../shared/domain/summary-status'
 const open = ref(false)
 const tooltip = ref(false)
+const refreshTooltip = ref(false)
+const refreshing = ref(false)
+const slots = useSlots()
+const reloadDashboard = inject<() => Promise<void>>('reloadDashboard')
+const REFRESH_THROTTLE_MS = 5000
+let lastRefreshAt = 0
 function openDetails() {
   tooltip.value = false
   open.value = true
+}
+async function refreshCard() {
+  refreshTooltip.value = false
+  if (refreshing.value || !reloadDashboard) return
+  const now = Date.now()
+  if (now - lastRefreshAt < REFRESH_THROTTLE_MS) return
+  lastRefreshAt = now
+  refreshing.value = true
+  try {
+    await reloadDashboard()
+  } finally {
+    refreshing.value = false
+  }
 }
 const props = defineProps<{
   id: ModuleId
@@ -19,12 +38,18 @@ const props = defineProps<{
   timeLabel?: string
   timeZone?: string
   lastSuccessAt?: string | null
+  refreshable?: boolean
 }>()
 const successTime = computed(() =>
   additionalSuccess(props.status, props.lastSuccessAt, props.observedAt),
 )
 const hasSubtitle = computed(
   () => props.status === 'stale' || props.observedAt || successTime.value,
+)
+const showDetails = computed(
+  () =>
+    !!slots.details &&
+    (props.details || hasSubtitle.value || !!slots.freshness || !!slots.subtitle),
 )
 </script>
 <template>
@@ -45,33 +70,51 @@ const hasSubtitle = computed(
         role="status"
         >{{ summaryStatus(status) }}</span
       >
-      <VarTooltip
-        v-if="(details || hasSubtitle || $slots.freshness || $slots.subtitle) && $slots.details"
-        v-model:show="tooltip"
-        :disabled="open"
-        :content="`查看${title}详情`"
-      >
-        <VarButton
-          text
-          round
-          class="module-detail-button edge-icon-action edge-icon-action--small"
-          :aria-label="`查看${title}详情`"
-          :title="`查看${title}详情`"
-          aria-haspopup="dialog"
-          @focus="tooltip = true"
-          @blur="tooltip = false"
-          @click="openDetails"
-          ><CommonAppIcon name="OpenInFullRound" :size="20"
-        /></VarButton>
-      </VarTooltip>
+      <div v-if="refreshable || showDetails" class="module-header-actions">
+        <VarTooltip
+          v-if="refreshable"
+          v-model:show="refreshTooltip"
+          :disabled="refreshing"
+          :content="`刷新${title}`"
+        >
+          <VarButton
+            text
+            round
+            class="module-refresh-button edge-icon-action edge-icon-action--small"
+            :aria-label="`刷新${title}`"
+            :title="`刷新${title}`"
+            :aria-busy="refreshing"
+            :disabled="refreshing"
+            @focus="refreshTooltip = true"
+            @blur="refreshTooltip = false"
+            @click="refreshCard"
+            ><CommonAppIcon name="RefreshRound" :size="20" :class="{ 'is-refreshing': refreshing }"
+          /></VarButton>
+        </VarTooltip>
+        <VarTooltip
+          v-if="showDetails"
+          v-model:show="tooltip"
+          :disabled="open"
+          :content="`查看${title}详情`"
+        >
+          <VarButton
+            text
+            round
+            class="module-detail-button edge-icon-action edge-icon-action--small"
+            :aria-label="`查看${title}详情`"
+            :title="`查看${title}详情`"
+            aria-haspopup="dialog"
+            @focus="tooltip = true"
+            @blur="tooltip = false"
+            @click="openDetails"
+            ><CommonAppIcon name="OpenInFullRound" :size="20"
+          /></VarButton>
+        </VarTooltip>
+      </div>
     </header>
     <div class="module-body"><slot /></div>
     <footer v-if="$slots.footer" class="module-footer"><slot name="footer" /></footer>
-    <DashboardModuleDetail
-      v-if="(details || hasSubtitle || $slots.freshness || $slots.subtitle) && $slots.details"
-      v-model:show="open"
-      :title="title"
-    >
+    <DashboardModuleDetail v-if="showDetails" v-model:show="open" :title="title">
       <template v-if="hasSubtitle || $slots.freshness || $slots.subtitle" #subtitle>
         <p v-if="status === 'stale'" role="status">数据已过期</p>
         <slot name="freshness" />

@@ -1436,11 +1436,27 @@ p {
 .edge-icon-action--small {
   --edge-icon-size: 20px;
 }
+.module-header-actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+.module-refresh-button:hover,
 .module-detail-button:hover {
   background: var(--n-surface-high);
 }
+.module-refresh-button:active,
 .module-detail-button:active {
   background: var(--color-secondary-container);
+}
+.module-refresh-button .app-icon.is-refreshing {
+  animation: module-refresh-spin 900ms linear infinite;
+}
+@keyframes module-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .var-popup__content:has(> .module-detail-panel) {
   --detail-inline-gap: max(16px, env(safe-area-inset-left), env(safe-area-inset-right));
