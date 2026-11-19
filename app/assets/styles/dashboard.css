@@ -1475,7 +1475,7 @@ p {
   background: var(--color-inverse-surface, var(--n-surface-high));
   color: var(--color-inverse-on-surface, var(--n-text));
   box-shadow: 0 6px 24px rgb(0 0 0 / 24%);
-  text-align: center;
+  text-align: left;
   overflow-wrap: anywhere;
 }
 .module-refresh-feedback[data-tone='error'] {

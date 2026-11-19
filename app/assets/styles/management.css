@@ -731,6 +731,7 @@
 }
 .admin-feedback-toast {
   pointer-events: auto;
+  text-align: left;
   width: min(540px, calc(100vw - 32px));
   margin: 0 auto max(16px, env(safe-area-inset-bottom));
   padding: 16px 20px;
@@ -742,7 +743,6 @@
 }
 .data-export-feedback {
   max-height: none;
-  text-align: center;
 }
 .data-export-feedback[data-tone='error'] {
   background: var(--color-error, var(--color-danger, #b3261e));
