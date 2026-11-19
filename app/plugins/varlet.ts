@@ -1,5 +1,6 @@
 import {
   Button,
+  Checkbox,
   Chip,
   Progress,
   Switch,
@@ -17,6 +18,7 @@ import '@varlet/ui/es/slider/style/index'
 import '@varlet/ui/es/popup/style/index'
 import '@varlet/ui/es/input/style/index'
 import '@varlet/ui/es/button/style/index'
+import '@varlet/ui/es/checkbox/style/index'
 import '@varlet/ui/es/chip/style/index'
 import '@varlet/ui/es/progress/style/index'
 import '@varlet/ui/es/switch/style/index'
@@ -35,6 +37,7 @@ export default defineNuxtPlugin((nuxt) => {
     VarPopup: Popup,
     VarInput: Input,
     VarButton: Button,
+    VarCheckbox: Checkbox,
     VarChip: Chip,
     VarProgress: Progress,
     VarSwitch: Switch,
