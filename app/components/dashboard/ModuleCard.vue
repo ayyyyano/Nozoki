@@ -168,19 +168,23 @@ const showDetails = computed(
       </template>
       <slot name="details" />
     </DashboardModuleDetail>
+    <!-- Stays inside <section> to keep a single root so the grid span variables
+         passed via $attrs keep landing on the card. The popup teleports to <body>,
+         so the card's inline-size containment cannot capture its fixed positioning. -->
+    <VarPopup
+      v-if="refreshable"
+      v-model:show="feedbackOpen"
+      position="bottom"
+      teleport="body"
+      class="module-refresh-feedback-popup"
+      role="status"
+      aria-live="polite"
+      :overlay="false"
+      :lock-scroll="false"
+      :default-style="false"
+      :close-on-key-escape="false"
+    >
+      <p class="module-refresh-feedback" :data-tone="feedbackTone">{{ feedback }}</p>
+    </VarPopup>
   </section>
-  <VarPopup
-    v-if="refreshable"
-    v-model:show="feedbackOpen"
-    position="bottom"
-    class="module-refresh-feedback-popup"
-    role="status"
-    aria-live="polite"
-    :overlay="false"
-    :lock-scroll="false"
-    :default-style="false"
-    :close-on-key-escape="false"
-  >
-    <p class="module-refresh-feedback" :data-tone="feedbackTone">{{ feedback }}</p>
-  </VarPopup>
 </template>
