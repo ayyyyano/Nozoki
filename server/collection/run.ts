@@ -37,6 +37,8 @@ export async function runCollection(
     sourceIds?: readonly string[]
     wallBudgetMs?: number
     scheduledCodexQuota?: boolean
+    /** Manual refresh: ignore next_run_at for the given sourceIds, keep lease/budget guards. */
+    force?: boolean
   } = {},
 ) {
   const clock = options.clock ?? (() => new Date()),
@@ -60,6 +62,9 @@ export async function runCollection(
     report.fatal = 'INVALID_SCHEDULED_TIME'
     return report
   }
+  // A forced run must be scoped to explicit sourceIds; forcing every source would
+  // defeat the collection budget and the cron cadence.
+  const force = options.force === true && !!options.sourceIds?.length
   try {
     await requireWritableStorage(db)
     const environment = await collectionEnvironment(db, env),
@@ -68,7 +73,11 @@ export async function runCollection(
       )
     const budget = Math.min(25000, Math.max(0, options.wallBudgetMs ?? 25000))
     await syncCollectionPlans(db, plans, environment, start.toISOString())
-    const due = await dueCollectionStates(db, start.toISOString())
+    const due = await dueCollectionStates(
+      db,
+      start.toISOString(),
+      force ? options.sourceIds : undefined,
+    )
     for (const prior of due) {
       const plan = plans.find((p) => p.source.id === prior.source_id)
       if (!plan) {
@@ -89,6 +98,7 @@ export async function runCollection(
         clock().toISOString(),
         new Date(scheduledTime).toISOString(),
         owner,
+        force,
       )
       if (!claim) {
         report.skipped++

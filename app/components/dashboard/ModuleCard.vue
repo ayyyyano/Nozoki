@@ -9,25 +9,6 @@ const refreshTooltip = ref(false)
 const refreshing = ref(false)
 const slots = useSlots()
 const reloadDashboard = inject<() => Promise<void>>('reloadDashboard')
-const REFRESH_THROTTLE_MS = 5000
-let lastRefreshAt = 0
-function openDetails() {
-  tooltip.value = false
-  open.value = true
-}
-async function refreshCard() {
-  refreshTooltip.value = false
-  if (refreshing.value || !reloadDashboard) return
-  const now = Date.now()
-  if (now - lastRefreshAt < REFRESH_THROTTLE_MS) return
-  lastRefreshAt = now
-  refreshing.value = true
-  try {
-    await reloadDashboard()
-  } finally {
-    refreshing.value = false
-  }
-}
 const props = defineProps<{
   id: ModuleId
   title: string
@@ -40,6 +21,58 @@ const props = defineProps<{
   lastSuccessAt?: string | null
   refreshable?: boolean
 }>()
+const REFRESH_THROTTLE_MS = 15000
+let lastRefreshAt = 0
+const feedback = ref('')
+const feedbackTone = ref<'success' | 'error'>('success')
+const feedbackOpen = ref(false)
+let feedbackTimer: ReturnType<typeof setTimeout> | undefined
+function showFeedback(message: string, tone: 'success' | 'error') {
+  feedback.value = message
+  feedbackTone.value = tone
+  feedbackOpen.value = true
+  if (feedbackTimer) clearTimeout(feedbackTimer)
+  feedbackTimer = setTimeout(() => (feedbackOpen.value = false), 4000)
+}
+onBeforeUnmount(() => {
+  if (feedbackTimer) clearTimeout(feedbackTimer)
+})
+function openDetails() {
+  tooltip.value = false
+  open.value = true
+}
+interface RefreshResult {
+  ok: boolean
+  code?: string
+  message?: string
+  success?: number
+  failure?: number
+  collected?: number
+}
+async function refreshCard() {
+  refreshTooltip.value = false
+  if (refreshing.value || !reloadDashboard) return
+  const now = Date.now()
+  if (now - lastRefreshAt < REFRESH_THROTTLE_MS) return
+  lastRefreshAt = now
+  refreshing.value = true
+  try {
+    const result = await $fetch<RefreshResult>('/api/collection/refresh', {
+      method: 'POST',
+      body: { moduleId: props.id },
+    })
+    if (!result?.ok) {
+      showFeedback(result?.message ?? '刷新失败，请稍后重试', 'error')
+      return
+    }
+    await reloadDashboard()
+    showFeedback(result.message ?? '刷新完成', result.failure ? 'error' : 'success')
+  } catch {
+    showFeedback('刷新失败，请检查网络后重试', 'error')
+  } finally {
+    refreshing.value = false
+  }
+}
 const successTime = computed(() =>
   additionalSuccess(props.status, props.lastSuccessAt, props.observedAt),
 )
@@ -136,4 +169,18 @@ const showDetails = computed(
       <slot name="details" />
     </DashboardModuleDetail>
   </section>
+  <VarPopup
+    v-if="refreshable"
+    v-model:show="feedbackOpen"
+    position="bottom"
+    class="module-refresh-feedback-popup"
+    role="status"
+    aria-live="polite"
+    :overlay="false"
+    :lock-scroll="false"
+    :default-style="false"
+    :close-on-key-escape="false"
+  >
+    <p class="module-refresh-feedback" :data-tone="feedbackTone">{{ feedback }}</p>
+  </VarPopup>
 </template>

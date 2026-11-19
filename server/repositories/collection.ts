@@ -1,4 +1,4 @@
-import type { Database, D1Statement } from '../types/database.ts'
+import type { Database, D1Statement, D1Value } from '../types/database.ts'
 import { hashToken } from '../services/auth-crypto.ts'
 import type { CollectionPlan } from '../collection/plans.ts'
 import type { CollectionEnvironment } from '../collection/environment.ts'
@@ -70,7 +70,28 @@ export async function syncCollectionPlans(
     ),
   )
 }
-export async function dueCollectionStates(db: Database, now: string): Promise<CollectionState[]> {
+/**
+ * Sources due for collection. When `forceSourceIds` is set, those sources are selected
+ * regardless of `next_run_at` (an explicit manual refresh), but in-flight leases are
+ * still respected so a forced run can never race a scheduled one on the same source.
+ */
+export async function dueCollectionStates(
+  db: Database,
+  now: string,
+  forceSourceIds?: readonly string[],
+): Promise<CollectionState[]> {
+  if (forceSourceIds?.length) {
+    const placeholders = forceSourceIds.map(() => '?').join(',')
+    return (
+      await db
+        .prepare(
+          `SELECT * FROM collection_state WHERE source_id IN (${placeholders})
+ AND (lease_until IS NULL OR lease_until<=?) ORDER BY source_id LIMIT 100`,
+        )
+        .bind(...forceSourceIds, now)
+        .all()
+    ).results as unknown as CollectionState[]
+  }
   return (
     await db
       .prepare(
@@ -88,10 +109,33 @@ export async function claimCollection(
   now: string,
   scheduledAt: string,
   owner: string,
+  force = false,
 ): Promise<CollectionClaim | null> {
   const runId = crypto.randomUUID(),
     token = crypto.randomUUID(),
     until = new Date(Date.parse(now) + COLLECTION_BUDGET.leaseMs).toISOString()
+  // A forced (manual) refresh intentionally ignores the source's next_run_at gate,
+  // but keeps the lease and revision/environment checks so it can never double-run
+  // against an in-flight scheduled collection or a stale configuration.
+  const dueGate = force ? '' : ' AND next_run_at<=?'
+  const claimBinds: D1Value[] = [
+    runId,
+    token,
+    owner,
+    until,
+    now,
+    scheduledAt,
+    plan.source.id,
+    plan.revision,
+    environment.epoch,
+    ...(force ? [] : [now]),
+    now,
+    scheduledAt,
+    plan.source.id,
+    plan.revision,
+    environment.epoch,
+    environment.fingerprint,
+  ]
   const [_, claimed] = await db.batch([
     db
       .prepare(
@@ -107,28 +151,11 @@ export async function claimCollection(
     db
       .prepare(
         `UPDATE collection_state SET run_id=?,lease_token=?,lease_owner=?,lease_until=?,last_attempt_at=?,last_scheduled_at=?
- WHERE source_id=? AND source_revision=? AND environment_epoch=? AND next_run_at<=? AND (lease_until IS NULL OR lease_until<=?) AND (last_scheduled_at IS NULL OR last_scheduled_at<?)
+ WHERE source_id=? AND source_revision=? AND environment_epoch=?${dueGate} AND (lease_until IS NULL OR lease_until<=?) AND (last_scheduled_at IS NULL OR last_scheduled_at<?)
  AND EXISTS(SELECT 1 FROM integrations WHERE id=? AND enabled=1 AND (collection_generation||':'||collection_revision)=?)
  AND EXISTS(SELECT 1 FROM collector_environment WHERE id=1 AND epoch=? AND fingerprint=?) RETURNING source_id`,
       )
-      .bind(
-        runId,
-        token,
-        owner,
-        until,
-        now,
-        scheduledAt,
-        plan.source.id,
-        plan.revision,
-        environment.epoch,
-        now,
-        now,
-        scheduledAt,
-        plan.source.id,
-        plan.revision,
-        environment.epoch,
-        environment.fingerprint,
-      ),
+      .bind(...claimBinds),
     db
       .prepare(
         `INSERT INTO collection_runs(id,source_id,config_version,status,started_at,source_revision,environment_epoch,scheduled_at)
