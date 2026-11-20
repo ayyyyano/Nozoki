@@ -20,6 +20,9 @@ export function balanceSeries(
     ]),
   )
 }
+/** DeepSeek's balance_infos currency enum; see server/adapters/deepseek.ts. */
+const BALANCE_CURRENCIES = ['CNY', 'USD'] as const
+
 /** The last successful sample of each local day, not a bill or an invented closing price. */
 export async function readDailyBalances(
   db: Database,
@@ -30,36 +33,41 @@ export async function readDailyBalances(
   legacySeries?: string,
 ): Promise<DeepSeekData['dailyBalances']> {
   const days = balanceDays(now, timezone)
-  // Same result as the former window join: per local day and currency, the newest sample.
-  // One narrow index range query per day instead of one OR-scan over the full history.
-  const statements = days.map((d) =>
-    db
-      .prepare(
-        `SELECT ? AS day,currency,total,collected_at FROM (
-    SELECT currency,total,collected_at,
-      row_number() OVER(PARTITION BY currency ORDER BY collected_at DESC) AS position
-    FROM (
-      SELECT currency,total,collected_at FROM balance_observations
-      WHERE source_id=? AND account_series=? AND collected_at>=? AND collected_at<? AND collected_at<=?
-      UNION ALL
-      SELECT currency,total,collected_at FROM balance_observations
-      WHERE source_id=? AND account_series IS NULL AND series_revision=? AND collected_at>=? AND collected_at<? AND collected_at<=?
-    )
-  ) WHERE position=1`,
-      )
-      .bind(
-        d.day,
-        sourceId,
-        seriesRevision,
-        d.start,
-        d.end,
-        now.toISOString(),
-        sourceId,
-        legacySeries ?? seriesRevision,
-        d.start,
-        d.end,
-        now.toISOString(),
-      ),
+  // One reverse index lookup per (day, currency). The former window join scanned every
+  // observation in the seven-day window on each dashboard request, which exhausted the
+  // free-tier D1 row-read quota under 30-second polling.
+  const statements = days.flatMap((d) =>
+    BALANCE_CURRENCIES.map((currency) =>
+      db
+        .prepare(
+          `SELECT ? AS day,currency,total,collected_at FROM (
+  SELECT currency,total,collected_at FROM (
+    SELECT currency,total,collected_at FROM balance_observations
+     WHERE source_id=? AND account_series=? AND currency=? AND collected_at>=? AND collected_at<? AND collected_at<=?
+     ORDER BY collected_at DESC LIMIT 1)
+  UNION ALL
+  SELECT currency,total,collected_at FROM (
+    SELECT currency,total,collected_at FROM balance_observations
+     WHERE source_id=? AND account_series IS NULL AND series_revision=? AND currency=? AND collected_at>=? AND collected_at<? AND collected_at<=?
+     ORDER BY collected_at DESC LIMIT 1)
+) ORDER BY collected_at DESC LIMIT 1`,
+        )
+        .bind(
+          d.day,
+          sourceId,
+          seriesRevision,
+          currency,
+          d.start,
+          d.end,
+          now.toISOString(),
+          sourceId,
+          legacySeries ?? seriesRevision,
+          currency,
+          d.start,
+          d.end,
+          now.toISOString(),
+        ),
+    ),
   )
   const rows = (await db.batch(statements)).flatMap(
     (r) =>

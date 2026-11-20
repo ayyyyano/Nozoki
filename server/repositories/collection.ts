@@ -237,7 +237,12 @@ export async function commitCollection(
       )
       .bind(c.plan.source.id, now, c.plan.revision, c.environment.epoch, json),
   ]
-  if (balances.length)
+  if (balances.length) {
+    // The same-hour throttle must stay index-friendly: substr(collected_at,1,13) made
+    // every balance write scan the source's entire history. All balances share the
+    // collection's finishedAt, so one bounded UTC hour is equivalent and reads a few rows.
+    const hourStart = `${now.slice(0, 13)}:00:00.000Z`
+    const hourEnd = new Date(Date.parse(hourStart) + 3600000).toISOString()
     statements.push(
       db
         .prepare(
@@ -245,9 +250,8 @@ export async function commitCollection(
  SELECT ?,?,json_extract(value,'$.currency'),json_extract(value,'$.observedAt'),json_extract(value,'$.collectedAt'),json_extract(value,'$.total'),json_extract(value,'$.granted'),json_extract(value,'$.toppedUp'),? FROM json_each(?) v
  WHERE NOT EXISTS(
    SELECT 1 FROM balance_observations o
-   WHERE o.source_id=? AND o.currency=json_extract(v.value,'$.currency')
-     AND (o.account_series=? OR (o.account_series IS NULL AND o.series_revision=?))
-     AND substr(o.collected_at,1,13)=substr(json_extract(v.value,'$.collectedAt'),1,13))`,
+   WHERE o.source_id=? AND o.account_series=? AND o.currency=json_extract(v.value,'$.currency')
+     AND o.collected_at>=? AND o.collected_at<?)`,
         )
         .bind(
           c.plan.source.id,
@@ -256,9 +260,11 @@ export async function commitCollection(
           JSON.stringify(balances),
           c.plan.source.id,
           accountSeries,
-          series,
+          hourStart,
+          hourEnd,
         ),
     )
+  }
   if (usage.length)
     statements.push(
       db
