@@ -9,7 +9,8 @@ const wrangler = resolve(dirname(require.resolve('wrangler/package.json')), 'bin
 
 /** Only an explicit deployment command may change remote D1. Builds remain offline. */
 export async function deployCloudflare(run = runWrangler) {
-  const config = 'wrangler.jsonc'
+  // CI bootstrapping writes a runner-local config; wrangler.jsonc stays the default.
+  const config = process.env.CLOUDFLARE_DEPLOY_CONFIG || 'wrangler.jsonc'
   // Wrangler tracks applied names in d1_migrations and applies only pending files.
   // A migration or permissions failure stops publication of the new Worker.
   await run(['d1', 'migrations', 'apply', 'DB', '--remote', '--config', config])

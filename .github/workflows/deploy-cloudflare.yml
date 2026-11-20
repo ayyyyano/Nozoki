@@ -10,6 +10,11 @@ on:
       - 'AGENTS.md'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
+    inputs:
+      bootstrap_database:
+        description: 'Create the D1 database when it is missing and use its ID for this run'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -83,6 +88,50 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build Worker
         run: pnpm build
+      - name: Ensure D1 database
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.bootstrap_database == true) || vars.CLOUDFLARE_BOOTSTRAP_D1 == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo '::error::Set CLOUDFLARE_API_TOKEN in the production environment secrets.'
+            exit 1
+          fi
+          if [[ ! "${CLOUDFLARE_ACCOUNT_ID:-}" =~ ^[a-fA-F0-9]{32}$ ]]; then
+            echo '::error::Invalid CLOUDFLARE_ACCOUNT_ID. Resolve the account before bootstrapping D1.'
+            exit 1
+          fi
+          DB_NAME=$(node scripts/prepare-cloudflare-config.mjs name wrangler.jsonc)
+          if [[ ! "$DB_NAME" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo '::error::Invalid database_name for the DB binding in wrangler.jsonc.'
+            exit 1
+          fi
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database"
+          header="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          list=$(curl --silent --show-error --fail --get \
+            --header "$header" --data-urlencode 'per_page=1000' "$api")
+          if ! jq -e '.success == true and (.result | type == "array")' >/dev/null <<< "$list"; then
+            echo '::error::Unable to list D1 databases. Check that the token can read D1 databases.'
+            exit 1
+          fi
+          DB_ID=$(jq -r --arg name "$DB_NAME" 'first(.result[] | select(.name == $name) | .uuid) // empty' <<< "$list")
+          if [[ -z "$DB_ID" ]]; then
+            created=$(curl --silent --show-error --fail --request POST \
+              --header "$header" --header 'Content-Type: application/json' \
+              --data "$(jq -nc --arg name "$DB_NAME" '{ name: $name }')" "$api")
+            if ! jq -e '.success == true and (.result.uuid | type == "string")' >/dev/null <<< "$created"; then
+              echo '::error::Unable to create the D1 database. Check that the token can create D1 databases.'
+              exit 1
+            fi
+            DB_ID=$(jq -r '.result.uuid' <<< "$created")
+            echo "Created D1 database $DB_NAME"
+          else
+            echo "Using existing D1 database $DB_NAME"
+          fi
+          echo "D1 database ID: $DB_ID"
+          node scripts/prepare-cloudflare-config.mjs config "$DB_ID" wrangler.jsonc wrangler.bootstrap.jsonc
+          echo "CLOUDFLARE_DEPLOY_CONFIG=wrangler.bootstrap.jsonc" >> "$GITHUB_ENV"
       - name: Apply D1 migrations and deploy Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

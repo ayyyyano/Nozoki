@@ -60,6 +60,9 @@ __pycache__/
 /nozoki-backup-*/
 /nozoki-docs-archive-*/
 
+# GitHub Actions bootstrap config (generated on the runner, never committed)
+/wrangler.bootstrap.jsonc
+
 # VitePress output
 /docs/.vitepress/dist/
 /docs/.vitepress/cache/

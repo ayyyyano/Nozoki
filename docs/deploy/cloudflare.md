@@ -10,8 +10,10 @@ Nozoki 在同一个 Worker 中运行看板、API 和定时采集。部署命令�
 
 ```sh
 pnpm exec wrangler login
-pnpm exec wrangler d1 create nozoki-db
+pnpm exec wrangler d1 create your-database-name
 ```
+
+把 `your-database-name` 换成 `wrangler.jsonc` 中 `DB` 绑定的 `database_name`，并把返回的 `database_id` 填回配置。使用 [GitHub Actions](./github-actions.md#首次部署数据库自举) 时可启用数据库自举，由工作流按这个名字查找或创建数据库，无需先手工填写 `database_id`。
 
 ## 首次部署
 

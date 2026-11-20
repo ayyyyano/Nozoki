@@ -13,6 +13,8 @@ pnpm deploy:cloudflare
 
 部署脚本会先应用 D1 迁移，迁移失败就停止发布。需要独立执行时使用 `pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.jsonc`。兼容的七模块旧结构升级期间可以只读展示，迁移完成后刷新。空库、损坏结构或配置缺失需要先修复数据库。
 
+Git 自动部署使用同一发布命令。GitHub Actions 默认不创建 D1、不设置运行时 Secret、不绑定自定义域名，也不删除任何资源；显式开启[数据库自举](/deploy/github-actions.md#首次部署数据库自举)后，才按 `database_name` 查库并在缺失时创建，且只在 runner 上生成临时配置副本。自举应用的是建表迁移，新库为空，不导入历史数据。删除 Worker/D1、迁移历史数据与重设密钥始终由站点所有者本人完成。
+
 从旧双 Worker 安装升级时，站点由主 Worker 采集。确认新的 Cron 生效后，由站点所有者清理旧 Collector 的触发器和构建连接。回滚应用时重新构建并发布目标版本，先确认数据库迁移与旧代码兼容。
 
 ## Node.js
