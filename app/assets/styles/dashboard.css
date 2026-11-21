@@ -1080,6 +1080,14 @@ p {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.monitor-name-link {
+  text-decoration: underline;
+}
+.monitor-name-link,
+.monitor-name-link:visited,
+.monitor-name-link:hover {
+  color: inherit;
+}
 .monitor-row p,
 .monitor-state small {
   color: var(--n-muted);

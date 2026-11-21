@@ -25,7 +25,6 @@ const expired = computed(() =>
         (m) =>
           m.sourceName ||
           m.checkedAt ||
-          m.statusPageUrl ||
           m.uptimePercent !== null ||
           (m.displayId && m.displayId !== m.name),
       )

@@ -45,6 +45,7 @@ blob-report/
 # Editor and operating system files
 .idea/
 .vscode/
+.workbuddy/
 .DS_Store
 Thumbs.db
 Desktop.ini

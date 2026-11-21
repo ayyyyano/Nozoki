@@ -211,7 +211,7 @@ const DevPreview = import.meta.dev
   <AuthAccountDialog ref="account" />
 </template>
 <style scoped>
-.dashboard-container :deep(a) {
+.dashboard-container :deep(a:not(.monitor-name-link)) {
   text-decoration: none;
 }
 </style>
