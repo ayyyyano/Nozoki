@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ADAPTER_PROTOCOLS } from '../../shared/contracts/adapter.ts'
+import { HttpsSchema } from '../../shared/contracts/config.ts'
 import { cap, parse, putView, sourceResult, stampISO, staleAt } from './common.ts'
 import { endpointCatalog } from './transport.ts'
 import type { Adapter, AdapterContext } from './types.ts'
@@ -10,7 +11,13 @@ const Metadata = z.object({
     .array(
       z.object({
         monitorList: z
-          .array(z.object({ id: z.number().int().nonnegative(), name: z.string().max(500) }))
+          .array(
+            z.object({
+              id: z.number().int().nonnegative(),
+              name: z.string().max(500),
+              url: z.unknown().optional(),
+            }),
+          )
           .max(200),
       }),
     )
@@ -78,6 +85,10 @@ async function read(context: AdapterContext) {
       beat = beats.at(-1)
     if (beat) staleAt(beat.at, context)
     const uptime = value.uptimeList[`${m.id}_24`]
+    // Kuma emits `url` (customUrl ?? url) only when the status page enables sendUrl.
+    // It is the monitored target, so accept only safe HTTPS and degrade the rest:
+    // putView validates statusPageUrl strictly and rejects the whole source otherwise.
+    const link = HttpsSchema.safeParse(m.url)
     return {
       id: `${context.source.id}/${context.source.fieldMappings.status_page_slug}/${m.id}`,
       name: m.name,
@@ -92,7 +103,7 @@ async function read(context: AdapterContext) {
               : 'pending',
       latencyMs: beat?.ping ?? null,
       checkedAt: beat?.at ?? null,
-      statusPageUrl: null,
+      statusPageUrl: link.success ? link.data : null,
       // Preserve null when absent. The documented ratio is a measured float; no money arithmetic here.
       uptimePercent: uptime === undefined ? null : String(Number((uptime * 100).toFixed(8))),
       capabilities: {
