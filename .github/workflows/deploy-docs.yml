@@ -13,6 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -44,6 +45,22 @@ jobs:
         with:
           name: github-pages-${{ github.run_attempt }}
           path: docs/.vitepress/dist
+      - name: Wait for Pages artifact to become visible
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: github-pages-${{ github.run_attempt }}
+        run: |
+          for attempt in $(seq 1 12); do
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+                --jq '.artifacts[].name' | grep -Fxq "$ARTIFACT_NAME"; then
+              echo "Artifact $ARTIFACT_NAME is visible"
+              exit 0
+            fi
+            echo "Waiting for artifact $ARTIFACT_NAME ($attempt/12)"
+            sleep 5
+          done
+          echo "Artifact $ARTIFACT_NAME did not become visible" >&2
+          exit 1
       - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         id: deployment
         with:
