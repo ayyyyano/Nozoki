@@ -1,3 +1,5 @@
+import { collectionTick } from '../../shared/collection/cadence.ts'
+import { readHomeServiceHistory, readServiceHistory } from '../../server/services/dashboard.ts'
 import { sourceTargetKey } from '../../shared/contracts/source-access.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -201,12 +203,11 @@ async function reset(spec = [['fixture', 'sleepy', 'devices']]) {
       const value = {
         ...settings,
         id,
-        baseUrl:
-          provider === 'sleepy' || provider === 'uptimeflare'
-            ? s.baseUrl
-            : provider === 'deepseek'
-              ? 'https://api.deepseek.com/'
-              : settings.baseUrl,
+        baseUrl: ['sleepy', 'uptimeflare', 'uptime-kuma'].includes(provider)
+          ? s.baseUrl
+          : provider === 'deepseek'
+            ? 'https://api.deepseek.com/'
+            : settings.baseUrl,
         credential: { operation: 'keep' },
       }
       if (provider !== 'quotes-custom') {
@@ -278,7 +279,7 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
           s.protocolVersion,
           s.baseUrl,
           Number(s.enabled),
-          s.refreshInterval,
+          180,
           JSON.stringify(s.fieldMappings),
           JSON.stringify(s.capabilities),
           credential.ciphertext,
@@ -332,6 +333,10 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
             db.prepare(sql),
           ),
         )
+      assert.equal(
+        (await rows('integrations')).find((s) => s.id === 'fixture').refresh_interval,
+        300,
+      )
       await reset()
     },
   )
@@ -519,7 +524,7 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
       assert.equal(r.failure, 1)
       const until = (await rows('collection_state'))[0].retry_after_until
       await save((c) => {
-        c.integrations[0].refreshInterval = 61
+        c.integrations[0].refreshInterval = 301
       })
       r = JSON.parse(await h1.run(at + 301000))
       assert.equal(r.selected, 0)
@@ -576,13 +581,14 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
     'balance history is exact, starts without fabricated changes, never writes official daily usage',
     async () => {
       await reset([['balance-source', 'deepseek', 'deepseek']])
-      assert.equal(JSON.parse(await h1.run(at)).success, 1)
+      const balanceAt = Math.floor(at / 3600000) * 3600000 + 119 * 60000
+      assert.equal(JSON.parse(await h1.run(balanceAt)).success, 1)
       let observations = await rows('balance_observations')
       assert.equal(observations.length, 2)
       const series = observations[0].series_revision
       let changes = await readBalanceChanges(db, 'balance-source', series, 60)
       assert.ok(changes.every((r) => r.change === null && r.observedAt === null))
-      assert.equal(JSON.parse(await h1.run(at + 301000, 'changed-balance')).success, 1)
+      assert.equal(JSON.parse(await h1.run(balanceAt + 301000, 'changed-balance')).success, 1)
       observations = await rows('balance_observations')
       assert.equal(observations.length, 4)
       changes = await readBalanceChanges(db, 'balance-source', series, 60)
@@ -954,6 +960,140 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
       const rejected = JSON.parse(await h1.run(Date.now()))
       assert.equal(rejected.fatal, 'COLLECTION_UNAVAILABLE')
       assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, [])
+    },
+  )
+  await check(
+    'fast service history is isolated, deduplicated, and projected through ACLs',
+    async () => {
+      // The preceding test hands ownership to a different environment. Restore the isolated
+      // fixture's environment for known upstream data and exercise two independent cron ticks.
+      await db.prepare('DELETE FROM collector_environment').run()
+      await reset([
+        ['fast-flare', 'uptimeflare', 'services'],
+        ['kuma', 'uptime-kuma', 'services'],
+      ])
+      await save((c) => {
+        c.integrations.find((i) => i.id === 'fast-flare').refreshInterval = 180
+        const services = c.modules.find((m) => m.id === 'services')
+        services.visibility = 'public'
+        services.sources.fast = { sourceId: 'fast-flare', subject: 'default' }
+        services.homeServices = [
+          { sourceId: 'fast-flare', monitorId: 'fast-flare/web' },
+          { sourceId: 'kuma', monitorId: 'kuma/public/1' },
+        ]
+      })
+      const tick = collectionTick(Date.now(), 'uptimeflare') + 180_000
+      const first = JSON.parse(await h1.run(tick, 'history', 'uptimeflare', 34_000))
+      assert.equal(first.success, 1)
+      assert.deepEqual(
+        (await rows('collection_state')).map((s) => s.source_id),
+        ['fast-flare'],
+      )
+      assert.equal((await rows('collection_state'))[0].next_run_at, iso(tick + 180_000))
+      assert.equal(
+        JSON.parse(await h2.run(tick + 180_000, 'history', 'uptimeflare', 34_000)).success,
+        1,
+      )
+      assert.equal((await rows('collection_state'))[0].next_run_at, iso(tick + 360_000))
+      const samples = await rows('service_observations')
+      assert.equal(samples.length, 2)
+      assert.equal(JSON.parse(await h1.run(tick + 181_000, 'ok', 'uptimeflare')).selected, 0)
+      const standard = JSON.parse(await h1.run(tick + 180_000, 'ok', 'standard', 40_000))
+      assert.equal(standard.success, 1)
+      const duplicate = JSON.parse(
+        await h1.run(tick + 360_000, 'repeat-monitor', 'uptimeflare', 34_000),
+      )
+      assert.equal(duplicate.success, 1)
+      assert.equal((await rows('service_observations')).length, 2)
+      const now = new Date(tick + 400_000)
+      const flare = await readServiceHistory(db, 'fast-flare/web', false, now)
+      assert.equal(flare.intervalSeconds, 180)
+      assert.deepEqual(
+        flare.points.map((p) => [p.state, p.latencyMs]),
+        [
+          ['up', 0],
+          ['up', 0],
+        ],
+      )
+      const kuma = await readServiceHistory(db, 'kuma/public/1', false, now)
+      assert.deepEqual(
+        kuma.points.map((p) => [p.state, p.latencyMs]),
+        [
+          ['down', null],
+          ['up', 17],
+        ],
+      )
+      const dashboard = await mf.getWorker('dashboard')
+      const publicResponse = await dashboard.fetch(
+        origin + '/api/service-history?monitor=fast-flare%2Fweb',
+      )
+      assert.equal(publicResponse.status, 200)
+      assert.match(publicResponse.headers.get('cache-control'), /no-store/)
+      assert.equal(publicResponse.headers.get('vary'), 'Cookie')
+      assert.equal((await publicResponse.json()).points.length, 2)
+      const home = await readHomeServiceHistory(db, false, now)
+      assert.deepEqual(
+        home.map(({ id }) => id),
+        ['fast-flare/web', 'kuma/public/1'],
+      )
+      const flareHome = home.find(({ id }) => id === 'fast-flare/web')
+      const kumaHome = home.find(({ id }) => id === 'kuma/public/1')
+      assert.ok(flareHome && kumaHome)
+      assert.deepEqual(Object.keys(flareHome), ['id', 'segments'])
+      assert.equal(flareHome.segments[12].at(-1), 'up')
+      assert.ok(flareHome.segments[12].slice(0, -1).every((status) => status === 'missing'))
+      assert.equal(kumaHome.segments[16].length, 16)
+      assert.ok(kumaHome.segments[16].includes('down'))
+      const homeResponse = await dashboard.fetch(origin + '/api/service-history?view=home')
+      assert.equal(homeResponse.status, 200)
+      assert.match(homeResponse.headers.get('cache-control'), /no-store/)
+      assert.equal(homeResponse.headers.get('vary'), 'Cookie')
+      assert.ok((await homeResponse.json()).every((item) => !('points' in item)))
+      await save((c) => {
+        const services = c.modules.find((m) => m.id === 'services')
+        services.fields[fieldPointer(['latency'])] = { enabled: true, visibility: 'admin' }
+      })
+      // ACL changes fence the prior snapshot. A new sample must obey the current projection.
+      assert.equal(await readServiceHistory(db, 'fast-flare/web', false, now), null)
+      assert.equal(
+        JSON.parse(await h1.run(tick + 540_000, 'history', 'uptimeflare', 34_000)).success,
+        1,
+      )
+      const afterRestriction = new Date(tick + 600_000)
+      const guest = await readServiceHistory(db, 'fast-flare/web', false, afterRestriction)
+      assert.equal(guest.showLatency, false)
+      assert.ok(guest.points.length && guest.points.every((p) => p.latencyMs === null))
+      assert.equal(
+        (await readServiceHistory(db, 'fast-flare/web', true, afterRestriction)).points[0]
+          .latencyMs,
+        0,
+      )
+      await save((c) => {
+        c.modules.find((m) => m.id === 'services').fields[fieldPointer(['history'])] = {
+          enabled: true,
+          visibility: 'admin',
+        }
+      })
+      assert.equal(
+        JSON.parse(await h1.run(tick + 720_000, 'history', 'uptimeflare', 34_000)).success,
+        1,
+      )
+      assert.equal(
+        await readServiceHistory(db, 'fast-flare/web', false, new Date(tick + 780_000)),
+        null,
+      )
+      assert.equal(
+        (await readServiceHistory(db, 'fast-flare/web', true, new Date(tick + 780_000))).points
+          .length,
+        2,
+      )
+      const denied = await dashboard.fetch(origin + '/api/service-history?monitor=fast-flare%2Fweb')
+      assert.equal(denied.status, 404)
+      assert.match(denied.headers.get('cache-control'), /no-store/)
+      assert.deepEqual(
+        await (await dashboard.fetch(origin + '/api/service-history?view=home')).json(),
+        [],
+      )
     },
   )
   await check(

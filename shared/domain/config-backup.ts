@@ -1,3 +1,4 @@
+import { STANDARD_COLLECTION_SECONDS, usesFastCollection } from '../collection/cadence.ts'
 import {
   ConfigBackupSchema,
   BACKUP_FILE_LIMIT,
@@ -27,6 +28,7 @@ export interface ConfigImportPlan {
   backgroundUpload?: { url: string; data: string }
   retainedSources: number
   restrictedModules: string[]
+  adjustedIntervals?: number
 }
 export function createConfigBackup(
   config: Config,
@@ -50,6 +52,7 @@ export function createConfigBackup(
         baseUrl: source.baseUrl,
         enabled: source.enabled,
         refreshInterval: source.refreshInterval,
+        ...(usesFastCollection(source) ? { fastUptimeFlare: true as const } : {}),
         fieldMappings: source.fieldMappings,
         ...credentials?.get(source.id),
       })),
@@ -74,10 +77,23 @@ export async function prepareConfigImport(
   const remap = new Map<string, string>()
   const used = new Set<string>()
   const changed = new Set<string>()
+  let adjustedIntervals = 0
+  function standardize(value: number) {
+    if (value >= STANDARD_COLLECTION_SECONDS) return value
+    adjustedIntervals++
+    return STANDARD_COLLECTION_SECONDS
+  }
   const sources = imported.integrations.map((item): IntegrationDraft => {
     if (used.has(item.id)) throw new Error('BACKUP_DUPLICATE_SOURCE')
     used.add(item.id)
-    const { credentialPlain, identityPlain, ...portable } = item
+    const { credentialPlain, identityPlain, fastUptimeFlare, ...settings } = item
+    const portable = {
+      ...settings,
+      refreshInterval:
+        fastUptimeFlare && usesFastCollection(settings)
+          ? settings.refreshInterval
+          : standardize(settings.refreshInterval),
+    }
     const preset = integrationPreset(portable)
     const old =
       baseline.integrations.find(
@@ -101,13 +117,13 @@ export async function prepareConfigImport(
             protocolVersion: original.protocolVersion,
             baseUrl: original.baseUrl,
             enabled: original.enabled,
-            refreshInterval: original.refreshInterval,
+            refreshInterval: Math.max(STANDARD_COLLECTION_SECONDS, original.refreshInterval),
             fieldMappings: original.fieldMappings,
           })
       )
         throw new Error('BACKUP_UNSUPPORTED_SOURCE')
       if (credentialPlain || identityPlain) throw new Error('BACKUP_UNSUPPORTED_SOURCE')
-      return original
+      return { ...original, refreshInterval: portable.refreshInterval }
     }
     const next: IntegrationDraft = {
       ...portable,
@@ -169,6 +185,7 @@ export async function prepareConfigImport(
     })),
     quotes: imported.quotes.map((q) => ({
       ...q,
+      refreshInterval: standardize(q.refreshInterval),
       provider: q.provider ? (remap.get(q.provider) ?? null) : null,
     })),
   })
@@ -218,7 +235,13 @@ export async function prepareConfigImport(
     ).length > CONFIG_BODY_LIMIT
   )
     throw new Error('BACKUP_TOO_LARGE')
-  return { config, backgroundUpload, retainedSources: retained.length, restrictedModules }
+  return {
+    config,
+    backgroundUpload,
+    retainedSources: retained.length,
+    restrictedModules,
+    ...(adjustedIntervals ? { adjustedIntervals } : {}),
+  }
 }
 /** Restore UI defaults. The destructive reset clears source credentials and identity keys;
  * non-default sources are disabled. Login sessions and the collection schedule are untouched. */

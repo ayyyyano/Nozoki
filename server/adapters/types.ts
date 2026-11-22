@@ -6,6 +6,7 @@ import type {
   DataStatus,
   SourceCapability,
 } from '../../shared/contracts/dashboard.ts'
+import type { MonitorHistoryPoint } from '../../shared/contracts/service-history.ts'
 import type { AdapterCode } from '../../shared/contracts/adapter.ts'
 import type { QuoteSymbolInput } from '../../shared/quotes/yahoo-symbol.ts'
 import type { UsageDay } from './codex-usage.ts'
@@ -52,6 +53,7 @@ export interface AdapterRead {
   items: number
   /** Aggregated deltas only; raw consuming queue records never leave the adapter. */
   usageDelta?: UsageDay[]
+  monitorHeartbeats?: Record<string, MonitorHistoryPoint[]>
   code?: AdapterCode
   retryAfterSeconds?: number
   /** Recognized source facts have no existing display DTO. Server-only, never logs/probe responses. */

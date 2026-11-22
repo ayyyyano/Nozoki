@@ -81,8 +81,8 @@ const hasSubtitle = computed(
 )
 const showDetails = computed(
   () =>
-    !!slots.details &&
-    (props.details || hasSubtitle.value || !!slots.freshness || !!slots.subtitle),
+    (props.details || hasSubtitle.value || !!slots.freshness || !!slots.subtitle) &&
+    !!slots.details,
 )
 </script>
 <template>
@@ -147,7 +147,7 @@ const showDetails = computed(
     </header>
     <div class="module-body"><slot /></div>
     <footer v-if="$slots.footer" class="module-footer"><slot name="footer" /></footer>
-    <DashboardModuleDetail v-if="showDetails" v-model:show="open" :title="title">
+    <DashboardModuleDetail v-if="showDetails" v-model:show="open" :title="title" :module-id="id">
       <template v-if="hasSubtitle || $slots.freshness || $slots.subtitle" #subtitle>
         <p v-if="status === 'stale'" role="status">数据已过期</p>
         <slot name="freshness" />
@@ -166,7 +166,7 @@ const showDetails = computed(
           :timezone="timeZone"
         />
       </template>
-      <slot name="details" />
+      <slot name="details" :open="open" />
     </DashboardModuleDetail>
     <!-- Stays inside <section> to keep a single root so the grid span variables
          passed via $attrs keep landing on the card. The popup teleports to <body>,

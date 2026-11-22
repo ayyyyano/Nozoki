@@ -90,16 +90,6 @@ export function quoteUpdates(items: Quote[], observedAt: string | null) {
     ? [{ ...first, symbol: '' }]
     : times
 }
-export function chartPoints(quote: Quote): string | null {
-  if (!Array.isArray(quote.history) || quote.history.length < 2) return null
-  const values = quote.history.map((p) => Number(p.close))
-  if (values.some((v) => !Number.isFinite(v))) return null
-  const min = Math.min(...values),
-    range = Math.max(...values) - min || 1
-  return values
-    .map((v, i) => `${(i / (values.length - 1)) * 240},${50 - ((v - min) / range) * 42}`)
-    .join(' ')
-}
 export function quoteHasDetails(items: Quote[]) {
   return items.some(
     (q) =>

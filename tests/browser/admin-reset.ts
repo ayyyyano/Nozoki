@@ -149,7 +149,7 @@ export async function verifyResetSave(page, context, origin) {
     await editor.getByRole('button', { name: '保存配置', exact: true }).click()
     assert.equal((await response).status(), 200)
     await expect(editor.getByRole('button', { name: '保存配置', exact: true })).toBeEnabled()
-    await editor.getByText('已保存并确认持久化', { exact: true }).waitFor()
+    await page.locator('.admin-feedback').getByText('已保存并确认持久化', { exact: true }).waitFor()
   }
   await save()
   await page.getByRole('button', { name: '重置常用链接为默认设置', exact: true }).click()

@@ -23,6 +23,13 @@ const Metadata = z.object({
     )
     .max(100),
 })
+function heartbeatState(status: number) {
+  if (status === 1) return 'up' as const
+  if (status === 0) return 'down' as const
+  if (status === 3) return 'maintenance' as const
+  return 'pending' as const
+}
+
 const Hearts = z.object({
   heartbeatList: z.record(
     z.string(),
@@ -78,11 +85,26 @@ async function read(context: AdapterContext) {
     uptime: cap(true),
     history: cap(false),
   })
+  const heartbeats: NonNullable<typeof result.monitorHeartbeats> = {}
   const monitors = meta.monitors.map((m) => {
     const beats = (value.heartbeatList[String(m.id)] ?? [])
         .map((b) => ({ ...b, at: utcTime(b.time) }))
         .toSorted((a, b) => a.at.localeCompare(b.at)),
       beat = beats.at(-1)
+    const id = `${context.source.id}/${context.source.fieldMappings.status_page_slug}/${m.id}`
+    const points = beats.filter((b) => Date.parse(b.at) <= context.now.getTime() + 60_000)
+    heartbeats[id] = Array.from(
+      new Map(
+        points.map((b) => [
+          b.at,
+          {
+            at: b.at,
+            state: heartbeatState(b.status),
+            latencyMs: b.ping ?? null,
+          },
+        ]),
+      ).values(),
+    )
     if (beat) staleAt(beat.at, context)
     const uptime = value.uptimeList[`${m.id}_24`]
     // Kuma emits `url` (customUrl ?? url) only when the status page enables sendUrl.
@@ -90,17 +112,9 @@ async function read(context: AdapterContext) {
     // putView validates statusPageUrl strictly and rejects the whole source otherwise.
     const link = HttpsSchema.safeParse(m.url)
     return {
-      id: `${context.source.id}/${context.source.fieldMappings.status_page_slug}/${m.id}`,
+      id,
       name: m.name,
-      state: !beat
-        ? 'pending'
-        : beat.status === 1
-          ? 'up'
-          : beat.status === 0
-            ? 'down'
-            : beat.status === 3
-              ? 'maintenance'
-              : 'pending',
+      state: beat ? heartbeatState(beat.status) : ('pending' as const),
       latencyMs: beat?.ping ?? null,
       checkedAt: beat?.at ?? null,
       statusPageUrl: link.success ? link.data : null,
@@ -123,6 +137,11 @@ async function read(context: AdapterContext) {
   )
     result.status = 'stale'
   result.items = monitors.length
+  result.monitorHeartbeats = heartbeats
+  result.capabilities.history = cap(
+    true,
+    Object.values(heartbeats).some((points) => points.length),
+  )
   putView(result, 'services', { monitors })
   return result
 }

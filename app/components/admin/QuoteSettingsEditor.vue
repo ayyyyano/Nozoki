@@ -96,7 +96,7 @@ watch(
         <AdminText v-model="draft.market" :label="`标的 ${order} 市场`" />
         <AdminText v-model="draft.symbol" :label="`标的 ${order} 代码`" />
         <AdminText v-model="draft.displayName" :label="`标的 ${order} 名称`" />
-        <AdminNumber v-model="draft.refreshInterval" :label="`标的 ${order} 刷新间隔`" />
+        <p class="admin-note">刷新间隔跟随行情来源。</p>
         <p class="admin-note">
           {{
             draft.provider

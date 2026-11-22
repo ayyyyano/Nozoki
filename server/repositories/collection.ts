@@ -2,6 +2,7 @@ import type { Database, D1Statement, D1Value } from '../types/database.ts'
 import { hashToken } from '../services/auth-crypto.ts'
 import type { CollectionPlan } from '../collection/plans.ts'
 import type { CollectionEnvironment } from '../collection/environment.ts'
+import { serviceHistoryStatement, type ServiceHistoryCommit } from './service-history.ts'
 import { nextBalanceCollection } from '../../shared/domain/daily-balances.ts'
 import { balanceSeries } from '../services/balance-observations.ts'
 import { usageCutoff, type UsageDay } from '../adapters/codex-usage.ts'
@@ -9,7 +10,7 @@ import {
   COLLECTION_BUDGET,
   failureStatus,
   retryPlan,
-  successfulSchedule,
+  successfulSourceSchedule,
   type CollectionCode,
 } from '../../shared/collection/policy.ts'
 
@@ -201,6 +202,7 @@ export async function commitCollection(
   now: string,
   metrics: Record<string, unknown>,
   usage: UsageDay[] = [],
+  serviceHistory?: ServiceHistoryCommit,
 ) {
   const json = JSON.stringify(views),
     series = await hashToken(
@@ -237,6 +239,7 @@ export async function commitCollection(
       )
       .bind(c.plan.source.id, now, c.plan.revision, c.environment.epoch, json),
   ]
+  if (serviceHistory) statements.push(serviceHistoryStatement(db, c, serviceHistory))
   if (balances.length) {
     // The same-hour throttle must stay index-friendly: substr(collected_at,1,13) made
     // every balance write scan the source's entire history. All balances share the
@@ -303,7 +306,7 @@ export async function commitCollection(
               c.plan.source.refreshInterval,
               c.plan.timezone ?? 'UTC',
             )
-          : successfulSchedule(scheduleAnchor, c.plan.source.refreshInterval),
+          : successfulSourceSchedule(scheduleAnchor, c.plan.source),
         c.plan.source.id,
       ),
     db
@@ -388,6 +391,11 @@ export async function cleanupCollection(db: Database, now: string) {
         'DELETE FROM codex_usage_days WHERE rowid IN(SELECT rowid FROM codex_usage_days WHERE day<? ORDER BY day LIMIT 100)',
       )
       .bind(usageCutoff(new Date(now))),
+    db
+      .prepare(
+        'DELETE FROM service_observations WHERE rowid IN (SELECT rowid FROM service_observations WHERE observed_at<? ORDER BY observed_at LIMIT 2048)',
+      )
+      .bind(new Date(Date.parse(now) - 86400000).toISOString()),
   ])
   return true
 }

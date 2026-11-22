@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DataSnapshot, DeepSeekData } from '../../../shared/contracts/dashboard'
 import { decimalText, formatTimestamp } from '../../../shared/domain/format'
+import { decimalPoint } from '../../../shared/domain/chart-series'
 import { balanceDays } from '../../../shared/domain/daily-balances'
 const props = defineProps<{ snapshot: DataSnapshot<DeepSeekData>; title: string }>()
 const clock = useLocalClock()
@@ -15,23 +16,23 @@ const series = computed(() => {
       ...(data?.dailyBalances ?? []).map((b) => b.currency),
     ]),
   ].filter((v) => /^[A-Z]{3}$/.test(v))
-  return currencies.map((currency) => {
-    const records = days.value.map(({ day }) => {
+  return currencies.map((currency) => ({
+    currency,
+    points: days.value.map(({ day }, index) => {
       const point = data?.dailyBalances.find((b) => b.day === day && b.currency === currency)
-      const valid =
-        point && typeof point.total === 'string' && /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(point.total)
-      return { day, point: valid ? point : null }
-    })
-    const max = Math.max(...records.map(({ point }) => Math.abs(Number(point?.total ?? 0))), 0)
-    return {
-      currency,
-      records: records.map((r) => ({
-        ...r,
-        height: r.point && max ? (Math.abs(Number(r.point.total)) / max) * 100 : 0,
-      })),
-    }
-  })
+      return {
+        ...decimalPoint(day, index === 6 ? '今日' : day.slice(5), point?.total, currency),
+        detail: point
+          ? `${index === 6 ? '今日最新观测' : '当日最后观测'} · 采集于 ${formatTimestamp(point.collectedAt, timezone.value)}`
+          : undefined,
+      }
+    }),
+  }))
 })
+const selectedCurrency = ref<string>()
+const detailSeries = computed(
+  () => series.value.find((s) => s.currency === selectedCurrency.value) ?? series.value[0],
+)
 </script>
 <template>
   <DashboardModuleCard
@@ -51,8 +52,28 @@ const series = computed(() => {
         snapshot.data.dailyBalances.length > 0)
     "
   >
-    <template v-if="!snapshot.data?.masked" #details>
+    <template v-if="!snapshot.data?.masked" #details="{ open }">
       <DashboardDataState :status="snapshot.status" compact />
+      <section v-if="detailSeries && open" class="detail-chart">
+        <h3>近 7 日剩余余额 · {{ detailSeries.currency }}</h3>
+        <div v-if="series.length > 1" class="chart-choices" aria-label="余额币种">
+          <button
+            v-for="item in series"
+            :key="item.currency"
+            type="button"
+            :aria-pressed="item.currency === detailSeries.currency"
+            @click="selectedCurrency = item.currency"
+          >
+            {{ item.currency }}
+          </button>
+        </div>
+        <ChartsTimeSeriesChart
+          :key="detailSeries.currency"
+          type="bar"
+          :label="`近 7 日 ${detailSeries.currency} 余额`"
+          :points="detailSeries.points"
+        />
+      </section>
       <section v-for="balance in snapshot.data?.balances ?? []" :key="balance.currency">
         <h3>{{ balance.currency }} 余额组成</h3>
         <dl class="quote-details">
@@ -100,40 +121,7 @@ const series = computed(() => {
           <h3>近 7 日剩余余额</h3>
           <span>{{ s.currency }}</span>
         </figcaption>
-        <div class="balance-bars">
-          <div
-            v-for="(day, index) in s.records"
-            :key="day.day"
-            class="balance-bar"
-            :class="{ 'balance-bar-missing': !day.point }"
-            tabindex="0"
-            :title="
-              day.point
-                ? `${day.day} · ${decimalText(day.point.total)} ${s.currency} · 采集于 ${formatTimestamp(day.point.collectedAt, timezone)}`
-                : `${day.day} · 尚无记录`
-            "
-            :aria-label="
-              day.point
-                ? `${day.day} 剩余 ${decimalText(day.point.total)} ${s.currency}，${index === 6 ? '今日最新观测' : '当日最后观测'}，采集于 ${formatTimestamp(day.point.collectedAt, timezone)}`
-                : `${day.day} 尚无记录`
-            "
-          >
-            <span
-              v-if="day.point"
-              class="balance-bar-value"
-              :style="{ transform: `translateY(${76 - Math.max(3, day.height * 0.76)}px)` }"
-              >{{ decimalText(day.point.total) }}</span
-            >
-            <div class="balance-bar-track">
-              <i
-                v-if="day.point"
-                :class="{ 'balance-negative': day.point.total.startsWith('-') }"
-                :style="{ height: `${day.height}%` }"
-              /><span v-else>—</span>
-            </div>
-            <small>{{ index === 6 ? '今日' : day.day.slice(5) }}</small>
-          </div>
-        </div>
+        <ChartsCompactChart type="bar" :label="`近 7 日 ${s.currency} 余额`" :points="s.points" />
       </figure>
       <p v-if="series.length > 1" class="quiet-note">
         另有 {{ series.length - 1 }} 种币种，可在详情查看。

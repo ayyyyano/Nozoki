@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import {
+  STANDARD_COLLECTION_SECONDS,
+  UPTIMEFLARE_COLLECTION_SECONDS,
+  usesFastCollection,
+  validCollectionInterval,
+} from '../../../shared/collection/cadence'
 import type { ProbeResult } from '../../../shared/contracts/adapter'
 import { canonical } from '../../../shared/contracts/admin'
 import type { CsrfDto } from '../../../shared/contracts/auth'
@@ -26,6 +32,15 @@ const props = defineProps<{
   recentFailure?: boolean
 }>()
 const emit = defineEmits<{ tested: [ProbeResult | null] }>()
+const fastCollection = computed({
+  get: () => usesFastCollection(model.value),
+  set: (enabled: boolean) => {
+    model.value.refreshInterval = enabled
+      ? UPTIMEFLARE_COLLECTION_SECONDS
+      : STANDARD_COLLECTION_SECONDS
+  },
+})
+const invalidInterval = computed(() => !validCollectionInterval(model.value))
 const preset = computed(() => integrationPreset(model.value))
 const clock = useLocalClock()
 const proofExpired = computed(
@@ -271,8 +286,21 @@ const identityImport = computed({
         reserve-details
         @update:model-value="model.fieldMappings[field.key] = $event"
       />
-      <AdminNumber v-model="model.refreshInterval" label="刷新间隔（秒）" />
+      <AdminNumber
+        v-if="!fastCollection"
+        v-model="model.refreshInterval"
+        label="刷新间隔（秒）"
+        :error="invalidInterval"
+      />
     </div>
+    <p v-if="invalidInterval" class="source-warning" role="status">
+      刷新间隔须为 300 至 86400 秒。
+    </p>
+    <AdminSettingSwitch
+      v-if="model.provider === 'uptimeflare'"
+      v-model="fastCollection"
+      label="每 3 分钟采集"
+    />
     <AdminSourceCredential
       v-if="showCredential"
       v-model="model.credential"

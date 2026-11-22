@@ -13,7 +13,7 @@ const known = {
     quota: false,
     estimatedCost: false,
   },
-  'uptime-kuma': { monitors: true, status: true, latency: true, uptime: true, history: false },
+  'uptime-kuma': { monitors: true, status: true, latency: true, uptime: true, history: true },
   uptimeflare: { status: true, latency: true, history: false },
   'quotes-custom': { quote: true },
 }

@@ -11,6 +11,8 @@ type CollectedHistoryCounts = {
   codexUsageDays: number
   collectionRuns: number
   snapshotViews: number
+  serviceObservations: number
+  serviceHeartbeatWindows: number
 }
 import {
   prepareConfigImport,
@@ -379,6 +381,9 @@ async function download() {
           {{ plan.config.modules.length }} 个模块 · {{ plan.config.links.length }} 个链接 ·
           {{ plan.config.quotes.length }} 个行情标的
         </p>
+        <p v-if="plan.adjustedIntervals">
+          已将 {{ plan.adjustedIntervals }} 个旧刷新间隔调整为 300 秒。
+        </p>
         <p v-if="plan.retainedSources">
           保留并停用 {{ plan.retainedSources }} 个备份未包含的来源。
         </p>
@@ -433,6 +438,8 @@ async function download() {
         <li>Codex 日用量 {{ historyCounts.codexUsageDays }} 条</li>
         <li>采集记录 {{ historyCounts.collectionRuns }} 条</li>
         <li>快照 {{ historyCounts.snapshotViews }} 份</li>
+        <li>服务探测快照 {{ historyCounts.serviceObservations }} 份</li>
+        <li>服务心跳窗口 {{ historyCounts.serviceHeartbeatWindows }} 份</li>
       </ul>
       <p v-else class="admin-note">统计暂时不可用，清除范围与上一致。</p>
       <p>需要保留时请先返回导出「包含采集历史」的备份。</p>

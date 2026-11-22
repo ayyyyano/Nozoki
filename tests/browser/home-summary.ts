@@ -79,7 +79,7 @@ export async function exerciseHomeSummary(
       let metrics = await measure(page)
       if (!process.env.NOZOKI_HOME_BEFORE) {
         assert.ok(metrics.pageWidth <= width)
-        await expect(page.locator('[data-module="services"] .monitor-row')).toHaveCount(8)
+        await expect(page.locator('[data-module="services"] .monitor-row')).toHaveCount(4)
         await expect(page.locator('[data-module="devices"] .device-row')).toHaveCount(4)
         await expect(page.locator('[data-module="links"] .link-grid a')).toHaveCount(4)
         await expect(page.locator('[data-module="quotes"] .quote-details')).toHaveCount(0)
@@ -159,7 +159,7 @@ export async function exerciseHomeSummary(
         Math.min(4, count),
       )
       await expect(page.locator('[data-module="services"] .monitor-row')).toHaveCount(
-        Math.min(8, count),
+        Math.min(4, count),
       )
       await expect(page.locator('[data-module="links"] .link-grid a')).toHaveCount(
         Math.min(4, count),
@@ -255,11 +255,13 @@ export async function exerciseHomeSummary(
     ),
   )
   await expect(service.getByRole('checkbox')).toHaveCount(10)
+  const lastService = service.getByRole('checkbox', { name: '在首页显示 service-9', exact: true })
+  await expect(lastService).toBeDisabled()
   await service.getByRole('checkbox', { name: '在首页显示 service-0', exact: true }).uncheck()
   await expect(
     service.getByRole('checkbox', { name: '在首页显示 service-0', exact: true }),
   ).not.toBeChecked()
-  await service.getByRole('checkbox', { name: '在首页显示 service-9', exact: true }).click()
+  await lastService.check()
   const saved = page.waitForResponse(
     (r) => r.url().endsWith('/api/admin/config') && r.request().method() === 'PUT',
   )
@@ -267,7 +269,7 @@ export async function exerciseHomeSummary(
   assert.equal((await saved).status(), 200)
   const actual = await input()
   const selection = actual.config.modules.find((m) => m.id === 'services').homeServices
-  assert.equal(selection.length, 8)
+  assert.equal(selection.length, 4)
   assert.equal(selection.at(-1).monitorId, source.id + '/service-9')
   assert.ok(!selection.some((s) => s.monitorId.endsWith('/service-0')))
   await page.reload()

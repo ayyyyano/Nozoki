@@ -1,3 +1,4 @@
+import { collectionInterval } from '../../shared/collection/cadence.ts'
 import type { StoredState, StoredIntegration } from '../repositories/config.ts'
 import type { IntegrationSettings } from '../../shared/contracts/config.ts'
 import type { ModuleId } from '../../shared/contracts/dashboard.ts'
@@ -48,7 +49,11 @@ export function collectionPlans(state: StoredState): CollectionPlan[] {
       return []
     return [
       {
-        source: { ...i.settings, credentialState: credentialState(i.envelope) },
+        source: {
+          ...i.settings,
+          refreshInterval: collectionInterval(i.settings),
+          credentialState: credentialState(i.envelope),
+        },
         revision: i.revision,
         envelope: i.envelope,
         identityEnvelope: i.identityEnvelope,

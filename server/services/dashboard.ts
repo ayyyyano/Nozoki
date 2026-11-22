@@ -1,3 +1,11 @@
+import { collectionInterval } from '../../shared/collection/cadence.ts'
+import {
+  HOME_HISTORY_SEGMENTS,
+  type HomeMonitorHistory,
+  type MonitorHistory,
+} from '../../shared/contracts/service-history.ts'
+import { readMonitorSamples, type MonitorSampleQuery } from '../repositories/service-history.ts'
+import { statusBuckets } from '../../shared/domain/chart-series.ts'
 import type { Config, ModuleSettings } from '../../shared/contracts/config.ts'
 import { canonicalModules } from '../../shared/domain/module-layout.ts'
 import type { CodexData, DataSnapshot, Monitor } from '../../shared/contracts/dashboard.ts'
@@ -17,9 +25,10 @@ import { parseFieldPath, pathPrefix } from '../../shared/contracts/field-paths.t
 import { ModuleSettingsSchema } from '../../shared/contracts/config.ts'
 import { DataLayerError } from '../types/database.ts'
 import { withCollectionState } from './collection-dashboard.ts'
-import { monitorCode, monitorDisplayState } from '../../shared/domain/home-summary.ts'
+import { HOME_LIMITS, monitorCode, monitorDisplayState } from '../../shared/domain/home-summary.ts'
 import {
   itemKey,
+  orderedHomeItems,
   type ItemChoice,
   type ItemDisplayModule,
 } from '../../shared/domain/item-display.ts'
@@ -312,6 +321,115 @@ function rawSnapshot(state: StoredState, m: ModuleSettings, admin = false): Data
     )
   }
   return snapshot('unconfigured', null, mapped?.id ?? 'not-configured')
+}
+
+async function serviceHistoryScope(db: Database, admin: boolean, now: Date) {
+  const stored = await readStoredState(db, { displayItems: 'services' })
+  const module = stored.config.modules.find((m) => m.id === 'services')
+  if (
+    !module?.enabled ||
+    (!admin && module.visibility !== 'public') ||
+    !allowed(module, ['history'], admin)
+  )
+    return null
+
+  const state = await withCollectionState(db, stored, now)
+  const snapshot = rawSnapshot(state, module, admin)
+  const projected = projectValue(snapshot.data as Json, module, [], admin)
+  const data = projected as { monitors?: Partial<Monitor>[] } | null | undefined
+  const monitors = (data?.monitors ?? []).map(({ id }, index) => ({
+    id: typeof id === 'string' ? id : `visible-${index}`,
+    hasId: typeof id === 'string',
+  }))
+  return { state, module, snapshot, projected, monitors }
+}
+
+function monitorHistoryQuery(
+  scope: NonNullable<Awaited<ReturnType<typeof serviceHistoryScope>>>,
+  monitorId: string,
+  admin: boolean,
+) {
+  const { state, module, snapshot } = scope
+  const path = ['monitors', '@' + monitorId]
+  const showStatus =
+    allowed(module, ['status'], admin) && allowed(module, [...path, 'state'], admin)
+  const showLatency =
+    allowed(module, ['latency'], admin) && allowed(module, [...path, 'latencyMs'], admin)
+  if ((!showStatus && !showLatency) || !allowed(module, [...path, 'checkedAt'], admin)) return null
+
+  const sourceId = itemDisplaySource(module, monitorId, snapshot.sourceId)
+  const source = state.integrations.find((s) => s.settings.id === sourceId)
+  if (
+    !source?.revision ||
+    !source.settings.enabled ||
+    !['uptimeflare', 'uptime-kuma'].includes(source.settings.provider)
+  )
+    return null
+  const query: MonitorSampleQuery = {
+    sourceId: source.settings.id,
+    revision: source.revision,
+    configVersion: state.config.site.configVersion,
+    monitorId,
+    kind: source.settings.provider === 'uptime-kuma' ? 'heartbeat' : 'observation',
+  }
+  return {
+    query,
+    intervalSeconds: query.kind === 'observation' ? collectionInterval(source.settings) : null,
+    showLatency,
+    showStatus,
+  }
+}
+
+export async function readServiceHistory(
+  db: Database,
+  monitorId: string,
+  admin: boolean,
+  now = new Date(),
+): Promise<MonitorHistory | null> {
+  const scope = await serviceHistoryScope(db, admin, now)
+  if (!scope?.monitors.some(({ id, hasId }) => hasId && id === monitorId)) return null
+  const target = monitorHistoryQuery(scope, monitorId, admin)
+  if (!target) return null
+  const { query, intervalSeconds, showLatency, showStatus } = target
+  const [points] = await readMonitorSamples(db, [query], now)
+  return {
+    kind: query.kind,
+    intervalSeconds,
+    showLatency,
+    showStatus,
+    until: now.toISOString(),
+    points: points!.flatMap((point) => {
+      const state = showStatus ? point.state : null
+      const latencyMs = showLatency ? point.latencyMs : null
+      return state === null && latencyMs === null ? [] : [{ at: point.at, state, latencyMs }]
+    }),
+  }
+}
+
+export async function readHomeServiceHistory(
+  db: Database,
+  admin: boolean,
+  now = new Date(),
+): Promise<HomeMonitorHistory[]> {
+  const scope = await serviceHistoryScope(db, admin, now)
+  if (!scope) return []
+  const selected = presentationItems(scope.projected, scope.module, scope.snapshot.sourceId, admin)
+  const targets = orderedHomeItems(scope.monitors, selected, HOME_LIMITS.services).flatMap(
+    ({ id, hasId }) => {
+      if (!hasId) return []
+      const target = monitorHistoryQuery(scope, id, admin)
+      return target?.showStatus ? [target.query] : []
+    },
+  )
+  const samples = await readMonitorSamples(db, targets, now)
+  const until = now.getTime()
+  return targets.map(({ monitorId }, i) => {
+    const points = samples[i]!
+    const states = (count: (typeof HOME_HISTORY_SEGMENTS)[number]) =>
+      statusBuckets(points, count, until).map(({ state }) => state)
+    const [regular, wide] = HOME_HISTORY_SEGMENTS
+    return { id: monitorId, segments: { [regular]: states(regular), [wide]: states(wide) } }
+  })
 }
 
 export async function readAdminDisplayItems(db: Database, id: ItemDisplayModule) {

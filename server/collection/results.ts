@@ -1,3 +1,6 @@
+import { MonitorHistoryPointSchema } from '../../shared/contracts/service-history.ts'
+import type { ServiceHistoryCommit } from '../repositories/service-history.ts'
+import type { ServicesData } from '../../shared/contracts/dashboard.ts'
 import type { AdapterRead } from '../adapters/types.ts'
 import type { CollectionClaim, ViewCommit, BalanceCommit } from '../repositories/collection.ts'
 import { snapshotSchema } from '../../shared/contracts/snapshots.ts'
@@ -18,6 +21,7 @@ export function collectionPayload(c: CollectionClaim, result: AdapterRead, now: 
     )
   const views: ViewCommit[] = [],
     balances: BalanceCommit[] = []
+  let serviceHistory: ServiceHistoryCommit | undefined
   for (const ref of c.plan.references) {
     const raw = result.views[ref.moduleId]
     if (!raw) continue
@@ -43,6 +47,38 @@ export function collectionPayload(c: CollectionClaim, result: AdapterRead, now: 
       orderAt: snapshot.observedAt ?? collectedAt,
       collectedAt,
     })
+    if (
+      ref.moduleId === 'services' &&
+      c.plan.source.provider === 'uptimeflare' &&
+      snapshot.observedAt &&
+      result.status === 'ok'
+    ) {
+      serviceHistory = {
+        kind: 'observation',
+        at: snapshot.observedAt,
+        samples: Object.fromEntries(
+          (snapshot.data as ServicesData).monitors.map((m) => [
+            m.id,
+            { at: snapshot.observedAt!, state: m.state, latencyMs: m.latencyMs },
+          ]),
+        ),
+      }
+    }
+    if (
+      ref.moduleId === 'services' &&
+      c.plan.source.provider === 'uptime-kuma' &&
+      result.monitorHeartbeats
+    ) {
+      const samples = Object.fromEntries(
+        (snapshot.data as ServicesData).monitors.map(({ id }) => [
+          id,
+          MonitorHistoryPointSchema.array()
+            .max(100)
+            .parse(result.monitorHeartbeats?.[id] ?? []),
+        ]),
+      )
+      serviceHistory = { kind: 'heartbeat', at: now, samples }
+    }
     if (ref.moduleId === 'deepseek') {
       const data = result.views.deepseek!.data!
       if (new Set(data.balances.map((b) => b.currency)).size !== data.balances.length)
@@ -74,5 +110,5 @@ export function collectionPayload(c: CollectionClaim, result: AdapterRead, now: 
   })
   if (usage.length > 50 || new Set(usage.map((d) => d.day)).size !== usage.length)
     throw new AdapterError('INVALID_RESPONSE')
-  return { views, balances, usage }
+  return { views, balances, usage, serviceHistory }
 }

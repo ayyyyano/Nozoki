@@ -1,3 +1,11 @@
+import {
+  collectionInterval,
+  collectionTick,
+  STANDARD_COLLECTION_SECONDS,
+  UPTIMEFLARE_COLLECTION_SECONDS,
+  usesFastCollection,
+} from './cadence.ts'
+
 // Portable scheduling rules; timestamps and counters are ordinary values supplied by the host.
 export const COLLECTION_BUDGET = {
   maxSources: 10,
@@ -5,7 +13,7 @@ export const COLLECTION_BUDGET = {
   maxRequests: 50,
   sourceTimeoutMs: 10000,
   leaseMs: 60000,
-  cronSeconds: 300,
+  cronSeconds: STANDARD_COLLECTION_SECONDS,
   cleanupSeconds: 3600,
   cleanupRows: 100,
 } as const
@@ -75,6 +83,14 @@ export function retryPlan(
 }
 export function successfulSchedule(now: number, interval: number) {
   return new Date(now + Math.max(COLLECTION_BUDGET.cronSeconds, interval) * 1000).toISOString()
+}
+export function successfulSourceSchedule(
+  anchor: number,
+  source: Parameters<typeof collectionInterval>[0],
+) {
+  if (!usesFastCollection(source)) return successfulSchedule(anchor, collectionInterval(source))
+  const tick = collectionTick(anchor, 'uptimeflare')
+  return new Date(tick + UPTIMEFLARE_COLLECTION_SECONDS * 1000).toISOString()
 }
 export function expiresAt(collectedAt: string, interval: number) {
   return new Date(Date.parse(collectedAt) + Math.max(600, interval * 2) * 1000).toISOString()

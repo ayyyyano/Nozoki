@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const model = defineModel<number>({ required: true })
-defineProps<{ label: string }>()
+defineProps<{ label: string; error?: boolean }>()
 const text = computed({
   get: () => String(model.value),
   set: (v) => {
@@ -13,6 +13,8 @@ const text = computed({
     v-model="text"
     :placeholder="label"
     :aria-label="label"
+    :error="error"
+    :aria-invalid="error || undefined"
     inputmode="numeric"
     variant="outlined"
   />

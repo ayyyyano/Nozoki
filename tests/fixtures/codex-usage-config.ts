@@ -12,7 +12,7 @@ export async function setupUsageConfig(db: Database, env: Record<string, unknown
     protocolVersion: 'cliproxy-v8-accounts',
     baseUrl: 'https://usage.example.com/',
     enabled: true,
-    refreshInterval: 60,
+    refreshInterval: 300,
     fieldMappings: {},
     capabilities: {},
     credential: { operation: 'replace' as const, value: 'SYNTHETIC-MANAGEMENT-ONLY' },

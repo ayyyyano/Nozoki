@@ -1,3 +1,8 @@
+import {
+  UPTIMEFLARE_COLLECTION_SECONDS,
+  usesFastCollection,
+  type CollectionCadence,
+} from '../../shared/collection/cadence.ts'
 import type { Database } from '../types/database.ts'
 import { readStoredState } from '../repositories/config.ts'
 import { collectionPlans, type CollectionPlan } from './plans.ts'
@@ -35,6 +40,7 @@ export async function runCollection(
     clock?: () => Date
     reader?: SourceReader
     sourceIds?: readonly string[]
+    cadence?: CollectionCadence
     wallBudgetMs?: number
     scheduledCodexQuota?: boolean
     /** Manual refresh: ignore next_run_at for the given sourceIds, keep lease/budget guards. */
@@ -66,11 +72,25 @@ export async function runCollection(
   // defeat the collection budget and the cron cadence.
   const force = options.force === true && !!options.sourceIds?.length
   try {
+    // The independently configured trigger is a cheap no-op on sites without an enabled fast source.
+    if (
+      options.cadence === 'uptimeflare' &&
+      !(await db
+        .prepare(
+          "SELECT 1 FROM integrations WHERE enabled=1 AND provider='uptimeflare' AND refresh_interval=? LIMIT 1",
+        )
+        .bind(UPTIMEFLARE_COLLECTION_SECONDS)
+        .first())
+    )
+      return report
     await requireWritableStorage(db)
-    const environment = await collectionEnvironment(db, env),
-      plans = collectionPlans(await readStoredState(db)).filter(
-        (p) => !options.sourceIds || options.sourceIds.includes(p.source.id),
-      )
+    const plans = collectionPlans(await readStoredState(db)).filter(
+      (p) =>
+        (!options.sourceIds || options.sourceIds.includes(p.source.id)) &&
+        (!options.cadence || usesFastCollection(p.source) === (options.cadence === 'uptimeflare')),
+    )
+    if (options.cadence === 'uptimeflare' && !plans.length) return report
+    const environment = await collectionEnvironment(db, env)
     const budget = Math.min(25000, Math.max(0, options.wallBudgetMs ?? 25000))
     await syncCollectionPlans(db, plans, environment, start.toISOString())
     const due = await dueCollectionStates(
@@ -152,6 +172,7 @@ export async function runCollection(
             status: result.status,
           },
           payload.usage,
+          payload.serviceHistory,
         )
         report.success++
       } catch (error) {
@@ -185,7 +206,10 @@ export async function runCollection(
         report.responseBytes += stats.responseBytes
       }
     }
-    report.cleaned = options.sourceIds ? false : await cleanupCollection(db, clock().toISOString())
+    report.cleaned =
+      !options.sourceIds &&
+      options.cadence !== 'uptimeflare' &&
+      (await cleanupCollection(db, clock().toISOString()))
     if (report.cleaned) {
       try {
         // The collector is also the only scheduled writer. Apply the shared retention policy

@@ -21,6 +21,7 @@ export const BackupSourceSchema = z.strictObject({
   baseUrl: fields.baseUrl,
   enabled: fields.enabled,
   refreshInterval: fields.refreshInterval,
+  fastUptimeFlare: z.literal(true).optional(),
   fieldMappings: fields.fieldMappings,
   credentialPlain: fields.credential.options[2].shape.value.optional(),
   identityPlain: fields.identityCredential.unwrap().shape.value.optional(),

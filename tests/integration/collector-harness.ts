@@ -12,6 +12,7 @@ import {
   failCollection,
 } from '../../server/repositories/collection.ts'
 import type { CollectionClaim } from '../../server/repositories/collection.ts'
+import type { CollectionCadence } from '../../shared/collection/cadence.ts'
 import { runCollection } from '../../server/collection/run.ts'
 import { collectionPayload } from '../../server/collection/results.ts'
 import { responseTransport } from '../../server/adapters/transport.ts'
@@ -19,7 +20,7 @@ import { runAdapter } from '../../server/adapters/registry.ts'
 import { AdapterError } from '../../server/adapters/types.ts'
 import type { AdapterRead } from '../../server/adapters/types.ts'
 import { sleepyDevicesFixture } from '../fixtures/devices0511.ts'
-import { balance, flare } from '../fixtures/adapters.ts'
+import { balance, flare, kumaMeta, kumaHearts } from '../fixtures/adapters.ts'
 import { snapshot, unavailableCapability } from '../../shared/domain/dashboard.ts'
 interface Env extends Record<string, unknown> {
   DB: Database
@@ -29,6 +30,7 @@ async function fixture(
   now: Date,
   multi = false,
   changedBalance = false,
+  monitorLag = 60,
 ): Promise<AdapterRead> {
   const payload = sleepyDevicesFixture()
   payload.time = now.getTime() / 1000
@@ -40,14 +42,26 @@ async function fixture(
   }
   const response =
     plan.source.provider === 'uptimeflare'
-      ? { ...flare, updatedAt: now.getTime() / 1000 - 60 }
+      ? { ...flare, updatedAt: now.getTime() / 1000 - monitorLag }
       : plan.source.provider === 'deepseek'
         ? balanceValue
         : payload
   const result = await runAdapter({
     source: plan.source,
     now,
-    transport: responseTransport(plan.source, async () => Response.json(response)),
+    transport: responseTransport(plan.source, async (endpoint) => {
+      if (plan.source.provider !== 'uptime-kuma') return Response.json(response)
+      if (!endpoint.includes('/heartbeat/')) return Response.json(kumaMeta)
+      return Response.json({
+        ...kumaHearts,
+        heartbeatList: {
+          '1': [
+            { status: 0, time: new Date(now.getTime() - 120000).toISOString(), ping: null },
+            { status: 1, time: new Date(now.getTime() - 60000).toISOString(), ping: 17 },
+          ],
+        },
+      })
+    }),
   })
   if (multi) {
     const codex = snapshot(
@@ -119,17 +133,24 @@ export default class Harness extends WorkerEntrypoint<Env> {
       )
     }
   }
-  async run(at: number, mode = 'ok') {
+  async run(at: number, mode = 'ok', cadence?: CollectionCadence, delayed = 0) {
     return JSON.stringify(
       await runCollection(this.env.DB, this.env, at, {
-        clock: () => new Date(at),
+        clock: () => new Date(at + delayed),
+        cadence,
         reader: async (p, _env, _signal, now, metrics) => {
           metrics.requests++
           if (mode === 'auth' || (mode === 'fail-one' && p.source.id.startsWith('a')))
             throw new AdapterError('AUTH_REQUIRED')
           if (mode === 'rate') throw new AdapterError('RATE_LIMITED', 3600)
           if (mode === 'hang') return new Promise<AdapterRead>(() => {})
-          return fixture(p, now, mode === 'multi', mode === 'changed-balance')
+          return fixture(
+            p,
+            now,
+            mode === 'multi',
+            mode === 'changed-balance',
+            mode === 'repeat-monitor' ? 570 : mode === 'history' ? 390 : 60,
+          )
         },
       }),
     )

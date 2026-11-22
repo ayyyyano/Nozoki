@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import type { Quote } from '../../../shared/contracts/dashboard'
 import { decimalText, formatTimestamp, signedDecimal } from '../../../shared/domain/format'
-import { chartPoints } from '../../../shared/domain/home-summary'
-defineProps<{ items: Quote[]; detail?: boolean }>()
+import { quoteSeries } from '../../../shared/domain/chart-series'
+const props = defineProps<{ items: Quote[]; detail?: boolean; interactive?: boolean }>()
 const timezone = useDashboardTimezone()
+const selected = ref<string>()
+const rows = computed(() =>
+  props.items.map((quote) => ({
+    id: JSON.stringify([quote.market, quote.symbol, quote.provider]),
+    quote,
+    points: quoteSeries(quote, (at) => formatTimestamp(at, timezone.value).slice(0, 10)),
+  })),
+)
+const active = computed(
+  () =>
+    rows.value.find((row) => row.id === selected.value) ??
+    rows.value.find((row) => row.points.some((p) => p.value !== null)),
+)
 </script>
 <template>
   <div class="quote-list">
-    <article
-      v-for="quote in items"
-      :key="`${quote.market}:${quote.symbol}:${quote.provider}`"
-      class="quote-item"
-    >
+    <article v-for="{ quote, id, points } in rows" :key="id">
       <div class="quote-title">
         <h3>{{ quote.symbol }}</h3>
         <span :title="quote.name" tabindex="0">{{ quote.name }}</span>
@@ -32,20 +41,28 @@ const timezone = useDashboardTimezone()
           quote.changePercent === null ? '' : `(${signedDecimal(quote.changePercent)}%)`
         }}</span>
       </p>
-      <svg
-        v-if="chartPoints(quote)"
-        class="quote-chart"
-        viewBox="0 0 240 56"
-        role="img"
-        :aria-label="`${quote.symbol} 历史报价`"
-      >
-        <polyline
-          :points="chartPoints(quote)!"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
+      <ChartsTimeSeriesChart
+        v-if="interactive && id === active?.id"
+        type="line"
+        :label="`${quote.symbol} 历史报价`"
+        :points="points"
+      />
+      <template v-else>
+        <ChartsCompactChart
+          v-if="points.length"
+          type="line"
+          :label="`${quote.symbol} 历史报价`"
+          :points="points"
         />
-      </svg>
+        <button
+          v-if="interactive && points.some((p) => p.value !== null)"
+          type="button"
+          class="chart-text-button"
+          @click="selected = id"
+        >
+          查看{{ quote.symbol }}图表
+        </button>
+      </template>
       <dl
         v-if="
           detail &&

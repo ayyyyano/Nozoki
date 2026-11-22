@@ -14,7 +14,7 @@ export function source(provider: IntegrationSettings['provider']): IntegrationSe
         : (ADAPTER_PROTOCOLS[provider][0] ?? 'unselected'),
     baseUrl: 'https://example.invalid/service/',
     enabled: true,
-    refreshInterval: 60,
+    refreshInterval: 300,
     fieldMappings: provider === 'uptime-kuma' ? { status_page_slug: 'public' } : {},
     capabilities: {},
     credentialState: { configured: false, keyVersion: null, lastUpdatedAt: null },

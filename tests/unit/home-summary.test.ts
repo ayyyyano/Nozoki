@@ -20,7 +20,7 @@ test('home budgets, explicit empty selection and whole-list health are independe
     id: 'site/' + i,
     state: i === 11 ? ('down' as const) : ('up' as const),
   }))
-  assert.equal(serviceSummary(snap).items.length, 8)
+  assert.equal(serviceSummary(snap).items.length, 4)
   assert.equal(serviceSummary(snap).down, 1)
   snap.homeItems = ['site/10', 'site/0', 'deleted']
   assert.deepEqual(
@@ -45,16 +45,15 @@ test('home budgets, explicit empty selection and whole-list health are independe
 })
 test('selection schema rejects duplicates, over-budget and non-service use', () => {
   const module = createDefaultConfig().modules.find((m) => m.id === 'services')!
-  const one = { sourceId: 'site', monitorId: 'site/home' }
+  const items = Array.from({ length: 5 }, (_, i) => ({ sourceId: 'site', monitorId: 'site/' + i }))
+  const one = items[0]!
   assert.ok(ModuleSettingsSchema.safeParse({ ...module, homeServices: [] }).success)
+  assert.ok(ModuleSettingsSchema.safeParse({ ...module, homeServices: items.slice(0, 4) }).success)
   assert.equal(
     ModuleSettingsSchema.safeParse({ ...module, homeServices: [one, one] }).success,
     false,
   )
-  assert.equal(
-    ModuleSettingsSchema.safeParse({ ...module, homeServices: Array(9).fill(one) }).success,
-    false,
-  )
+  assert.equal(ModuleSettingsSchema.safeParse({ ...module, homeServices: items }).success, false)
   assert.equal(
     ModuleSettingsSchema.safeParse({ ...module, id: 'devices', homeServices: [] }).success,
     false,

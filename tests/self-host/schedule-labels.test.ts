@@ -76,6 +76,10 @@ test(
     await page.waitForURL('**/admin')
     await settle(page)
     const section = async () => {
+      if (new URL(page.url()).searchParams.get('module') === 'activity') {
+        await page.locator('.admin-edit-dialog:visible').waitFor()
+        return
+      }
       await page
         .getByRole('navigation', { name: '管理分区', exact: true })
         .getByRole('button', { name: '主页模块', exact: true })

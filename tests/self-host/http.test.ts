@@ -405,6 +405,450 @@ test(
       },
     )
     await t.test(
+      'real browser renders shared charts in desktop and mobile dialogs',
+      { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
+      async () => {
+        const { mkdir, readdir, readFile, stat, writeFile } = await import('node:fs/promises')
+        const { launch, settle, geometry } = await import('../browser/support.ts')
+        const { expect } = await import('playwright/test')
+        const { fixture, fixed } = await import('../fixtures/layout.ts')
+        const { statusBuckets } = await import('../../shared/domain/chart-series.ts')
+        const dashboard = await fixture({ disabled: [], monitors: 13, longNames: true })
+        const balance = dashboard.modules.find((m) => m.id === 'deepseek').snapshot
+        balance.collectedAt = fixed.toISOString()
+        balance.lastSuccessAt = fixed.toISOString()
+        const balanceData = balance.data
+        balanceData.dailyBalances = Array.from({ length: 7 }, (_, i) => {
+          const day = new Date(fixed.getTime() - (6 - i) * 86400000).toISOString()
+          return {
+            day: day.slice(0, 10),
+            collectedAt: day,
+            currency: 'CNY',
+            total: i === 2 ? '-12.5' : String(60 + i),
+          }
+        })
+        const services = dashboard.modules.find((m) => m.id === 'services').snapshot
+        services.status = 'ok'
+        services.collectedAt = fixed.toISOString()
+        services.lastSuccessAt = fixed.toISOString()
+        services.expiresAt = new Date(fixed.getTime() + 600_000).toISOString()
+        for (const item of services.data.monitors) item.checkedAt = fixed.toISOString()
+        const monitorIds = services.data.monitors.map(({ id }) => id)
+        const selected = [monitorIds[2], monitorIds[0], monitorIds[3], monitorIds[1]]
+        services.homeItems = selected
+        Object.assign(services.data.monitors[2], { state: 'up', latencyMs: 591 })
+        Object.assign(services.data.monitors[0], { state: 'up', latencyMs: null })
+        Object.assign(services.data.monitors[3], { state: 'down', latencyMs: 612 })
+        Object.assign(services.data.monitors[1], { state: 'maintenance', latencyMs: 325 })
+        const points = Array.from({ length: 81 }, (_, index) => ({
+          at: new Date(fixed.getTime() - (80 - index) * 180_000).toISOString(),
+          state:
+            index > 75
+              ? ('down' as const)
+              : index === 4
+                ? ('maintenance' as const)
+                : ('up' as const),
+          latencyMs: index === 80 ? 260 : (index * 9) % 110,
+        })).filter((_, index) => index < 25 || index > 32)
+        const screenshots =
+          process.env.NOZOKI_SERVICES_EVIDENCE ?? '.wrangler/test-results/service-charts'
+        await mkdir(screenshots, { recursive: true })
+        const report = []
+        const assets = resolve(release, 'public/_nuxt')
+        let chartChunk = ''
+        for (const name of await readdir(assets)) {
+          if (!name.endsWith('.js')) continue
+          const path = resolve(assets, name)
+          if (
+            (await stat(path)).size > 200_000 &&
+            (await readFile(path, 'utf8')).includes('[ECharts]')
+          ) {
+            chartChunk = name
+            break
+          }
+        }
+        assert.ok(chartChunk, 'The production browser build contains an ECharts chunk')
+        const chartsBrowser = await launch()
+        try {
+          for (const [width, height] of [
+            [1920, 1080],
+            [1440, 900],
+            [1280, 720],
+            [768, 1024],
+            [390, 844],
+            [320, 640],
+          ]) {
+            const desktop = width >= 1024
+            const context = await chartsBrowser.newContext({
+              viewport: { width, height },
+              hasTouch: !desktop,
+              colorScheme: [1920, 390].includes(width) ? 'dark' : 'light',
+            })
+            const page = await context.newPage()
+            const errors: string[] = []
+            page.on('pageerror', (error) => errors.push(error.message))
+            await page.clock.setFixedTime(fixed)
+            const current = structuredClone(dashboard)
+            const currentServices = current.modules.find((m) => m.id === 'services').snapshot
+            if (width === 768) currentServices.partialFailures = 1
+            let samples = points
+            await page.route('**/api/dashboard', (route) => route.fulfill({ json: current }))
+            const requests: string[] = []
+            let homeRequests = 0
+            let homeBytes = 0
+            await page.route('**/api/service-history?*', (route) => {
+              const params = new URL(route.request().url()).searchParams
+              if (params.get('view') === 'home') {
+                homeRequests++
+                const json = currentServices.homeItems.map((id) => ({
+                  id,
+                  segments: Object.fromEntries(
+                    [12, 16].map((segments) => [
+                      segments,
+                      statusBuckets(samples, segments, fixed.getTime()).map(({ state }) => state),
+                    ]),
+                  ),
+                }))
+                homeBytes = Buffer.byteLength(JSON.stringify(json))
+                return route.fulfill({ json })
+              }
+              const id = params.get('monitor')
+              assert.ok(id && monitorIds.includes(id))
+              requests.push(id)
+              return route.fulfill({
+                json: {
+                  kind: 'observation',
+                  intervalSeconds: 180,
+                  showStatus: true,
+                  showLatency: true,
+                  until: fixed.toISOString(),
+                  points: samples,
+                },
+              })
+            })
+            const initialCharts: string[] = []
+            page.on('request', (req) => {
+              if (new URL(req.url()).pathname.endsWith('/' + chartChunk))
+                initialCharts.push(req.url())
+            })
+            await page.goto(origin)
+            await settle(page)
+            const initialDashboard = page.waitForResponse((r) => r.url().endsWith('/api/dashboard'))
+            await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+            await initialDashboard
+            const card = page.locator('[data-module="services"]')
+            const homeRows = card.locator('.monitor-row')
+            const visibleSegments = (row) =>
+              row.locator('.monitor-heartbeat-segments:visible > span')
+            await expect(visibleSegments(homeRows.first()).first()).toHaveAttribute(
+              'data-state',
+              'missing',
+            )
+            await expect(visibleSegments(homeRows.first()).last()).toHaveAttribute(
+              'data-state',
+              'down',
+            )
+            await expect(homeRows).toHaveCount(4)
+            assert.deepEqual(
+              await homeRows.evaluateAll((rows) =>
+                rows.map((row) => row.getAttribute('data-monitor-id')),
+              ),
+              selected,
+            )
+            await expect(homeRows.nth(0).locator('.monitor-latency')).toContainText('591 ms')
+            await expect(homeRows.nth(1).locator('.monitor-latency')).toContainText('—')
+            await expect(homeRows.nth(2).locator('.monitor-state')).toHaveText('异常')
+            await expect(homeRows.nth(3).locator('.monitor-state')).toHaveText('维护中')
+            await expect(
+              card.locator('.monitor-meta, .chart-plot, .monitor-history-toggle'),
+            ).toHaveCount(0)
+            assert.equal(homeRequests, 1)
+            assert.ok(homeBytes > 0 && homeBytes < 1_400)
+            const initialHome = { requests: homeRequests, bytes: homeBytes }
+            assert.deepEqual(requests, [])
+            assert.deepEqual(initialCharts, [])
+            const metrics = await geometry(page)
+            const serviceGeometry = metrics.cards.find(({ id }) => id === 'services')
+            const homeLayout = async () => {
+              const rects = await homeRows.evaluateAll((rows) =>
+                rows.map((row) => {
+                  const r = row.getBoundingClientRect()
+                  const heading = row.querySelector('h3')!
+                  const meta = row.querySelector('.monitor-state, .monitor-latency')!
+                  return {
+                    x: r.x,
+                    y: r.y,
+                    width: r.width,
+                    height: r.height,
+                    nameClipped: heading.scrollWidth > heading.clientWidth,
+                    headingFits:
+                      heading.getBoundingClientRect().right <= meta.getBoundingClientRect().left,
+                    metaFits: meta.getBoundingClientRect().right <= r.right + 1,
+                  }
+                }),
+              )
+              const box = (await card.boundingBox())!
+              const segmentCount = await visibleSegments(homeRows.first()).count()
+              const segmentHeight = (await visibleSegments(homeRows.first()).first().boundingBox())!
+                .height
+              const columns = box.width >= 300 ? 2 : 1
+              assert.equal(segmentCount, box.width >= 400 ? 16 : 12)
+              assert.equal(segmentHeight, box.width >= 400 ? 16 : box.width >= 300 ? 14 : 9)
+              assert.equal(new Set(rects.map(({ x }) => x)).size, columns)
+              assert.equal(new Set(rects.map(({ y }) => y)).size, 4 / columns)
+              assert.ok(
+                rects.every(
+                  ({ headingFits, metaFits, nameClipped }) =>
+                    headingFits && metaFits && nameClipped,
+                ),
+              )
+              assert.ok(rects.every(({ y, height }) => y + height <= box.y + box.height))
+              return { card: box, rects, segmentCount, segmentHeight }
+            }
+            const actualLayout = await homeLayout()
+            const constrained = []
+            if (width === 1440) {
+              assert.equal(metrics.columns, 4)
+              assert.ok(serviceGeometry.width >= 300 && serviceGeometry.width <= 340)
+              assert.equal(serviceGeometry.height, 240)
+              assert.ok(
+                metrics.cards
+                  .filter(({ id }) => id !== 'links')
+                  .every(({ height }) => height === 240),
+              )
+              await page.screenshot({
+                path: screenshots + '/home-four-columns.png',
+                fullPage: true,
+                animations: 'disabled',
+              })
+              for (const cardWidth of [280, 300, 320, 340, 400, 450]) {
+                await card.evaluate(
+                  (el, size) => el.style.setProperty('width', size + 'px'),
+                  cardWidth,
+                )
+                constrained.push(await homeLayout())
+              }
+              await card.evaluate((el) => el.style.removeProperty('width'))
+              for (const quantity of [0, 1, 2, 3, 4]) {
+                currentServices.homeItems = selected.slice(0, quantity)
+                const response = page.waitForResponse((r) => r.url().endsWith('/api/dashboard'))
+                await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+                await response
+                await expect(homeRows).toHaveCount(quantity)
+                if (quantity) await expect(visibleSegments(homeRows.first()).first()).toBeVisible()
+                assert.deepEqual(
+                  await homeRows.evaluateAll((rows) =>
+                    rows.map((r) => r.getAttribute('data-monitor-id')),
+                  ),
+                  selected.slice(0, quantity),
+                )
+              }
+            }
+            report.push({
+              width,
+              height,
+              dashboardColumns: metrics.columns,
+              initialHome,
+              ...actualLayout,
+              constrained,
+            })
+            if (!desktop && width <= 390)
+              await card.screenshot({
+                path: screenshots + '/home-' + width + '.png',
+                animations: 'disabled',
+              })
+
+            await page.getByRole('button', { name: '查看服务状态详情', exact: true }).click()
+            const panel = page.getByRole('dialog', { name: '服务状态', exact: true })
+            await expect(panel).not.toHaveClass(/module-detail-enter-active/)
+            if (width === 768) await expect(panel).toContainText('1 个来源暂不可用')
+            const rows = panel.locator('.monitor-row')
+            const first = rows.first()
+            const second = rows.nth(1)
+            const toggles = panel.locator('.monitor-history-toggle')
+            const firstToggle = toggles.first()
+            const timeline = first.getByRole('slider', { name: '服务状态时间轴' })
+            const latency = first.getByRole('slider', { name: '服务响应时间' })
+            await expect(rows).toHaveCount(13)
+            await expect(panel.getByRole('list', { name: '状态图例' })).toHaveCount(1)
+            const [left, right] = await Promise.all([first.boundingBox(), second.boundingBox()])
+            assert.ok(left && right)
+            if (desktop) {
+              assert.ok(Math.abs(left.y - right.y) < 1 && right.x >= left.x + left.width)
+              await expect(toggles).toHaveCount(0)
+              await expect(
+                second.getByRole('slider', { name: '服务状态时间轴' }).locator('svg'),
+              ).toBeVisible()
+            } else {
+              assert.ok(Math.abs(left.x - right.x) < 1 && right.y >= left.y + left.height)
+              await expect(toggles).toHaveCount(13)
+              await expect(panel.locator('.monitor-history')).toHaveCount(0)
+              assert.deepEqual(requests, [])
+              const tapTarget = (await firstToggle.boundingBox())!
+              await expect(firstToggle).toHaveCSS('height', '40px')
+              await expect(firstToggle).toHaveCSS('width', '40px')
+              assert.ok(
+                tapTarget.height >= 39.5 &&
+                  tapTarget.width >= 39.5 &&
+                  tapTarget.x + tapTarget.width <= left.x + left.width + 0.5,
+                JSON.stringify({ width, tapTarget, left }),
+              )
+              if (width === 390)
+                await panel.screenshot({
+                  path: screenshots + '/details-mobile-collapsed.png',
+                  animations: 'disabled',
+                })
+              async function headingInPanel() {
+                const [heading, dialog] = await Promise.all([
+                  first.locator('.monitor-heading').boundingBox(),
+                  panel.boundingBox(),
+                ])
+                assert.ok(heading && dialog)
+                return { ...heading, y: heading.y - dialog.y }
+              }
+              const heading = await headingInPanel()
+              await firstToggle.tap()
+              await expect(firstToggle).toHaveAttribute('aria-expanded', 'true')
+              assert.deepEqual(await headingInPanel(), heading)
+            }
+            await expect(timeline.locator('svg')).toBeVisible()
+            await expect(latency.locator('svg')).toBeVisible()
+            await expect(first.locator('.chart-marker, .chart-band')).toHaveCount(0)
+            await expect(first.locator('.monitor-history-readout')).toBeEmpty()
+            await expect(panel).not.toContainText(/Nozoki 近|用方向键|点击查看|尚未选择/)
+            assert.equal(initialCharts.length, 1)
+            assert.ok(requests.includes(monitorIds[0]))
+            assert.ok(!requests.includes(monitorIds.at(-1)))
+            await expect(timeline).toHaveCSS('border-radius', '0px')
+            if (width === 1440 || width === 390) {
+              await panel.screenshot({
+                path: screenshots + '/details-default-' + width + '.png',
+                animations: 'disabled',
+              })
+            }
+            const edge = { x: (await timeline.boundingBox())!.width - 5, y: 12 }
+            if (desktop) {
+              await timeline.hover({ position: edge })
+              await expect(first.locator('.chart-band')).toBeVisible()
+              await expect(first.locator('.monitor-history-readout')).toContainText(/含异常/)
+              await panel.locator('h2').hover()
+              await expect(first.locator('.chart-marker, .chart-band')).toHaveCount(0)
+            }
+            await timeline[desktop ? 'click' : 'tap']({ position: edge })
+            await expect(first.locator('.chart-band')).toBeVisible()
+            if (desktop) {
+              await timeline.hover({ position: { x: 12, y: 12 } })
+              await expect(first.locator('.monitor-history-readout')).toContainText('缺测')
+              await panel.locator('h2').hover()
+              await expect(first.locator('.monitor-history-readout')).toContainText(/含异常/)
+            }
+            await timeline[desktop ? 'click' : 'tap']({ position: edge })
+            await expect(first.locator('.chart-band')).toHaveCount(0)
+            await latency.press('End')
+            await latency.press('Enter')
+            await expect(first.locator('.chart-marker')).toHaveCount(2)
+            await expect(first.locator('.chart-band')).toHaveCount(0)
+            await expect(first.locator('.monitor-history-readout')).toContainText(/异常.*260 ms/)
+            if (width === 1440 || width === 390) {
+              await panel.screenshot({
+                path: screenshots + '/details-selected-' + width + '.png',
+                animations: 'disabled',
+              })
+            }
+            if (width === 1440 || width === 390) {
+              async function refreshServices() {
+                const update = page.waitForResponse(
+                  (response) =>
+                    new URL(response.url()).searchParams.get('monitor') === monitorIds[0],
+                )
+                await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+                await update
+              }
+              currentServices.collectedAt = new Date(fixed.getTime() - 1000).toISOString()
+              await refreshServices()
+              await expect(first.locator('.monitor-history-readout')).toContainText('260 ms')
+              samples = points.slice(0, -1)
+              currentServices.collectedAt = new Date(fixed.getTime() - 2000).toISOString()
+              await refreshServices()
+              await expect(first.locator('.monitor-history-readout')).toBeEmpty()
+              await latency.press('End')
+              await latency.press('Space')
+            }
+            await panel.getByRole('button', { name: '关闭详情' }).press('Escape')
+            await expect(panel).toBeVisible()
+            await expect(first.locator('.monitor-history-readout')).toBeEmpty()
+            if (!desktop) {
+              await expect(firstToggle).toHaveAttribute('aria-expanded', 'true')
+              await toggles.nth(1).tap()
+              await expect(firstToggle).toHaveAttribute('aria-expanded', 'false')
+              await expect(second.locator('.monitor-history')).toBeVisible()
+              await expect(panel.locator('.monitor-history')).toHaveCount(1)
+              await toggles.nth(1).tap()
+              await expect(panel.locator('.monitor-history')).toHaveCount(0)
+            }
+            if (width === 1440) {
+              await page.setViewportSize({ width: 390, height: 844 })
+              await expect(panel.locator('.monitor-history')).toHaveCount(0)
+              await firstToggle.click()
+              await expect(panel.locator('.monitor-history')).toHaveCount(1)
+              await page.setViewportSize({ width, height })
+              await expect(panel.locator('.monitor-history')).toHaveCount(13)
+            }
+            assert.equal(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+              true,
+            )
+            const body = panel.locator('.module-detail-content')
+            assert.equal(await body.evaluate((e) => e.scrollWidth <= e.clientWidth + 1), true)
+            await rows.last().scrollIntoViewIfNeeded()
+            if (!desktop) await toggles.last().tap()
+            await expect(
+              rows.last().getByRole('slider', { name: '服务状态时间轴' }).locator('svg'),
+            ).toBeVisible()
+            assert.ok(requests.includes(monitorIds.at(-1)))
+            await page.keyboard.press('Escape')
+            await expect(panel).toBeHidden()
+            await card.getByRole('button', { name: '查看服务状态详情', exact: true }).click()
+            await expect(panel).toBeVisible()
+            await expect(panel.locator('.chart-marker, .chart-band')).toHaveCount(0)
+            if (!desktop) await expect(panel.locator('.monitor-history')).toHaveCount(0)
+            await page.keyboard.press('Escape')
+            await expect(panel).toBeHidden()
+            await page.locator('[data-module="deepseek"] .module-detail-button').click()
+            const balance = page.getByRole('slider', { name: /近 7 日.*余额/ })
+            await expect(balance.locator('svg')).toBeVisible()
+            await balance.press('End')
+            await expect(balance).toHaveAttribute('aria-valuetext', /今日/)
+            if (width === 1440)
+              await page.locator('.module-detail-panel:visible').screenshot({
+                path: screenshots + '/deepseek.png',
+                animations: 'disabled',
+              })
+            await page.keyboard.press('Escape')
+            await page.locator('[data-module="quotes"] .module-detail-button').click()
+            const quote = page.getByRole('slider', { name: 'QQQM 历史报价' })
+            await expect(quote.locator('svg')).toBeVisible()
+            await quote.press('Home')
+            await expect(quote).toHaveAttribute('aria-valuetext', /USD/)
+            if (width === 1440)
+              await page.locator('.module-detail-panel:visible').screenshot({
+                path: screenshots + '/quotes.png',
+                animations: 'disabled',
+              })
+            assert.deepEqual(errors, [])
+            await context.close()
+          }
+          assert.deepEqual(
+            [...new Set(report.map(({ dashboardColumns }) => dashboardColumns))],
+            [4, 3, 2, 1],
+          )
+          await writeFile(screenshots + '/geometry.json', JSON.stringify(report, null, 2))
+        } finally {
+          await chartsBrowser.close()
+        }
+      },
+    )
+    await t.test(
       'real browser restores admin, saves a draft and logs out on Node SSR',
       { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
       async () => {

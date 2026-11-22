@@ -1,7 +1,9 @@
+import { STANDARD_COLLECTION_SECONDS, validCollectionInterval } from '../collection/cadence.ts'
 import { BACKGROUND_IMAGE_LIMIT, isUploadedBackgroundUrl } from './background-image.ts'
 import { z } from 'zod'
 import { MODULE_IDS } from './dashboard.ts'
 import { canonicalModules } from '../domain/module-layout.ts'
+import { ITEM_HOME_LIMITS } from '../domain/item-display.ts'
 import { DEFAULT_APPEARANCE } from './appearance.ts'
 import {
   DEFAULT_SCHEDULE,
@@ -125,7 +127,7 @@ export const ModuleSettingsSchema = z
     presentation: ModulePresentationSchema.optional(),
     homeServices: z
       .array(z.strictObject({ sourceId: IdSchema, monitorId: z.string().min(1).max(1024) }))
-      .max(8)
+      .max(ITEM_HOME_LIMITS.services)
       .optional(),
     sources: z.record(
       IdSchema,
@@ -157,7 +159,7 @@ export const ModuleSettingsSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['homeServices'],
-        message: 'Services selection must contain at most eight distinct stable monitors',
+        message: `Services selection must contain at most ${ITEM_HOME_LIMITS.services} distinct stable monitors`,
       })
     if (value.id !== 'deepseek' && value.guestBlur !== undefined)
       ctx.addIssue({
@@ -295,6 +297,10 @@ export const IntegrationWriteSchema = IntegrationSettingsBaseSchema.omit({
   })
   .refine(validAccess, 'Invalid source target')
   .refine((i) => !i.enabled || i.baseUrl !== null, 'Enabled integration needs a base URL')
+  .refine(validCollectionInterval, {
+    path: ['refreshInterval'],
+    message: 'Unsupported collection interval',
+  })
 export const LinkSettingsSchema = z.strictObject({
   id: IdSchema,
   title: z.string().trim().min(1).max(120),
@@ -354,7 +360,18 @@ export const ConfigSchema = z
   .strictObject({ ...common, integrations: z.array(IntegrationSettingsSchema).max(10) })
   .superRefine(validatePackage)
 export const ConfigWriteSchema = z
-  .strictObject({ ...common, integrations: z.array(IntegrationWriteSchema).max(10) })
+  .strictObject({
+    ...common,
+    integrations: z.array(IntegrationWriteSchema).max(10),
+    quotes: z
+      .array(
+        QuoteSymbolSchema.refine((q) => q.refreshInterval >= STANDARD_COLLECTION_SECONDS, {
+          path: ['refreshInterval'],
+          message: 'Unsupported collection interval',
+        }),
+      )
+      .max(20),
+  })
   .superRefine(validatePackage)
 export const SaveConfigSchema = z
   .strictObject({

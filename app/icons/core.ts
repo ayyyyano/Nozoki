@@ -31,6 +31,8 @@ import LogOutRound from '@vicons/material/es/LogOutRound.js'
 import UndoRound from '@vicons/material/es/UndoRound.js'
 import RestoreRound from '@vicons/material/es/RestoreRound.js'
 import HubRound from '@vicons/material/es/HubRound.js'
+import KeyboardArrowDownRound from '@vicons/material/es/KeyboardArrowDownRound.js'
+import KeyboardArrowUpRound from '@vicons/material/es/KeyboardArrowUpRound.js'
 export const coreIcons: Record<
   string,
   { component: Component; name: string; symbol: string; filled?: Component }
@@ -55,6 +57,16 @@ export const coreIcons: Record<
   arrow: { component: ArrowForwardRound, name: 'ArrowForwardRound', symbol: 'arrow_forward' },
   up: { component: ArrowUpwardRound, name: 'ArrowUpwardRound', symbol: 'arrow_upward' },
   down: { component: ArrowDownwardRound, name: 'ArrowDownwardRound', symbol: 'arrow_downward' },
+  chevronDown: {
+    component: KeyboardArrowDownRound,
+    name: 'KeyboardArrowDownRound',
+    symbol: 'keyboard_arrow_down',
+  },
+  chevronUp: {
+    component: KeyboardArrowUpRound,
+    name: 'KeyboardArrowUpRound',
+    symbol: 'keyboard_arrow_up',
+  },
   battery: { component: BatteryFullRound, name: 'BatteryFullRound', symbol: 'battery_full' },
   bolt: { component: BoltRound, name: 'BoltRound', symbol: 'bolt' },
   alert: { component: WarningRound, name: 'WarningRound', symbol: 'warning' },

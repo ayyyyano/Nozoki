@@ -7,6 +7,8 @@ const PURGE_STATEMENTS = [
   'DELETE FROM codex_usage_days',
   "DELETE FROM collection_runs WHERE status<>'running'",
   'DELETE FROM integration_snapshot_views',
+  'DELETE FROM service_observations',
+  'DELETE FROM service_heartbeat_windows',
 ] as const
 
 export interface PurgedRows {
@@ -15,6 +17,8 @@ export interface PurgedRows {
   codexUsageDays: number
   collectionRuns: number
   snapshotViews: number
+  serviceObservations: number
+  serviceHeartbeatWindows: number
 }
 
 /** Counts only; never exposes row payloads. Used to preview the destructive reset scope. */
@@ -25,6 +29,8 @@ export async function collectedHistoryCounts(db: Database) {
     db.prepare('SELECT count(*) AS n FROM codex_usage_days'),
     db.prepare("SELECT count(*) AS n FROM collection_runs WHERE status<>'running'"),
     db.prepare('SELECT count(*) AS n FROM integration_snapshot_views'),
+    db.prepare('SELECT count(*) AS n FROM service_observations'),
+    db.prepare('SELECT count(*) AS n FROM service_heartbeat_windows'),
   ])
   const count = (index: number) => (results[index]!.results[0] as { n: number }).n
   return {
@@ -33,6 +39,8 @@ export async function collectedHistoryCounts(db: Database) {
     codexUsageDays: count(2),
     collectionRuns: count(3),
     snapshotViews: count(4),
+    serviceObservations: count(5),
+    serviceHeartbeatWindows: count(6),
   }
 }
 
@@ -45,5 +53,7 @@ export async function purgeCollectedHistory(db: Database): Promise<PurgedRows> {
     codexUsageDays: results[2]!.meta.changes ?? 0,
     collectionRuns: results[3]!.meta.changes ?? 0,
     snapshotViews: results[4]!.meta.changes ?? 0,
+    serviceObservations: results[5]!.meta.changes ?? 0,
+    serviceHeartbeatWindows: results[6]!.meta.changes ?? 0,
   }
 }

@@ -59,10 +59,13 @@ WantedBy=multi-user.target
 
 ## 定时采集
 
-运行 `pnpm collector:node` 可执行一轮到期采集。自动采集可在同一运行账号下配置系统 Cron：
+运行 `pnpm collector:node` 可执行一轮到期采集。自动采集可在同一运行账号下配置以下两条系统 Cron，分别运行普通来源和选用 3 分钟采集的 UptimeFlare：
 
 ```text
-*/5 * * * * /usr/bin/node --env-file=/etc/nozoki/nozoki.env /opt/nozoki/.output-node/collector.mjs
+*/5 * * * * /usr/bin/node --env-file=/etc/nozoki/nozoki.env /opt/nozoki/.output-node/collector.mjs --standard
+1-58/3 * * * * /usr/bin/node --env-file=/etc/nozoki/nozoki.env /opt/nozoki/.output-node/collector.mjs --uptimeflare-fast
 ```
+
+已有安装可继续使用原来每 5 分钟运行一次的无参数命令。要启用 3 分钟采集，请用上面两条替换原任务。
 
 网页服务和采集使用同一数据库、加密配置及采集环境变量。后台批准的公网 HTTPS 数据源由进程直接连接。SQLite 部署面向单机运行，数据库及 WAL、共享内存文件应在同一块本地持久磁盘上。升级或切换主机前请参阅[备份与恢复](/operations/backup.md)。

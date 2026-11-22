@@ -70,6 +70,16 @@ export default defineNuxtConfig({
   build: { transpile: ['@varlet/ui', '@vicons/material', 'dayjs'] },
   css: ['~/assets/styles/m3-themes.css', '~/assets/styles/dashboard.css'],
   components: [{ path: '~/components', ignore: ['**/dev/**'] }],
+  hooks: {
+    'build:manifest'(manifest) {
+      // The static dashboard previews render without downloading the interactive engine.
+      for (const [id, chunk] of Object.entries(manifest)) {
+        if (!(chunk.src ?? id).endsWith('utils/chart-engine.ts')) continue
+        chunk.prefetch = false
+        chunk.preload = false
+      }
+    },
+  },
   vite: {
     optimizeDeps: { include: ['@material/material-color-utilities', '@varlet/ui'] },
     build: {

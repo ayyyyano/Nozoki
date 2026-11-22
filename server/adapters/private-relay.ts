@@ -272,7 +272,9 @@ export async function createPrivateRelay(
           ? 'probe'
           : (match[2] as 'probe' | 'read'),
       )
-      const { facts: _facts, ...safe } = result
+      // The legacy bounded relay protocol carries current views only.
+      const { facts: _facts, monitorHeartbeats: _heartbeats, ...safe } = result
+      if (_heartbeats) safe.capabilities.history = { supported: false, verified: false }
       const body = JSON.stringify({
         ...safe,
         contractVersion: 1,
