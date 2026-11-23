@@ -54,15 +54,22 @@ if (
   }
   let personalReduced = false
   try {
-    personalReduced =
-      JSON.parse(localStorage.getItem('nozoki-appearance-v1') ?? 'null')?.reduceMotion === true
+    const saved = JSON.parse(
+      localStorage.getItem('nozoki-appearance-v2') ??
+        localStorage.getItem('nozoki-appearance-v1') ??
+        'null',
+    )
+    personalReduced = (saved?.version === 2 ? saved.overrides : saved)?.reduceMotion === true
   } catch {
     /* Invalid preferences keep the system default. */
   }
   const systemReduced = matchMedia('(prefers-reduced-motion: reduce)')
   const controller = createDxController({
     report: (error) => console.warn('DX early initialization fallback', error),
-    reduced: () => personalReduced || systemReduced.matches,
+    reduced: () =>
+      personalReduced ||
+      systemReduced.matches ||
+      document.documentElement.dataset.nozokiReduced === 'true',
     hidden: () => document.hidden,
     readinessBudgetMs: 10000,
     setTimer,
@@ -92,7 +99,10 @@ if (
       signal.addEventListener('abort', cancel, { once: true })
       ownedListeners++
       emit()
-      const budget = setTimer(cancel, 1800)
+      const budget = setTimer(
+        () => assetAbort.abort(new DOMException('Transition artwork timed out', 'TimeoutError')),
+        1800,
+      )
       try {
         await visual.prepare(assetAbort.signal)
       } finally {
@@ -175,6 +185,24 @@ if (
         marker.animation.addEventListener('finish', finish)
         signal.addEventListener('abort', cancel, { once: true })
         if (signal.aborted) cancel()
+      })
+    },
+    fallback(signal) {
+      visual.dispose()
+      if (!overlay || signal.aborted) return Promise.resolve()
+      return new Promise<void>((resolve) => {
+        const finish = () => {
+          clearTimer(budget)
+          signal.removeEventListener('abort', finish)
+          ownedListeners--
+          emit()
+          resolve()
+        }
+        const budget = setTimer(finish, 150)
+        ownedListeners++
+        emit()
+        signal.addEventListener('abort', finish, { once: true })
+        if (signal.aborted) finish()
       })
     },
   })

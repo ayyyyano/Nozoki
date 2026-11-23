@@ -1,8 +1,9 @@
-export type DxPhase = 'idle' | 'boot' | 'entering' | 'holding' | 'leaving'
+export type DxPhase = 'idle' | 'boot' | 'entering' | 'holding' | 'leaving' | 'fallback'
 export type DxResult = 'complete' | 'skipped' | 'cancelled' | 'failed'
 export interface DxEnvironment {
   frame(signal: AbortSignal): Promise<void>
   animate(phase: 'entering' | 'leaving', signal: AbortSignal): Promise<void>
+  fallback?(signal: AbortSignal): Promise<void>
   reduced(): boolean
   hidden(): boolean
   phase(value: DxPhase): void
@@ -71,7 +72,15 @@ export function createDxController(env: DxEnvironment) {
       } catch (error) {
         if (signal.aborted) return 'cancelled'
         env.report?.(error)
-        return 'failed'
+        if (env.fallback && !env.reduced() && !env.hidden()) {
+          change('fallback')
+          try {
+            await env.fallback(signal)
+          } catch (fallbackError) {
+            if (!signal.aborted) env.report?.(fallbackError)
+          }
+        }
+        return signal.aborted ? 'cancelled' : 'failed'
       } finally {
         if (timer !== undefined) env.clearTimer(timer)
         if (onAbort) signal.removeEventListener('abort', onAbort)

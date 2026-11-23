@@ -214,24 +214,27 @@ test('readiness rejection falls back to the page and records the error', async (
   assert.equal(h.phases.at(-1), 'idle')
 })
 test('frame initialization failure still clears the overlay and budget', async () => {
-  let phase: DxPhase = 'idle'
+  const phases: DxPhase[] = []
   let cleared = false
+  let faded = false
   const h = createDxController({
     frame: async () => {
       throw new Error('frame')
     },
     animate: async () => {},
+    fallback: async () => {
+      faded = true
+    },
     reduced: () => false,
     hidden: () => false,
-    phase: (v) => {
-      phase = v
-    },
+    phase: (v) => phases.push(v),
     setTimer: () => 1 as unknown as ReturnType<typeof setTimeout>,
     clearTimer: () => {
       cleared = true
     },
   })
   assert.equal(await h.start(() => new Promise(() => {})), 'failed')
-  assert.equal(phase, 'idle')
+  assert.deepEqual(phases, ['boot', 'fallback', 'idle'])
+  assert.equal(faded, true)
   assert.equal(cleared, true)
 })

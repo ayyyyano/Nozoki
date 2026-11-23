@@ -157,6 +157,97 @@ test(
         assert.equal(redirect.headers.get('location'), '/login')
       },
     )
+    await t.test(
+      'boot animation skips reduced motion and fades out when its artwork stalls',
+      { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
+      async () => {
+        const { launch } = await import('../browser/support.ts')
+        const dxBrowser = await launch()
+        const assetRoot = '/vendor/maimai-transition/'
+        try {
+          for (const mode of ['normal', 'stall', 'site-reduced', 'system-reduced'] as const) {
+            const context = await dxBrowser.newContext({
+              reducedMotion: mode === 'system-reduced' ? 'reduce' : 'no-preference',
+            })
+            const page = await context.newPage()
+            try {
+              const requests: string[] = []
+              page.on('request', (request) => {
+                const path = new URL(request.url()).pathname
+                if (path.startsWith(assetRoot)) requests.push(path.slice(assetRoot.length))
+              })
+              if (mode === 'stall') await page.route('**/transition.svg', () => {})
+              await page.addInitScript((mode) => {
+                if (window !== window.top) return
+                if (mode === 'site-reduced') {
+                  localStorage.setItem(
+                    'nozoki-appearance-v2',
+                    JSON.stringify({ version: 2, overrides: { reduceMotion: true } }),
+                  )
+                }
+                const phases: string[] = []
+                const trace = { phases, fade: '' }
+                Object.assign(window, { dxRecordedTrace: trace })
+                new MutationObserver(() => {
+                  const overlay = document.querySelector('.dx-transition')
+                  const phase = overlay?.getAttribute('data-phase')
+                  if (phase && phase !== phases.at(-1)) phases.push(phase)
+                  const veil = overlay?.querySelector('.dx-veil')
+                  if (phase === 'fallback' && veil)
+                    trace.fade = getComputedStyle(veil).animationName
+                }).observe(document, {
+                  childList: true,
+                  subtree: true,
+                  attributes: true,
+                  attributeFilter: ['data-phase'],
+                })
+              }, mode)
+              await page.goto(origin, { waitUntil: 'domcontentloaded' })
+              await page.waitForFunction(() => '__NOZOKI_DX_BOOT__' in window)
+              const boot = await page.evaluate(async () => {
+                const win = window as import('../../shared/browser/dx-boot').DxBootWindow & {
+                  dxRecordedTrace: { phases: string[]; fade: string }
+                }
+                const result = await win.__NOZOKI_DX_BOOT__!.done
+                return {
+                  result,
+                  ...win.dxRecordedTrace,
+                  resources: win.__NOZOKI_DX_BOOT__!.snapshot(),
+                }
+              })
+              assert.deepEqual(boot.resources, {
+                phase: 'idle',
+                timers: 0,
+                frames: 0,
+                listeners: 0,
+              })
+              assert.equal(await page.locator('.dx-transition').count(), 0)
+              if (mode === 'normal') {
+                assert.equal(boot.result, 'complete')
+                assert.ok(boot.phases.includes('entering') && boot.phases.includes('leaving'))
+                assert.deepEqual(requests.toSorted(), [
+                  'player.css',
+                  'transition.svg',
+                  'upstream.css',
+                ])
+              } else if (mode === 'stall') {
+                assert.equal(boot.result, 'failed')
+                assert.ok(boot.phases.includes('fallback') && !boot.phases.includes('entering'))
+                assert.equal(boot.fade, 'dx-fallback-reveal')
+              } else {
+                assert.equal(boot.result, 'skipped')
+                assert.deepEqual(boot.phases, [])
+                assert.deepEqual(requests, [])
+              }
+            } finally {
+              await context.close()
+            }
+          }
+        } finally {
+          await dxBrowser.close()
+        }
+      },
+    )
     let cookie, csrf, saved
     await t.test(
       'Origin, Host and streaming byte limits reject before authentication/writes',

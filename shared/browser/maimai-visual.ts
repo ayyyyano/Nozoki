@@ -1,4 +1,10 @@
 // Visuals are vendored from the user-selected reference. Only lifecycle/timing is adapted here.
+const assetRoot = '/vendor/maimai-transition/'
+const player = `<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="${assetRoot}upstream.css">
+<link rel="stylesheet" href="${assetRoot}player.css">
+<div class="stage"><div class="frame"></div></div>`
+
 export function createMaimaiVisual(
   host: () => HTMLElement | null,
   onFrames: (count: number) => void = () => {},
@@ -36,35 +42,40 @@ export function createMaimaiVisual(
     iframe.title = '加载过渡'
     iframe.tabIndex = -1
     iframe.setAttribute('aria-hidden', 'true')
+    iframe.setAttribute('sandbox', 'allow-same-origin')
     iframe.style.cssText = 'width:100%;height:100%;border:0;display:block;pointer-events:none;'
-    const loading = new Promise<void>((resolve, reject) => {
+    const frameReady = new Promise<void>((resolve, reject) => {
       const cleanup = () => {
-        window.removeEventListener('message', message)
+        iframe.removeEventListener('load', finish)
         signal.removeEventListener('abort', cancel)
       }
       const cancel = () => {
         cleanup()
-        reject(new DOMException('Cancelled', 'AbortError'))
+        reject(signal.reason)
       }
-      const message = (event: MessageEvent) => {
-        if (event.source !== iframe.contentWindow || event.origin !== location.origin) return
-        if (event.data?.type === 'nozoki-maimai-ready') {
-          cleanup()
-          resolve()
-        }
-        if (event.data?.type === 'nozoki-maimai-error') {
-          cleanup()
-          reject(new Error('Transition artwork failed'))
-        }
+      const finish = () => {
+        cleanup()
+        resolve()
       }
-      window.addEventListener('message', message)
+      iframe.addEventListener('load', finish, { once: true })
       signal.addEventListener('abort', cancel, { once: true })
     })
-    iframe.src = '/vendor/maimai-transition/player.html'
+    iframe.srcdoc = player
     container.append(iframe)
-    await loading
-    if (signal.aborted) throw new DOMException('Cancelled', 'AbortError')
-    stage = iframe.contentDocument!.querySelector<HTMLElement>('.stage')!
+    const artwork = fetch(`${assetRoot}transition.svg`, { signal }).then((response) => {
+      if (!response.ok) throw new Error(`Transition artwork HTTP ${response.status}`)
+      return response.text()
+    })
+    const [, markup] = await Promise.all([frameReady, artwork])
+    signal.throwIfAborted()
+    stage = iframe.contentDocument?.querySelector<HTMLElement>('.stage') ?? undefined
+    const frame = stage?.querySelector('.frame')
+    if (!stage || !frame) throw new Error('Transition frame unavailable')
+    frame.innerHTML = markup
+    const svg = frame.querySelector('svg')
+    if (!svg) throw new Error('Transition artwork unavailable')
+    const chip = svg.querySelector('#滴拉熊')
+    if (chip) svg.append(chip)
     animations = stage
       .getAnimations({ subtree: true })
       .filter((a): a is CSSAnimation => 'animationName' in a)
@@ -111,14 +122,11 @@ export function createMaimaiVisual(
       )!,
     }))
     cancelAnimationFrame(frameId)
-    let previous: number | undefined
-    let elapsed = 0
+    const started = performance.now()
     // Follow the reference scroll player's paused-currentTime technique. Only the clock differs.
     const tick = (now: number) => {
       setFrames(0)
-      elapsed += previous === undefined ? 0 : Math.min(40, now - previous)
-      previous = now
-      const progress = Math.min(1, elapsed / duration)
+      const progress = Math.max(0, Math.min(1, (now - started) / duration))
       const time = offset + (end - offset) * progress
       for (const { layer, animation } of driven)
         animation.currentTime = Math.min(time, layer.delay + layer.duration)

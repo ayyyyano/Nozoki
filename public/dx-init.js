@@ -1,341 +1,384 @@
 /*! Nozoki early transition lifecycle. Original artwork: /vendor/maimai-transition/NOTICE.txt */
 ;(() => {
-  function S(i) {
+  function I(r) {
     let c = null,
-      f = 0,
-      n = () => new DOMException('Transition cancelled', 'AbortError')
-    function O(o) {
+      p = 0,
+      a = () => new DOMException('Transition cancelled', 'AbortError')
+    function k(s) {
       if (c) return c.result
-      if (i.reduced() || i.hidden()) return Promise.resolve('skipped')
-      let v = new AbortController(),
-        w = ++f,
-        { signal: p } = v,
-        T = (t) => {
-          c?.id === w && i.phase(t)
+      if (r.reduced() || r.hidden()) return Promise.resolve('skipped')
+      let b = new AbortController(),
+        E = ++p,
+        { signal: l } = b,
+        y = (n) => {
+          c?.id === E && r.phase(n)
         },
-        l = Promise.resolve().then(async () => {
-          let t, b
+        d = Promise.resolve().then(async () => {
+          let n, f
           try {
-            if (p.aborted) throw n()
-            T('boot')
-            let r = !1,
-              s = new Promise((g, m) => {
-                ;((b = () => m(n())), p.addEventListener('abort', b, { once: !0 }))
+            if (l.aborted) throw a()
+            y('boot')
+            let o = !1,
+              g = new Promise((x, v) => {
+                ;((f = () => v(a())), l.addEventListener('abort', f, { once: !0 }))
                 let h = () => {
-                  ;((r = !0), t !== void 0 && i.clearTimer(t), (t = void 0), g())
+                  ;((o = !0), n !== void 0 && r.clearTimer(n), (n = void 0), x())
                 }
-                ;((t = i.setTimer(h, i.readinessBudgetMs ?? 900)),
+                ;((n = r.setTimer(h, r.readinessBudgetMs ?? 900)),
                   Promise.resolve()
-                    .then(o)
-                    .then(h, (D) => {
-                      ;(i.report?.(D), h())
+                    .then(s)
+                    .then(h, (_) => {
+                      ;(r.report?.(_), h())
                     }))
               }).then(
                 () => !0,
                 () => !1,
               )
             if (
-              (await i.frame(p),
-              p.aborted ||
-                (T('entering'), await i.animate('entering', p), p.aborted) ||
-                (r || T('holding'), !(await s) || p.aborted) ||
-                (T('leaving'), await i.animate('leaving', p), p.aborted))
+              (await r.frame(l),
+              l.aborted ||
+                (y('entering'), await r.animate('entering', l), l.aborted) ||
+                (o || y('holding'), !(await g) || l.aborted) ||
+                (y('leaving'), await r.animate('leaving', l), l.aborted))
             )
-              throw n()
+              throw a()
             return 'complete'
-          } catch (r) {
-            return p.aborted ? 'cancelled' : (i.report?.(r), 'failed')
+          } catch (o) {
+            if (l.aborted) return 'cancelled'
+            if ((r.report?.(o), r.fallback && !r.reduced() && !r.hidden())) {
+              y('fallback')
+              try {
+                await r.fallback(l)
+              } catch (w) {
+                l.aborted || r.report?.(w)
+              }
+            }
+            return l.aborted ? 'cancelled' : 'failed'
           } finally {
-            ;(t !== void 0 && i.clearTimer(t),
-              b && p.removeEventListener('abort', b),
-              v.abort(),
-              c?.id === w && (i.phase('idle'), (c = null)))
+            ;(n !== void 0 && r.clearTimer(n),
+              f && l.removeEventListener('abort', f),
+              b.abort(),
+              c?.id === E && (r.phase('idle'), (c = null)))
           }
         })
-      return ((c = { abort: v, result: l, id: w }), l)
+      return ((c = { abort: b, result: d, id: E }), d)
     }
-    function _() {
-      let o = c
-      o && ((c = null), o.abort.abort(), i.phase('idle'))
+    function T() {
+      let s = c
+      s && ((c = null), s.abort.abort(), r.phase('idle'))
     }
     return {
-      start: O,
-      cancel: _,
+      start: k,
+      cancel: T,
       get running() {
         return c !== null
       },
     }
   }
-  function I(i, c = () => {}) {
-    let f = [],
-      n = 0,
-      O = 0,
-      _ = (t) => {
-        ;((O = t), c(t))
+  var C = '/vendor/maimai-transition/',
+    F = `<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="${C}upstream.css">
+<link rel="stylesheet" href="${C}player.css">
+<div class="stage"><div class="frame"></div></div>`
+  function B(r, c = () => {}) {
+    let p = [],
+      a = 0,
+      k = 0,
+      T = (n) => {
+        ;((k = n), c(n))
       },
-      o = [],
-      v,
-      w = !1
-    function p() {
-      for (let t of f) t.cancel()
-      ;(cancelAnimationFrame(n),
-        (n = 0),
-        _(0),
-        (f = []),
-        (o = []),
-        (v = void 0),
-        i()?.replaceChildren(),
-        (w = !1))
+      s = [],
+      b,
+      E = !1
+    function l() {
+      for (let n of p) n.cancel()
+      ;(cancelAnimationFrame(a),
+        (a = 0),
+        T(0),
+        (p = []),
+        (s = []),
+        (b = void 0),
+        r()?.replaceChildren(),
+        (E = !1))
     }
-    async function T(t) {
-      let b = i()
-      if (!b || t.aborted) throw new DOMException('Cancelled', 'AbortError')
-      let r = document.createElement('iframe')
-      ;((r.title = '\u52A0\u8F7D\u8FC7\u6E21'),
-        (r.tabIndex = -1),
-        r.setAttribute('aria-hidden', 'true'),
-        (r.style.cssText = 'width:100%;height:100%;border:0;display:block;pointer-events:none;'))
-      let x = new Promise((s, g) => {
-        let m = () => {
-            ;(window.removeEventListener('message', D), t.removeEventListener('abort', h))
+    async function y(n) {
+      let f = r()
+      if (!f || n.aborted) throw new DOMException('Cancelled', 'AbortError')
+      let o = document.createElement('iframe')
+      ;((o.title = '\u52A0\u8F7D\u8FC7\u6E21'),
+        (o.tabIndex = -1),
+        o.setAttribute('aria-hidden', 'true'),
+        o.setAttribute('sandbox', 'allow-same-origin'),
+        (o.style.cssText = 'width:100%;height:100%;border:0;display:block;pointer-events:none;'))
+      let w = new Promise((m, e) => {
+        let i = () => {
+            ;(o.removeEventListener('load', u), n.removeEventListener('abort', t))
           },
-          h = () => {
-            ;(m(), g(new DOMException('Cancelled', 'AbortError')))
+          t = () => {
+            ;(i(), e(n.reason))
           },
-          D = (L) => {
-            L.source !== r.contentWindow ||
-              L.origin !== location.origin ||
-              (L.data?.type === 'nozoki-maimai-ready' && (m(), s()),
-              L.data?.type === 'nozoki-maimai-error' &&
-                (m(), g(new Error('Transition artwork failed'))))
+          u = () => {
+            ;(i(), m())
           }
-        ;(window.addEventListener('message', D), t.addEventListener('abort', h, { once: !0 }))
+        ;(o.addEventListener('load', u, { once: !0 }), n.addEventListener('abort', t, { once: !0 }))
       })
-      if (((r.src = '/vendor/maimai-transition/player.html'), b.append(r), await x, t.aborted))
-        throw new DOMException('Cancelled', 'AbortError')
+      ;((o.srcdoc = F), f.append(o))
+      let g = fetch(`${C}transition.svg`, { signal: n }).then((m) => {
+          if (!m.ok) throw new Error(`Transition artwork HTTP ${m.status}`)
+          return m.text()
+        }),
+        [, x] = await Promise.all([w, g])
+      ;(n.throwIfAborted(), (b = o.contentDocument?.querySelector('.stage') ?? void 0))
+      let v = b?.querySelector('.frame')
+      if (!b || !v) throw new Error('Transition frame unavailable')
+      v.innerHTML = x
+      let h = v.querySelector('svg')
+      if (!h) throw new Error('Transition artwork unavailable')
+      let _ = h.querySelector('#\u6EF4\u62C9\u718A')
       if (
-        ((v = r.contentDocument.querySelector('.stage')),
-        (f = v.getAnimations({ subtree: !0 }).filter((s) => 'animationName' in s)),
-        !f.length)
+        (_ && h.append(_),
+        (p = b.getAnimations({ subtree: !0 }).filter((m) => 'animationName' in m)),
+        !p.length)
       )
         throw new Error('Reference animations unavailable')
-      for (let s of f) {
-        let g = s.effect.target,
-          m = s.effect.getTiming()
-        o.push({
-          target: g,
-          name: s.animationName,
-          delay: m.delay ?? 0,
-          duration: Number(m.duration),
+      for (let m of p) {
+        let e = m.effect.target,
+          i = m.effect.getTiming()
+        s.push({
+          target: e,
+          name: m.animationName,
+          delay: i.delay ?? 0,
+          duration: Number(i.duration),
         })
       }
-      for (let s of f) (s.pause(), (s.currentTime = 0))
-      w = !0
+      for (let m of p) (m.pause(), (m.currentTime = 0))
+      E = !0
     }
-    function l(t) {
-      if (!w) return
-      let b = t === 'leaving',
-        r = o.filter((a) => (a.name.includes('-out') || a.name.startsWith('expand-')) === b),
-        x = r,
-        s = Math.min(...x.map((a) => a.delay)),
-        g = Math.max(...x.map((a) => a.delay + Number(a.duration))),
-        m = b ? 320 : 240,
-        h = r.findLast((a, E) => Math.abs(x[E].delay + x[E].duration - g) < 0.01),
-        D = f.find((a) => a.animationName === h.name && a.effect.target === h.target),
-        L = r.map((a) => ({
-          layer: a,
-          animation: f.find((E) => E.animationName === a.name && E.effect.target === a.target),
+    function d(n) {
+      if (!E) return
+      let f = n === 'leaving',
+        o = s.filter((t) => (t.name.includes('-out') || t.name.startsWith('expand-')) === f),
+        w = o,
+        g = Math.min(...w.map((t) => t.delay)),
+        x = Math.max(...w.map((t) => t.delay + Number(t.duration))),
+        v = f ? 320 : 240,
+        h = o.findLast((t, u) => Math.abs(w[u].delay + w[u].duration - x) < 0.01),
+        _ = p.find((t) => t.animationName === h.name && t.effect.target === h.target),
+        m = o.map((t) => ({
+          layer: t,
+          animation: p.find((u) => u.animationName === t.name && u.effect.target === t.target),
         }))
-      cancelAnimationFrame(n)
-      let e,
-        u = 0,
-        d = (a) => {
-          ;(_(0), (u += e === void 0 ? 0 : Math.min(40, a - e)), (e = a))
-          let E = Math.min(1, u / m),
-            A = s + (g - s) * E
-          for (let { layer: M, animation: y } of L)
-            y.currentTime = Math.min(A, M.delay + M.duration)
-          E < 1 ? (_(1), (n = requestAnimationFrame(d))) : ((n = 0), D.finish())
+      cancelAnimationFrame(a)
+      let e = performance.now(),
+        i = (t) => {
+          T(0)
+          let u = Math.max(0, Math.min(1, (t - e) / v)),
+            O = g + (x - g) * u
+          for (let { layer: L, animation: A } of m)
+            A.currentTime = Math.min(O, L.delay + L.duration)
+          u < 1 ? (T(1), (a = requestAnimationFrame(i))) : ((a = 0), _.finish())
         }
       return (
-        _(1),
-        (n = requestAnimationFrame(d)),
-        { element: h.target, name: h.name, animation: D }
+        T(1),
+        (a = requestAnimationFrame(i)),
+        { element: h.target, name: h.name, animation: _ }
       )
     }
     return {
-      prepare: T,
-      draw: l,
-      dispose: p,
+      prepare: y,
+      draw: d,
+      dispose: l,
       get pendingFrames() {
-        return O
+        return k
       },
     }
   }
-  var P = window
+  var M = window
   if (
-    !P.__NOZOKI_DX_BOOT__ &&
-    !P.__NOZOKI_DX_APP_MOUNTED__ &&
-    (!P.__NOZOKI_DX_CURTAIN__ || P.__NOZOKI_DX_CURTAIN__.element.isConnected)
+    !M.__NOZOKI_DX_BOOT__ &&
+    !M.__NOZOKI_DX_APP_MOUNTED__ &&
+    (!M.__NOZOKI_DX_CURTAIN__ || M.__NOZOKI_DX_CURTAIN__.element.isConnected)
   ) {
-    let i = 'idle',
+    let r = 'idle',
       c = new Set(),
-      f = new Set(),
-      n = 0,
-      O = 0,
-      _ = 0,
-      o,
-      v,
-      w,
-      p = new Promise((e) => {
-        w = e
+      p = new Set(),
+      a = 0,
+      k = 0,
+      T = 0,
+      s,
+      b,
+      E,
+      l = new Promise((e) => {
+        E = e
       }),
-      T = () => ({ phase: i, timers: c.size, frames: O + _, listeners: n }),
-      l = () => {
-        for (let e of f) e(T())
+      y = () => ({ phase: r, timers: c.size, frames: k + T, listeners: a }),
+      d = () => {
+        for (let e of p) e(y())
       },
-      t = I(
-        () => v ?? null,
+      n = B(
+        () => b ?? null,
         (e) => {
-          ;((O = e), l())
+          ;((k = e), d())
         },
       ),
-      b = (e, u) => {
-        let d = setTimeout(() => {
-          ;(c.delete(d), l(), e())
-        }, u)
-        return (c.add(d), l(), d)
+      f = (e, i) => {
+        let t = setTimeout(() => {
+          ;(c.delete(t), d(), e())
+        }, i)
+        return (c.add(t), d(), t)
       },
-      r = (e) => {
-        ;(clearTimeout(e), c.delete(e), l())
+      o = (e) => {
+        ;(clearTimeout(e), c.delete(e), d())
       },
-      x = !1
+      w = !1
     try {
-      x = JSON.parse(localStorage.getItem('nozoki-appearance-v1') ?? 'null')?.reduceMotion === !0
+      let e = JSON.parse(
+        localStorage.getItem('nozoki-appearance-v2') ??
+          localStorage.getItem('nozoki-appearance-v1') ??
+          'null',
+      )
+      w = (e?.version === 2 ? e.overrides : e)?.reduceMotion === !0
     } catch {}
-    let s = matchMedia('(prefers-reduced-motion: reduce)'),
-      g = S({
+    let g = matchMedia('(prefers-reduced-motion: reduce)'),
+      x = I({
         report: (e) => console.warn('DX early initialization fallback', e),
-        reduced: () => x || s.matches,
+        reduced: () => w || g.matches || document.documentElement.dataset.nozokiReduced === 'true',
         hidden: () => document.hidden,
         readinessBudgetMs: 1e4,
-        setTimer: b,
-        clearTimer: r,
+        setTimer: f,
+        clearTimer: o,
         phase(e) {
-          if (((i = e), e === 'boot')) {
+          if (((r = e), e === 'boot')) {
             if (
-              ((o = P.__NOZOKI_DX_CURTAIN__?.claim() ?? document.createElement('div')),
-              !o.isConnected)
+              ((s = M.__NOZOKI_DX_CURTAIN__?.claim() ?? document.createElement('div')),
+              !s.isConnected)
             ) {
-              ;((o.className = 'dx-transition'), o.setAttribute('aria-hidden', 'true'))
-              let u = document.createElement('div')
-              ;((u.className = 'dx-veil'), o.append(u), document.documentElement.append(o))
+              ;((s.className = 'dx-transition'), s.setAttribute('aria-hidden', 'true'))
+              let i = document.createElement('div')
+              ;((i.className = 'dx-veil'), s.append(i), document.documentElement.append(s))
             }
-            ;((v = document.createElement('div')), (v.className = 'dx-geometry'), o.append(v))
+            ;((b = document.createElement('div')), (b.className = 'dx-geometry'), s.append(b))
           }
-          ;(o && (o.dataset.phase = e), l())
+          ;(s && (s.dataset.phase = e), d())
         },
         async frame(e) {
-          let u = new AbortController(),
-            d = () => u.abort()
-          ;(e.addEventListener('abort', d, { once: !0 }), n++, l())
-          let a = b(d, 1800)
+          let i = new AbortController(),
+            t = () => i.abort()
+          ;(e.addEventListener('abort', t, { once: !0 }), a++, d())
+          let u = f(
+            () => i.abort(new DOMException('Transition artwork timed out', 'TimeoutError')),
+            1800,
+          )
           try {
-            await t.prepare(u.signal)
+            await n.prepare(i.signal)
           } finally {
-            ;(r(a), u.abort(), e.removeEventListener('abort', d), n--, l())
+            ;(o(u), i.abort(), e.removeEventListener('abort', t), a--, d())
           }
-          await new Promise((E, A) => {
-            let M = 0,
-              y = !1,
-              C = () => {
-                ;(cancelAnimationFrame(M), r(k), e.removeEventListener('abort', R), _--, n--, l())
-              },
+          await new Promise((O, L) => {
+            let A = 0,
+              D = !1,
               N = () => {
-                y || ((y = !0), C(), E())
+                ;(cancelAnimationFrame(A), o(R), e.removeEventListener('abort', S), T--, a--, d())
               },
-              R = () => {
-                y || ((y = !0), C(), A(e.reason))
+              P = () => {
+                D || ((D = !0), N(), O())
               },
-              k = b(N, 100)
-            ;(_++,
-              n++,
-              l(),
-              e.addEventListener('abort', R, { once: !0 }),
-              (M = requestAnimationFrame(N)),
-              e.aborted && R())
+              S = () => {
+                D || ((D = !0), N(), L(e.reason))
+              },
+              R = f(P, 100)
+            ;(T++,
+              a++,
+              d(),
+              e.addEventListener('abort', S, { once: !0 }),
+              (A = requestAnimationFrame(P)),
+              e.aborted && S())
           })
         },
-        async animate(e, u) {
-          let d = t.draw(e)
-          d &&
-            (await new Promise((a, E) => {
-              let A = !1,
-                M = () => {
-                  ;(d.element.removeEventListener('animationend', N),
-                    d.element.removeEventListener('animationcancel', N),
-                    d.animation.removeEventListener('finish', y),
-                    u.removeEventListener('abort', C),
-                    r(R),
-                    (n -= 4),
-                    l())
+        async animate(e, i) {
+          let t = n.draw(e)
+          t &&
+            (await new Promise((u, O) => {
+              let L = !1,
+                A = () => {
+                  ;(t.element.removeEventListener('animationend', P),
+                    t.element.removeEventListener('animationcancel', P),
+                    t.animation.removeEventListener('finish', D),
+                    i.removeEventListener('abort', N),
+                    o(S),
+                    (a -= 4),
+                    d())
                 },
-                y = () => {
-                  A || ((A = !0), M(), a())
+                D = () => {
+                  L || ((L = !0), A(), u())
                 },
-                C = () => {
-                  A || ((A = !0), M(), E(u.reason))
+                N = () => {
+                  L || ((L = !0), A(), O(i.reason))
                 },
-                N = (k) => {
-                  k.target === d.element && k.animationName === d.name && y()
+                P = (R) => {
+                  R.target === t.element && R.animationName === t.name && D()
                 },
-                R = b(y, 2400)
-              ;((n += 4),
-                l(),
-                d.element.addEventListener('animationend', N),
-                d.element.addEventListener('animationcancel', N),
-                d.animation.addEventListener('finish', y),
-                u.addEventListener('abort', C, { once: !0 }),
-                u.aborted && C())
+                S = f(D, 2400)
+              ;((a += 4),
+                d(),
+                t.element.addEventListener('animationend', P),
+                t.element.addEventListener('animationcancel', P),
+                t.animation.addEventListener('finish', D),
+                i.addEventListener('abort', N, { once: !0 }),
+                i.aborted && N())
             }))
         },
+        fallback(e) {
+          return (
+            n.dispose(),
+            !s || e.aborted
+              ? Promise.resolve()
+              : new Promise((i) => {
+                  let t = () => {
+                      ;(o(u), e.removeEventListener('abort', t), a--, d(), i())
+                    },
+                    u = f(t, 150)
+                  ;(a++, d(), e.addEventListener('abort', t, { once: !0 }), e.aborted && t())
+                })
+          )
+        },
       }),
-      m = () => g.cancel(),
+      v = () => x.cancel(),
       h = () => {
-        document.hidden && m()
+        document.hidden && v()
       },
-      D = () => {
-        s.matches && m()
+      _ = () => {
+        g.matches && v()
       }
     ;(document.addEventListener('visibilitychange', h),
-      window.addEventListener('pagehide', m),
-      s.addEventListener('change', D),
-      (n += 3))
-    let L = g
-      .start(() => p)
+      window.addEventListener('pagehide', v),
+      g.addEventListener('change', _),
+      (a += 3))
+    let m = x
+      .start(() => l)
       .finally(() => {
-        ;(w(),
-          t.dispose(),
-          o?.remove(),
-          P.__NOZOKI_DX_CURTAIN__?.cancel(),
-          (o = void 0),
-          (v = void 0),
+        ;(E(),
+          n.dispose(),
+          s?.remove(),
+          M.__NOZOKI_DX_CURTAIN__?.cancel(),
+          (s = void 0),
+          (b = void 0),
           document.removeEventListener('visibilitychange', h),
-          window.removeEventListener('pagehide', m),
-          s.removeEventListener('change', D),
-          (n -= 3))
+          window.removeEventListener('pagehide', v),
+          g.removeEventListener('change', _),
+          (a -= 3))
         for (let e of c) clearTimeout(e)
-        ;(c.clear(), l(), f.clear())
+        ;(c.clear(), d(), p.clear())
       })
-    P.__NOZOKI_DX_BOOT__ = {
-      done: L,
-      snapshot: T,
+    M.__NOZOKI_DX_BOOT__ = {
+      done: m,
+      snapshot: y,
       ready() {
-        w()
+        E()
       },
-      cancel: m,
+      cancel: v,
       subscribe(e) {
-        return (f.add(e), e(T()), () => f.delete(e))
+        return (p.add(e), e(y()), () => p.delete(e))
       },
     }
   }

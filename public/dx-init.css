@@ -28,6 +28,17 @@
 .dx-transition[data-phase='boot'] .dx-geometry {
   opacity: 0;
 }
+.dx-transition[data-phase='fallback'] .dx-veil {
+  animation: dx-fallback-reveal 120ms ease-out both;
+}
+@keyframes dx-fallback-reveal {
+  to {
+    opacity: 0;
+  }
+}
+:root[data-nozoki-reduced='true'] .dx-transition {
+  display: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .dx-transition {
     display: none;
