@@ -434,7 +434,7 @@ test(
         services.expiresAt = new Date(fixed.getTime() + 600_000).toISOString()
         for (const item of services.data.monitors) item.checkedAt = fixed.toISOString()
         const monitorIds = services.data.monitors.map(({ id }) => id)
-        const selected = [monitorIds[2], monitorIds[0], monitorIds[3], monitorIds[1]]
+        const selected = [2, 0, 3, 1, 7, 6, 8, 5].map((i) => monitorIds[i])
         services.homeItems = selected
         Object.assign(services.data.monitors[2], { state: 'up', latencyMs: 591 })
         Object.assign(services.data.monitors[0], { state: 'up', latencyMs: null })
@@ -475,6 +475,7 @@ test(
             [1440, 900],
             [1280, 720],
             [768, 1024],
+            [600, 844],
             [390, 844],
             [320, 640],
           ]) {
@@ -549,7 +550,7 @@ test(
               'data-state',
               'down',
             )
-            await expect(homeRows).toHaveCount(4)
+            await expect(homeRows).toHaveCount(8)
             assert.deepEqual(
               await homeRows.evaluateAll((rows) =>
                 rows.map((row) => row.getAttribute('data-monitor-id')),
@@ -564,12 +565,30 @@ test(
               card.locator('.monitor-meta, .chart-plot, .monitor-history-toggle'),
             ).toHaveCount(0)
             assert.equal(homeRequests, 1)
-            assert.ok(homeBytes > 0 && homeBytes < 1_400)
+            assert.ok(homeBytes > 0 && homeBytes < 2_700)
             const initialHome = { requests: homeRequests, bytes: homeBytes }
             assert.deepEqual(requests, [])
             assert.deepEqual(initialCharts, [])
             const metrics = await geometry(page)
             const serviceGeometry = metrics.cards.find(({ id }) => id === 'services')
+            assert.ok(
+              metrics.cards
+                .filter(({ id }) => id !== 'links')
+                .every(({ height }) => height === 240),
+            )
+            if (!desktop) {
+              const shortcuts = await page
+                .locator('[data-module="links"] .link-grid a')
+                .evaluateAll((links) =>
+                  links.map((link) => {
+                    const { x, y } = link.getBoundingClientRect()
+                    return { x, y }
+                  }),
+                )
+              assert.equal(shortcuts.length, 4)
+              assert.equal(new Set(shortcuts.map(({ x }) => x)).size, 2)
+              assert.equal(new Set(shortcuts.map(({ y }) => y)).size, 2)
+            }
             const homeLayout = async () => {
               const rects = await homeRows.evaluateAll((rows) =>
                 rows.map((row) => {
@@ -592,18 +611,18 @@ test(
               const segmentCount = await visibleSegments(homeRows.first()).count()
               const segmentHeight = (await visibleSegments(homeRows.first()).first().boundingBox())!
                 .height
-              const columns = box.width >= 300 ? 2 : 1
               assert.equal(segmentCount, box.width >= 400 ? 16 : 12)
-              assert.equal(segmentHeight, box.width >= 400 ? 16 : box.width >= 300 ? 14 : 9)
-              assert.equal(new Set(rects.map(({ x }) => x)).size, columns)
-              assert.equal(new Set(rects.map(({ y }) => y)).size, 4 / columns)
+              assert.equal(segmentHeight, 7)
+              assert.equal(new Set(rects.map(({ x }) => x)).size, 2)
+              assert.equal(new Set(rects.map(({ y }) => y)).size, 4)
               assert.ok(
                 rects.every(
                   ({ headingFits, metaFits, nameClipped }) =>
                     headingFits && metaFits && nameClipped,
                 ),
               )
-              assert.ok(rects.every(({ y, height }) => y + height <= box.y + box.height))
+              const footer = await card.locator('.module-footer').boundingBox()
+              assert.ok(footer && rects.every(({ y, height }) => y + height <= footer.y))
               return { card: box, rects, segmentCount, segmentHeight }
             }
             const actualLayout = await homeLayout()
@@ -630,7 +649,7 @@ test(
                 constrained.push(await homeLayout())
               }
               await card.evaluate((el) => el.style.removeProperty('width'))
-              for (const quantity of [0, 1, 2, 3, 4]) {
+              for (const quantity of [0, 1, 2, 3, 4, 5, 8]) {
                 currentServices.homeItems = selected.slice(0, quantity)
                 const response = page.waitForResponse((r) => r.url().endsWith('/api/dashboard'))
                 await page.evaluate(() => window.dispatchEvent(new Event('focus')))
@@ -846,7 +865,14 @@ test(
             await page.keyboard.press('Escape')
             await expect(panel).toBeHidden()
             await page.locator('[data-module="deepseek"] .module-detail-button').click()
-            const balance = page.getByRole('slider', { name: /近 7 日.*余额/ })
+            const deepSeek = page.getByRole('dialog', { name: 'DeepSeek', exact: true })
+            await expect(
+              deepSeek.getByRole('heading', { name: '近 7 日余额', exact: true }),
+            ).toBeVisible()
+            await expect(
+              deepSeek.getByRole('heading', { name: '余额明细', exact: true }),
+            ).toBeVisible()
+            const balance = deepSeek.getByRole('slider', { name: /近 7 日.*余额/ })
             await expect(balance.locator('svg')).toBeVisible()
             await balance.press('End')
             await expect(balance).toHaveAttribute('aria-valuetext', /今日/)

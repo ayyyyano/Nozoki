@@ -139,7 +139,7 @@ export async function exerciseUniformGrid(page, { origin, evidence, input, reque
         .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)
       assert.equal(
         internal,
-        plan.links !== 'strip' || m.grid.width < 500 ? Math.min(2, navItems) : navItems,
+        plan.links !== 'strip' || m.grid.width < 1040 ? Math.min(2, navItems) : navItems,
         JSON.stringify({ label, plan, internal }),
       )
     }

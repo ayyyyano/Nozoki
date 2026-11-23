@@ -14,6 +14,14 @@ Nozoki 是一个基于 [Nuxt 4](https://nuxt.com/)，以自部署和便捷管理
 
 ![Nozoki Preview](docs/public/preview.png)
 
+<table>
+  <tr>
+    <td><img src="docs/public/preview-mobile-home.png" width="260" alt="主页预览"></td>
+    <td><img src="docs/public/preview-mobile-services.png" width="260" alt="服务状态"></td>
+    <td><img src="docs/public/preview-mobile-admin.png" width="260" alt="后台管理"></td>
+  </tr>
+</table>
+
 ## 看板功能
 
 ### 账户

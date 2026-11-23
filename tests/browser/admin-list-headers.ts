@@ -177,7 +177,7 @@ export async function exerciseAdminListHeaders(page, { input, save, evidence }) 
   await edit('services')
   const choices = editor('services').getByRole('checkbox')
   await expect(choices).toHaveCount(8)
-  await choices.nth(3).uncheck()
+  await choices.nth(7).uncheck()
   const serviceOrder = page.getByRole('list', { name: '首页服务列表' })
   const firstService = await serviceOrder
     .getByRole('listitem')
@@ -242,7 +242,7 @@ export async function exerciseAdminListHeaders(page, { input, save, evidence }) 
     byId('activity').fields,
     initial.config.modules.find((m) => m.id === 'activity').fields,
   )
-  assert.equal(byId('services').homeServices.length, 3)
+  assert.equal(byId('services').homeServices.length, 7)
   assert.equal(saved.config.site.schedule.start, '09:00')
   assert.equal(saved.config.quotes[0].displayName, '行情编辑回归')
   assert.ok(

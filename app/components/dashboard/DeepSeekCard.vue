@@ -30,6 +30,7 @@ const series = computed(() => {
   }))
 })
 const selectedCurrency = ref<string>()
+const balances = computed(() => props.snapshot.data?.balances ?? [])
 const detailSeries = computed(
   () => series.value.find((s) => s.currency === selectedCurrency.value) ?? series.value[0],
 )
@@ -55,7 +56,7 @@ const detailSeries = computed(
     <template v-if="!snapshot.data?.masked" #details="{ open }">
       <DashboardDataState :status="snapshot.status" compact />
       <section v-if="detailSeries && open" class="detail-chart">
-        <h3>近 7 日剩余余额 · {{ detailSeries.currency }}</h3>
+        <h3>近 7 日余额</h3>
         <div v-if="series.length > 1" class="chart-choices" aria-label="余额币种">
           <button
             v-for="item in series"
@@ -74,22 +75,25 @@ const detailSeries = computed(
           :points="detailSeries.points"
         />
       </section>
-      <section v-for="balance in snapshot.data?.balances ?? []" :key="balance.currency">
-        <h3>{{ balance.currency }} 余额组成</h3>
-        <dl class="quote-details">
-          <div v-if="balance.total !== null">
-            <dt>剩余</dt>
-            <dd>{{ decimalText(balance.total) }}</dd>
-          </div>
-          <div v-if="balance.toppedUp !== null">
-            <dt>充值余额</dt>
-            <dd>{{ decimalText(balance.toppedUp) }}</dd>
-          </div>
-          <div v-if="balance.granted !== null">
-            <dt>赠送余额</dt>
-            <dd>{{ decimalText(balance.granted) }}</dd>
-          </div>
-        </dl>
+      <section v-if="balances.length">
+        <h3>余额明细</h3>
+        <template v-for="balance in balances" :key="balance.currency">
+          <h4 v-if="balances.length > 1">{{ balance.currency }}</h4>
+          <dl class="quote-details">
+            <div v-if="balance.total !== null">
+              <dt>剩余</dt>
+              <dd>{{ decimalText(balance.total) }}</dd>
+            </div>
+            <div v-if="balance.toppedUp !== null">
+              <dt>充值余额</dt>
+              <dd>{{ decimalText(balance.toppedUp) }}</dd>
+            </div>
+            <div v-if="balance.granted !== null">
+              <dt>赠送余额</dt>
+              <dd>{{ decimalText(balance.granted) }}</dd>
+            </div>
+          </dl>
+        </template>
       </section>
       <div
         class="balance-record"

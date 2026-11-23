@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { CodexData, DataSnapshot } from '../../../shared/contracts/dashboard'
-import { quotaExpired } from '../../../shared/collection/policy'
 import { presentRing, RING_LABELS } from '../../../shared/domain/codex-rings'
 import { formatTimestamp } from '../../../shared/domain/format'
 const props = defineProps<{ snapshot: DataSnapshot<CodexData>; title: string }>()
@@ -20,17 +19,10 @@ const staleRings = computed(() =>
       : []
   }),
 )
-const staleQuota = computed(() =>
-  props.snapshot.data?.quota?.accounts.some((a) =>
-    a.windows.some((w) => quotaExpired(w, now.value)),
-  ),
-)
 const extra = computed(() => {
   const data = props.snapshot.data
   return !!(
-    data?.quota?.accounts.some((a) => a.windows.length) ||
-    data?.usage?.days.length ||
-    data?.capabilities?.quota?.reason === 'QUOTA_READ_UNAVAILABLE'
+    data?.usage?.days.length || data?.capabilities?.quota?.reason === 'QUOTA_READ_UNAVAILABLE'
   )
 })
 const details = computed(
@@ -69,15 +61,14 @@ const details = computed(
       compact
     />
     <DashboardCodexRingGrid :rings="home" :now="now" />
-    <template v-if="staleRings.length || (snapshot.status !== 'stale' && staleQuota)" #freshness>
-      <div v-if="staleRings.length" role="status">
+    <template v-if="staleRings.length" #freshness>
+      <div role="status">
         <p v-for="ring in staleRings" :key="ring.label">
           {{ ring.label }}已过期<span v-if="ring.observedAt">
             · {{ formatTimestamp(new Date(ring.observedAt).toISOString(), timezone) }}</span
           >
         </p>
       </div>
-      <p v-else role="status">原始配额观测已过期</p>
     </template>
     <template #details>
       <DashboardCodexRingGrid :rings="rings" :now="now" detail />

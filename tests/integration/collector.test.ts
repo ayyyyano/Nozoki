@@ -874,7 +874,7 @@ test('phase 06 real workerd/D1 collector fences, schedules and shared reads', as
         .getByText(/已过期/)
         .first()
         .waitFor()
-      await codexDetails.getByText('原始配额观测', { exact: true }).click()
+      assert.equal(await codexDetails.getByText('原始配额观测', { exact: true }).count(), 0)
       assert.ok(!(await codexDetails.innerText()).includes('74.875'))
       await page.keyboard.press('Escape')
       assert.ok(!(await page.locator('[data-module="codex"]').innerText()).includes('74.875'))

@@ -1,4 +1,4 @@
-export const ITEM_HOME_LIMITS = { devices: 4, tailscale: 8, services: 4 } as const
+export const ITEM_HOME_LIMITS = { devices: 4, tailscale: 8, services: 8 } as const
 export type ItemDisplayModule = keyof typeof ITEM_HOME_LIMITS
 
 export const DEVICE_ICONS = [

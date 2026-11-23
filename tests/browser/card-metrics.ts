@@ -135,7 +135,7 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
       await expect(panel.locator('.module-detail-subtitle time')).toHaveCount(1)
       if (id === 'codex') {
         await expect(panel).not.toContainText(/来源就绪|执行成功|暂无队列用量/)
-        await expect(panel.getByText('原始配额观测', { exact: true })).toBeVisible()
+        await expect(panel.getByText('原始配额观测', { exact: true })).toHaveCount(0)
         await expect(panel.getByText('总 Token 120', { exact: true })).toBeVisible()
       }
       await close(panel)

@@ -303,7 +303,7 @@ export async function exerciseCompactGrid(page, { origin, evidence }) {
             page.locator(`[data-module="${id}"] .module-body > .data-state`),
           ).toHaveCount(0)
         }
-        await expect(page.locator('[data-module="services"] .monitor-row')).toHaveCount(4)
+        await expect(page.locator('[data-module="services"] .monitor-row')).toHaveCount(8)
         await expect(
           page.locator('[data-module="services"] footer').getByRole('status', {
             name: '全部监控状态',
