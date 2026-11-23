@@ -367,7 +367,13 @@ p {
   min-width: 0;
   flex: 0 0 auto;
 }
-.module-card:is([data-module='devices'], [data-module='codex'], [data-module='quotes'])
+.module-card:is(
+    [data-module='devices'],
+    [data-module='tailscale'],
+    [data-module='codex'],
+    [data-module='quotes'],
+    [data-module='services']
+  )
   > .module-body {
   display: flex;
   flex: 1 0 auto;
@@ -1054,11 +1060,6 @@ p {
 .module-card[data-module='services'] {
   container-name: services-card;
 }
-.module-card[data-module='services']:has(.monitor-list-home) > .module-body {
-  display: flex;
-  flex: 1 0 auto;
-  flex-direction: column;
-}
 .monitor-list {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1067,8 +1068,6 @@ p {
 .monitor-list-home {
   --heartbeat-segment-height: 9px;
   width: 100%;
-  flex: 1 0 auto;
-  align-content: center;
   gap: 6px 12px;
 }
 .monitor-heading {
@@ -1132,7 +1131,6 @@ p {
   .monitor-list-home {
     --heartbeat-segment-height: 14px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-content: space-evenly;
     row-gap: 14px;
   }
   .monitor-heartbeat {
@@ -1153,7 +1151,6 @@ p {
 .monitor-list-home:has(> .monitor-row:nth-child(5)) {
   --heartbeat-segment-height: 7px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: space-evenly;
   row-gap: 6px;
 }
 .monitor-list-home:has(> .monitor-row:nth-child(5)) .monitor-heartbeat {

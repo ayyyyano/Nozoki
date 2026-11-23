@@ -111,8 +111,10 @@ export async function exerciseCardMetrics(page, { origin, evidence }) {
       )
     for (const [id, selector] of [
       ['devices', '.device-list'],
+      ['tailscale', '.tailnet-list'],
       ['codex', '.codex-ring-grid'],
       ['quotes', '.quote-list'],
+      ['services', '.monitor-list-home'],
     ]) {
       const offset = await card(id)
         .locator(selector)

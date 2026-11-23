@@ -413,7 +413,12 @@ test(
         const { expect } = await import('playwright/test')
         const { fixture, fixed } = await import('../fixtures/layout.ts')
         const { statusBuckets } = await import('../../shared/domain/chart-series.ts')
+        const { presentationSnapshots } = await import('../fixtures/presentation.ts')
         const dashboard = await fixture({ disabled: [], monitors: 13, longNames: true })
+        Object.assign(
+          dashboard.modules.find((m) => m.id === 'tailscale').snapshot,
+          presentationSnapshots(fixed).tailscale,
+        )
         const balance = dashboard.modules.find((m) => m.id === 'deepseek').snapshot
         balance.collectedAt = fixed.toISOString()
         balance.lastSuccessAt = fixed.toISOString()
@@ -493,6 +498,10 @@ test(
             const current = structuredClone(dashboard)
             const currentServices = current.modules.find((m) => m.id === 'services').snapshot
             if (width === 768) currentServices.partialFailures = 1
+            if (width === 390) {
+              const tailnet = current.modules.find((m) => m.id === 'tailscale').snapshot
+              tailnet.homeItems = tailnet.data.devices.slice(0, 4).map(({ id }) => id)
+            }
             let samples = points
             await page.route('**/api/dashboard', (route) => route.fulfill({ json: current }))
             const requests: string[] = []
@@ -571,6 +580,17 @@ test(
             assert.deepEqual(initialCharts, [])
             const metrics = await geometry(page)
             const serviceGeometry = metrics.cards.find(({ id }) => id === 'services')
+            const centerOffset = (list) =>
+              list.evaluate((content) => {
+                const body = content.parentElement.getBoundingClientRect()
+                const block = content.getBoundingClientRect()
+                return Math.abs(block.top - body.top - (body.bottom - block.bottom))
+              })
+            const tailnet = page.locator('[data-module="tailscale"] .tailnet-list')
+            await expect(tailnet.locator('.tailnet-device')).toHaveCount(width === 390 ? 4 : 8)
+            assert.ok((await centerOffset(tailnet)) < 1, `Tailscale content at ${width}px`)
+            const servicesList = card.locator('.monitor-list-home')
+            assert.ok((await centerOffset(servicesList)) < 1, `Services content at ${width}px`)
             assert.ok(
               metrics.cards
                 .filter(({ id }) => id !== 'links')
@@ -656,6 +676,7 @@ test(
                 await response
                 await expect(homeRows).toHaveCount(quantity)
                 if (quantity) await expect(visibleSegments(homeRows.first()).first()).toBeVisible()
+                if (quantity) assert.ok((await centerOffset(servicesList)) < 1)
                 assert.deepEqual(
                   await homeRows.evaluateAll((rows) =>
                     rows.map((r) => r.getAttribute('data-monitor-id')),
