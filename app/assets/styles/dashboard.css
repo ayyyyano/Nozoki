@@ -1197,6 +1197,36 @@ p {
 .monitor-history-toggle:focus-visible {
   background: var(--n-surface-high);
 }
+.monitor-history-toggle .app-icon {
+  transition: transform 150ms ease-out;
+}
+.monitor-history-toggle[aria-expanded='true'] .app-icon {
+  transform: rotate(180deg);
+}
+@media (width < 1024px) {
+  .monitor-history-reveal-enter-active {
+    transition: opacity 150ms ease-out;
+  }
+  .monitor-history-reveal-enter-from {
+    opacity: 0;
+  }
+}
+.dashboard-visibility-enter-active,
+.dashboard-visibility-leave-active {
+  transition: opacity 150ms ease-out;
+}
+.dashboard-visibility-enter-from,
+.dashboard-visibility-leave-to {
+  opacity: 0;
+}
+.home-history-ready .monitor-heartbeat {
+  animation: history-reveal 140ms ease-out;
+}
+@keyframes history-reveal {
+  from {
+    opacity: 0;
+  }
+}
 @media (min-width: 1024px) {
   .monitor-list-detail {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1936,6 +1966,14 @@ p {
   inset-block: 8px 26px;
   background: color-mix(in srgb, var(--n-primary), transparent 80%);
   pointer-events: none;
+}
+.chart-pin-feedback {
+  animation: chart-pin-in 120ms ease-out;
+}
+@keyframes chart-pin-in {
+  from {
+    opacity: 0.45;
+  }
 }
 .chart-readout,
 .monitor-history-readout {

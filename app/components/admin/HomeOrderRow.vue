@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { preserveAdminOrderFocus } from '../../utils/admin-order-focus'
 const enabled = defineModel<boolean>('enabled', { required: true })
 defineProps<{
   title: string
@@ -8,7 +9,7 @@ defineProps<{
   index: number
   count: number
 }>()
-defineEmits<{ edit: []; move: [delta: -1 | 1] }>()
+const emit = defineEmits<{ edit: []; move: [delta: -1 | 1] }>()
 </script>
 
 <template>
@@ -25,6 +26,7 @@ defineEmits<{ edit: []; move: [delta: -1 | 1] }>()
       round
       type="primary"
       :aria-label="`编辑${itemLabel}`"
+      data-order-edit
       aria-haspopup="dialog"
       @click="$emit('edit')"
       ><CommonAppIcon name="EditRound" :size="20"
@@ -34,7 +36,7 @@ defineEmits<{ edit: []; move: [delta: -1 | 1] }>()
       round
       :disabled="index === 0"
       :aria-label="`上移${itemLabel}`"
-      @click="$emit('move', -1)"
+      @click="preserveAdminOrderFocus($event, () => emit('move', -1))"
       ><CommonAppIcon name="up" :size="20"
     /></VarButton>
     <VarButton
@@ -42,7 +44,7 @@ defineEmits<{ edit: []; move: [delta: -1 | 1] }>()
       round
       :disabled="index === count - 1"
       :aria-label="`下移${itemLabel}`"
-      @click="$emit('move', 1)"
+      @click="preserveAdminOrderFocus($event, () => emit('move', 1))"
       ><CommonAppIcon name="down" :size="20"
     /></VarButton>
   </li>

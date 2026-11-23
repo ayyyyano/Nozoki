@@ -7,7 +7,9 @@ const props = defineProps<{
   resetToken: number
   locateToken: number
   locateIndex?: number
+  locateField?: string
 }>()
+const dialog = useTemplateRef('dialog')
 const items = defineModel<ConfigWrite['quotes']>({ required: true })
 const { index, draft, show, open, edit, apply, remove } = useOrderedItemEditor(items)
 const quoteKeys = new WeakMap<object, string>()
@@ -39,8 +41,12 @@ watch(
 )
 watch(
   () => props.locateToken,
-  () => {
-    if (props.locateIndex !== undefined) edit(props.locateIndex)
+  async () => {
+    if (props.locateIndex === undefined) return
+    edit(props.locateIndex)
+    await nextTick()
+    await nextTick()
+    dialog.value?.focusValidation(props.locateField)
   },
 )
 </script>
@@ -48,7 +54,12 @@ watch(
 <template>
   <section class="admin-module-group">
     <h3>首页展示</h3>
-    <ul class="admin-home-items" aria-label="行情标的">
+    <TransitionGroup
+      tag="ul"
+      move-class="admin-order-move"
+      class="admin-home-items"
+      aria-label="行情标的"
+    >
       <AdminHomeOrderRow
         v-for="(quote, i) in items"
         :key="quoteKey(quote)"
@@ -63,7 +74,7 @@ watch(
         @edit="edit(i)"
         @move="moveOrderedItem(items, i, $event)"
       />
-    </ul>
+    </TransitionGroup>
     <VarButton
       class="admin-add-button"
       type="primary"
@@ -74,6 +85,7 @@ watch(
       <CommonAppIcon name="AddRound" :size="20" />添加行情标的
     </VarButton>
     <AdminSourceDialog
+      ref="dialog"
       v-model:show="show"
       :title="index === null ? '添加行情标的' : '编辑行情标的'"
       confirm="应用"
@@ -93,9 +105,13 @@ watch(
         </VarButton>
       </template>
       <div v-if="draft" class="source-candidate-fields">
-        <AdminText v-model="draft.market" :label="`标的 ${order} 市场`" />
-        <AdminText v-model="draft.symbol" :label="`标的 ${order} 代码`" />
-        <AdminText v-model="draft.displayName" :label="`标的 ${order} 名称`" />
+        <AdminText v-model="draft.market" data-error-field="market" :label="`标的 ${order} 市场`" />
+        <AdminText v-model="draft.symbol" data-error-field="symbol" :label="`标的 ${order} 代码`" />
+        <AdminText
+          v-model="draft.displayName"
+          data-error-field="displayName"
+          :label="`标的 ${order} 名称`"
+        />
         <p class="admin-note">刷新间隔跟随行情来源。</p>
         <p class="admin-note">
           {{

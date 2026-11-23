@@ -5,6 +5,7 @@ const props = defineProps<{
   buckets: readonly StatusBucket[]
   selected: number | null
   selectionText?: string
+  pinRevision?: number
 }>()
 const emit = defineEmits<{ preview: [index: number | null]; commit: [index: number] }>()
 const x = computed(() => props.buckets.map((_, i) => i))
@@ -44,6 +45,7 @@ const options = computed(() => {
     v-if="buckets.length"
     :model-value="selected"
     :selection-text="selectionText"
+    :pin-revision="pinRevision"
     label="服务状态时间轴"
     :values="x"
     :details="[]"

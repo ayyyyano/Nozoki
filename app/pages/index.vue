@@ -127,87 +127,89 @@ const DevPreview = import.meta.dev
       ><CommonAppIcon name="person" :filled="shared?.viewer === 'admin'"
     /></VarButton>
   </div>
-  <main
-    v-show="displayMode === 'dashboard'"
-    :inert="displayMode === 'wallpaper'"
-    id="main-content"
-    class="dashboard-container"
-    tabindex="-1"
-  >
-    <h1 class="sr-only">{{ shared?.site.siteName ?? 'Nozoki' }} 摸鱼看板</h1>
-    <p v-if="!shared && !DevPreview" role="alert">共享配置暂时不可用，请稍后刷新。</p>
-    <component :is="DevPreview" v-if="DevPreview" v-model:data="data" v-model:modules="modules" />
-    <LayoutDashboardGrid
-      v-slot="{ businessStyle }"
-      :business-count="visible.filter((m) => moduleRole(m.id) === 'business').length"
-      :links-visible="
-        visible.some((m) => moduleRole(m.id) === 'navigation') &&
-        !hints.has('links') &&
-        !!data.links.data?.items.some((item) => isSafeLink(item.url))
-      "
+  <Transition name="dashboard-visibility">
+    <main
+      v-show="displayMode === 'dashboard'"
+      :inert="displayMode === 'wallpaper'"
+      id="main-content"
+      class="dashboard-container"
+      tabindex="-1"
     >
-      <template v-for="(module, index) in visible" :key="module.id">
-        <DashboardModuleCard
-          v-if="hints.has(module.id)"
-          :style="businessStyle(index)"
-          :id="module.id"
-          :title="module.title"
-          :icon="moduleIcons[module.id]"
-          status="unconfigured"
-          class="module-login-required"
-          ><a href="/login" @click.prevent="account?.open()">登录后查看</a></DashboardModuleCard
-        >
-        <DashboardDeepSeekCard
-          v-else-if="module.id === 'deepseek'"
-          :style="businessStyle(index)"
-          :title="module.title"
-          :snapshot="data.deepseek"
-        />
-        <DashboardDevicesCard
-          v-else-if="module.id === 'devices'"
-          :style="businessStyle(index)"
-          :title="module.title"
-          :snapshot="data.devices"
-        />
-        <DashboardTailscaleCard
-          v-else-if="module.id === 'tailscale'"
-          :style="businessStyle(index)"
-          :title="module.title"
-          :snapshot="data.tailscale"
-        />
-        <DashboardCodexCard
-          v-else-if="module.id === 'codex'"
-          :style="businessStyle(index)"
-          :title="module.title"
-          :snapshot="data.codex"
-        />
-        <DashboardActivityCard
-          v-else-if="module.id === 'activity'"
-          :style="businessStyle(index)"
-          :title="module.title"
-          :snapshot="data.activity"
-          :now="now"
-        />
-        <DashboardQuotesCard
-          v-else-if="module.id === 'quotes'"
-          :style="businessStyle(index)"
-          :title="module.title"
-          :snapshot="data.quotes"
-        />
-        <DashboardLinksCard
-          v-else-if="module.id === 'links'"
-          :title="module.title"
-          :snapshot="data.links"
-        />
-        <DashboardServicesCard
-          v-else
-          :style="businessStyle(index)"
-          :title="module.title"
-          :snapshot="data.services"
-        />
-      </template>
-    </LayoutDashboardGrid>
-  </main>
+      <h1 class="sr-only">{{ shared?.site.siteName ?? 'Nozoki' }} 摸鱼看板</h1>
+      <p v-if="!shared && !DevPreview" role="alert">共享配置暂时不可用，请稍后刷新。</p>
+      <component :is="DevPreview" v-if="DevPreview" v-model:data="data" v-model:modules="modules" />
+      <LayoutDashboardGrid
+        v-slot="{ businessStyle }"
+        :business-count="visible.filter((m) => moduleRole(m.id) === 'business').length"
+        :links-visible="
+          visible.some((m) => moduleRole(m.id) === 'navigation') &&
+          !hints.has('links') &&
+          !!data.links.data?.items.some((item) => isSafeLink(item.url))
+        "
+      >
+        <template v-for="(module, index) in visible" :key="module.id">
+          <DashboardModuleCard
+            v-if="hints.has(module.id)"
+            :style="businessStyle(index)"
+            :id="module.id"
+            :title="module.title"
+            :icon="moduleIcons[module.id]"
+            status="unconfigured"
+            class="module-login-required"
+            ><a href="/login" @click.prevent="account?.open()">登录后查看</a></DashboardModuleCard
+          >
+          <DashboardDeepSeekCard
+            v-else-if="module.id === 'deepseek'"
+            :style="businessStyle(index)"
+            :title="module.title"
+            :snapshot="data.deepseek"
+          />
+          <DashboardDevicesCard
+            v-else-if="module.id === 'devices'"
+            :style="businessStyle(index)"
+            :title="module.title"
+            :snapshot="data.devices"
+          />
+          <DashboardTailscaleCard
+            v-else-if="module.id === 'tailscale'"
+            :style="businessStyle(index)"
+            :title="module.title"
+            :snapshot="data.tailscale"
+          />
+          <DashboardCodexCard
+            v-else-if="module.id === 'codex'"
+            :style="businessStyle(index)"
+            :title="module.title"
+            :snapshot="data.codex"
+          />
+          <DashboardActivityCard
+            v-else-if="module.id === 'activity'"
+            :style="businessStyle(index)"
+            :title="module.title"
+            :snapshot="data.activity"
+            :now="now"
+          />
+          <DashboardQuotesCard
+            v-else-if="module.id === 'quotes'"
+            :style="businessStyle(index)"
+            :title="module.title"
+            :snapshot="data.quotes"
+          />
+          <DashboardLinksCard
+            v-else-if="module.id === 'links'"
+            :title="module.title"
+            :snapshot="data.links"
+          />
+          <DashboardServicesCard
+            v-else
+            :style="businessStyle(index)"
+            :title="module.title"
+            :snapshot="data.services"
+          />
+        </template>
+      </LayoutDashboardGrid>
+    </main>
+  </Transition>
   <AuthAccountDialog ref="account" />
 </template>
 <style scoped>

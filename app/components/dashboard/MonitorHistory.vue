@@ -120,6 +120,7 @@ const latency = computed(() => {
 type Selection = { kind: 'bucket' | 'point'; at: number }
 const preview = ref<Selection | null>(null)
 const pinned = ref<Selection | null>(null)
+const pinRevision = ref(0)
 const active = computed(() => preview.value ?? pinned.value)
 const bucketAt = (at: number) => historyBucketIndex(buckets.value, at)
 const statusIndex = computed(() => {
@@ -182,6 +183,7 @@ function pin(kind: Selection['kind'], index: number) {
     current?.kind === kind &&
     (kind === 'point' ? current.at === next.at : bucketAt(current.at) === index)
   pinned.value = same ? null : next
+  if (!same) pinRevision.value++
   preview.value = null
 }
 function clearSelection() {
@@ -215,6 +217,7 @@ watch([past, windowRange], () => {
         :selected="statusIndex"
         :buckets="buckets"
         :selection-text="selectionText"
+        :pin-revision="pinRevision"
         @preview="browse('bucket', $event)"
         @commit="pin('bucket', $event)"
       />
@@ -226,6 +229,7 @@ watch([past, windowRange], () => {
           :domain="windowRange"
           :highlight-range="highlightRange"
           :selection-text="selectionText"
+          :pin-revision="pinRevision"
           label="服务响应时间"
           type="line"
           unit="ms"

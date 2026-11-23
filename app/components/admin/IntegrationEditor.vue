@@ -276,7 +276,13 @@ const identityImport = computed({
       <VarButton v-if="!model.baseUrl" text @click="url = preset.roots[0]!">使用预设地址</VarButton>
     </div>
     <div class="source-settings-grid">
-      <AdminText v-if="instanceAddress" v-model="url" label="实例 HTTPS 地址" reserve-details />
+      <AdminText
+        v-if="instanceAddress"
+        v-model="url"
+        data-error-field="baseUrl"
+        label="实例 HTTPS 地址"
+        reserve-details
+      />
       <AdminText
         v-for="field in preset.fields"
         :key="field.key"

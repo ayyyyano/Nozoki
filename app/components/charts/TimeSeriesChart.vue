@@ -13,6 +13,7 @@ const props = defineProps<{
   domain?: readonly [number, number]
   highlightRange?: readonly [number, number]
   selectionText?: string
+  pinRevision?: number
 }>()
 const emit = defineEmits<{ preview: [index: number | null]; commit: [index: number] }>()
 const selected = defineModel<number | null>({ default: null })
@@ -101,6 +102,7 @@ const options = computed(() => {
     :selectable="selectable"
     :range="highlightRange"
     :selection-text="selectionText"
+    :pin-revision="pinRevision"
     @preview="emit('preview', $event)"
     @commit="emit('commit', $event)"
   />

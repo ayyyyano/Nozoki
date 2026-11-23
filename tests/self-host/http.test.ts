@@ -483,6 +483,7 @@ test(
               viewport: { width, height },
               hasTouch: !desktop,
               colorScheme: [1920, 390].includes(width) ? 'dark' : 'light',
+              reducedMotion: width === 320 ? 'reduce' : 'no-preference',
             })
             const page = await context.newPage()
             const errors: string[] = []
@@ -709,6 +710,18 @@ test(
               const heading = await headingInPanel()
               await firstToggle.tap()
               await expect(firstToggle).toHaveAttribute('aria-expanded', 'true')
+              await expect(firstToggle.locator('.app-icon')).toHaveCSS(
+                'transform',
+                'matrix(-1, 0, 0, -1, 0, 0)',
+              )
+              if (width === 320)
+                assert.ok(
+                  await firstToggle
+                    .locator('.app-icon')
+                    .evaluate(
+                      (icon) => Number.parseFloat(getComputedStyle(icon).transitionDuration) < 0.01,
+                    ),
+                )
               assert.deepEqual(await headingInPanel(), heading)
             }
             await expect(timeline.locator('svg')).toBeVisible()
@@ -747,6 +760,7 @@ test(
             await latency.press('End')
             await latency.press('Enter')
             await expect(first.locator('.chart-marker')).toHaveCount(2)
+            await expect(first.locator('.chart-marker.chart-pin-feedback')).toHaveCount(2)
             await expect(first.locator('.chart-band')).toHaveCount(0)
             await expect(first.locator('.monitor-history-readout')).toContainText(/异常.*260 ms/)
             if (width === 1440 || width === 390) {
@@ -785,6 +799,15 @@ test(
               await expect(panel.locator('.monitor-history')).toHaveCount(1)
               await toggles.nth(1).tap()
               await expect(panel.locator('.monitor-history')).toHaveCount(0)
+              if (width === 390) {
+                await firstToggle.evaluate(async (button: HTMLButtonElement) => {
+                  button.click()
+                  await new Promise(requestAnimationFrame)
+                  button.click()
+                })
+                await expect(firstToggle).toHaveAttribute('aria-expanded', 'false')
+                await expect(panel.locator('.monitor-history')).toHaveCount(0)
+              }
             }
             if (width === 1440) {
               await page.setViewportSize({ width: 390, height: 844 })
@@ -808,6 +831,14 @@ test(
             assert.ok(requests.includes(monitorIds.at(-1)))
             await page.keyboard.press('Escape')
             await expect(panel).toBeHidden()
+            if (width === 1440) {
+              await page.getByRole('button', { name: '显示纯壁纸' }).click()
+              await expect(page.locator('#main-content')).toHaveAttribute('inert', '')
+              await expect(page.locator('#main-content')).toBeHidden()
+              await page.getByRole('button', { name: '恢复看板' }).click()
+              await expect(page.locator('#main-content')).toBeVisible()
+              await expect(page.locator('#main-content')).not.toHaveAttribute('inert', '')
+            }
             await card.getByRole('button', { name: '查看服务状态详情', exact: true }).click()
             await expect(panel).toBeVisible()
             await expect(panel.locator('.chart-marker, .chart-band')).toHaveCount(0)
@@ -915,7 +946,12 @@ test(
         await item('saved-accounts').locator('.admin-item-toggle').click()
         await expect(sourceEditor).toBeVisible()
         await expect(sourceEditor.getByLabel('协议版本', { exact: true })).toHaveCount(0)
+        await page.setViewportSize({ width: 320, height: 640 })
+        await expect(sourceEditor).toBeVisible()
+        const editorBounds = await sourceEditor.boundingBox()
+        assert.ok(editorBounds && editorBounds.x > 0 && editorBounds.x + editorBounds.width < 320)
         await closeEditor()
+        await page.setViewportSize({ width: 1280, height: 720 })
         await item('saved-legacy').locator('.admin-item-toggle').click()
         await expect(sourceEditor.getByText(/旧协议暂不支持编辑/)).toBeVisible()
         await closeEditor()
@@ -929,8 +965,29 @@ test(
         await expect(sleepy.getByRole('button', { name: '添加来源', exact: true })).toBeDisabled()
         await sleepy.getByRole('button', { name: '取消', exact: true }).click()
         await expect(sleepy).toBeHidden()
+        await page.getByRole('button', { name: '主页模块', exact: true }).click()
+        await page.locator('[data-edit-module="links"] .admin-item-toggle').click()
+        const links = sourceEditor.getByRole('list', { name: '常用链接', exact: true })
+        const secondLink = await links.getByRole('listitem').nth(1).getAttribute('data-edit-link')
+        await links.getByRole('button', { name: '上移链接 2', exact: true }).press('Enter')
+        await expect(links.getByRole('listitem').first()).toHaveAttribute(
+          'data-edit-link',
+          secondLink!,
+        )
+        await expect(links.getByRole('button', { name: '编辑链接 1', exact: true })).toBeFocused()
+        await links.getByRole('button', { name: '下移链接 1', exact: true }).press('Enter')
+        await closeEditor()
         await page.getByRole('button', { name: '站点外观', exact: true }).click()
-        await page.getByLabel('站点名称', { exact: true }).fill('Browser self-host save')
+        const siteName = page.getByLabel('站点名称', { exact: true })
+        await siteName.fill('')
+        await page.getByRole('button', { name: '保存配置', exact: true }).click()
+        await page.getByRole('button', { name: /site\.siteName/ }).click()
+        await expect(siteName).toBeFocused()
+        await expect(page.locator('[data-validation-target]').filter({ has: siteName })).toHaveCSS(
+          'animation-name',
+          'admin-validation-focus',
+        )
+        await siteName.fill('Browser self-host save')
         await page.getByRole('button', { name: '保存配置', exact: true }).click()
         await page.getByText('已保存并确认持久化', { exact: true }).waitFor()
         const read = async () => (await context.request.get(origin + '/api/admin/config')).json()

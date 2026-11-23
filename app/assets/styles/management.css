@@ -729,6 +729,28 @@
   width: 100%;
   pointer-events: none;
 }
+.admin-feedback-motion-enter-active {
+  transition: opacity 150ms ease-out;
+}
+.admin-feedback-motion-leave-active {
+  transition: opacity 120ms ease-in;
+}
+.admin-feedback-motion-enter-from,
+.admin-feedback-motion-leave-to {
+  opacity: 0;
+}
+[data-validation-target] {
+  border-radius: 4px;
+  animation: admin-validation-focus 750ms ease-out;
+}
+@keyframes admin-validation-focus {
+  from {
+    box-shadow: 0 0 0 2px var(--color-error, #b3261e);
+  }
+  to {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
 .admin-feedback-toast {
   pointer-events: auto;
   text-align: left;
@@ -1094,6 +1116,21 @@
 .admin-edit-popup--compact {
   --editor-max-width: 760px;
 }
+.admin-editor-motion-enter-active {
+  transition:
+    opacity 180ms ease-out,
+    transform 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+.admin-editor-motion-leave-active {
+  transition:
+    opacity 120ms ease-in,
+    transform 150ms ease-in;
+}
+.admin-editor-motion-enter-from,
+.admin-editor-motion-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.985);
+}
 .admin-edit-scrim {
   --popup-overlay-background-color: rgb(0 0 0 / 52%);
 }
@@ -1341,6 +1378,9 @@
   margin: 0;
   list-style: none;
   min-width: 0;
+}
+.admin-order-move {
+  transition: transform 170ms ease-out;
 }
 .admin-home-items li {
   display: flex;

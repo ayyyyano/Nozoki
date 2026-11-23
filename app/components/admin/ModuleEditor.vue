@@ -10,6 +10,7 @@ const props = defineProps<{
   resetToken: number
   locateToken: number
   locateIndex?: number
+  locateField?: string
 }>()
 const editor = computed(() => moduleEditors[model.value.id])
 const hasSource = computed(() => Object.values(SOURCE_MODULES).includes(model.value.id))
@@ -50,6 +51,7 @@ const sourceNames = computed(() =>
           :reset-token="resetToken"
           :locate-token="locateToken"
           :locate-index="locateIndex"
+          :locate-field="locateField"
         />
         <AdminLinkSettingsEditor
           v-if="model.id === 'links'"
@@ -57,6 +59,7 @@ const sourceNames = computed(() =>
           :reset-token="resetToken"
           :locate-token="locateToken"
           :locate-index="locateIndex"
+          :locate-field="locateField"
         />
       </template>
       <template v-if="editor?.guest" #guest>

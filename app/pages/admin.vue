@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { focusAdminValidation } from '../utils/admin-validation-focus'
 import type { SessionDto, CsrfDto } from '../../shared/contracts/auth'
 import {
   ConfigSchema,
@@ -190,6 +191,7 @@ const navigation = useTemplateRef('navigation')
 const editorResetToken = ref(0)
 const editorLocateToken = ref(0)
 const editorLocateIndex = ref<number>()
+const editorLocateField = ref<string>()
 const showActions = ref(false)
 const actionsPanel = useTemplateRef<HTMLElement>('actionsPanel')
 const showFeedback = ref(false)
@@ -317,7 +319,7 @@ function errorLabel(error: string) {
 }
 async function locate(error: string) {
   const path = error.split('：', 1)[0]!.replace(/^config\./, '')
-  const [field, item] = path.split('.')
+  const [field, item, ...parts] = path.split('.')
   const module =
     path === 'site.schedule' || path.startsWith('site.schedule.') || path === 'site.timezone'
       ? 'activity'
@@ -344,6 +346,7 @@ async function locate(error: string) {
     (field === 'quotes' || field === 'links') && item && /^\d+$/.test(item)
       ? Number(item)
       : undefined
+  editorLocateField.value = parts.at(-1) ?? item
   editorLocateToken.value++
   if (editorLocateIndex.value !== undefined) return
   const group = document.querySelector<HTMLElement>(
@@ -351,10 +354,7 @@ async function locate(error: string) {
       ? '.admin-edit-dialog-body'
       : '.admin-form > fieldset:not([style*="display: none"])',
   )
-  const input = [...(group?.querySelectorAll<HTMLElement>('input:not(:disabled)') ?? [])].find(
-    (el) => el.getClientRects().length,
-  )
-  ;(input ?? sectionHeading.value)?.focus()
+  if (!focusAdminValidation(group, editorLocateField.value)) sectionHeading.value?.focus()
 }
 function acceptLatest() {
   if (latest.value) accept(latest.value)
@@ -629,6 +629,7 @@ onBeforeRouteLeave((to, from) => {
       <VarPopup
         v-model:show="showFeedback"
         position="bottom"
+        transition="admin-feedback-motion"
         class="admin-feedback-popup"
         role="status"
         aria-live="polite"
@@ -697,7 +698,12 @@ onBeforeRouteLeave((to, from) => {
             <legend class="sr-only">站点外观</legend>
             <section class="admin-appearance-group">
               <h3>站点信息</h3>
-              <AdminText v-model="draft.site.siteName" label="站点名称" :max="100" />
+              <AdminText
+                v-model="draft.site.siteName"
+                data-error-field="siteName"
+                label="站点名称"
+                :max="100"
+              />
             </section>
             <section class="admin-appearance-group">
               <h3>主题配色</h3>
@@ -782,6 +788,7 @@ onBeforeRouteLeave((to, from) => {
                   :reset-token="editorResetToken"
                   :locate-token="editorLocateToken"
                   :locate-index="editorLocateIndex"
+                  :locate-field="editorLocateField"
                 />
               </fieldset>
               <template v-if="activeModule" #footer>

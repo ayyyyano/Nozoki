@@ -21,11 +21,16 @@ const homeScope = computed(() =>
 )
 const homeWindow = computed(() => Math.floor(now.value / (15 * 60_000)))
 const homeHistory = shallowRef(new Map<string, HomeMonitorHistory['segments']>())
+const revealHistory = ref(false)
+let historyRevealed = false
 onMounted(() => {
   watch(
     [homeScope, revision, homeWindow],
     async ([scope], previous, onCleanup) => {
-      if (scope !== previous?.[0]) homeHistory.value = new Map()
+      if (scope !== previous?.[0]) {
+        homeHistory.value = new Map()
+        revealHistory.value = false
+      }
       if (!summary.value.items.length) return
       const request = new AbortController()
       onCleanup(() => request.abort())
@@ -36,10 +41,16 @@ onMounted(() => {
           retry: 0,
           timeout: 10000,
         })
-        if (!request.signal.aborted)
+        if (!request.signal.aborted) {
+          revealHistory.value = !historyRevealed && histories.length > 0
+          historyRevealed ||= revealHistory.value
           homeHistory.value = new Map(histories.map(({ id, segments }) => [id, segments]))
+        }
       } catch {
-        if (!request.signal.aborted) homeHistory.value = new Map()
+        if (!request.signal.aborted) {
+          revealHistory.value = false
+          homeHistory.value = new Map()
+        }
       }
     },
     { immediate: true },
@@ -71,7 +82,12 @@ const expired = computed(() =>
       :empty="!summary.total"
       compact
     />
-    <DashboardMonitorList :monitors="summary.items" :snapshot="snapshot" :history="homeHistory" />
+    <DashboardMonitorList
+      :monitors="summary.items"
+      :snapshot="snapshot"
+      :history="homeHistory"
+      :class="{ 'home-history-ready': revealHistory }"
+    />
     <p v-if="summary.total && !summary.items.length" class="quiet-note">
       未选择首页服务，可在详情中查看。
     </p>

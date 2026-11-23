@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { preserveAdminOrderFocus } from '../../utils/admin-order-focus'
 import type { ModuleSettings } from '../../../shared/contracts/config'
 import type { ModulePresentation } from '../../../shared/contracts/module-presentation'
 import type { DataStatus } from '../../../shared/contracts/dashboard'
@@ -179,7 +180,13 @@ function apply() {
     <p v-if="selected.length === limit" class="admin-note">
       已达到选择上限。取消一项选择后可以添加其他{{ itemLabel }}。
     </p>
-    <ul v-if="rows.length" class="admin-home-items" :aria-label="`首页${itemLabel}列表`">
+    <TransitionGroup
+      v-if="rows.length"
+      tag="ul"
+      move-class="admin-order-move"
+      class="admin-home-items"
+      :aria-label="`首页${itemLabel}列表`"
+    >
       <li
         v-for="row in rows"
         :key="row.key"
@@ -210,6 +217,7 @@ function apply() {
           type="primary"
           :aria-label="`编辑 ${row.alias ?? row.name}`"
           aria-haspopup="dialog"
+          data-order-edit
           @click="edit(row)"
         >
           <CommonAppIcon name="EditRound" :size="20" />
@@ -220,7 +228,7 @@ function apply() {
           round
           :disabled="row.index === 0"
           :aria-label="`上移${itemLabel} ${row.alias ?? row.name}`"
-          @click="move(row.index, -1)"
+          @click="preserveAdminOrderFocus($event, () => move(row.index, -1))"
           ><CommonAppIcon name="up" :size="20"
         /></VarButton>
         <VarButton
@@ -229,11 +237,11 @@ function apply() {
           round
           :disabled="row.index === selected.length - 1"
           :aria-label="`下移${itemLabel} ${row.alias ?? row.name}`"
-          @click="move(row.index, 1)"
+          @click="preserveAdminOrderFocus($event, () => move(row.index, 1))"
           ><CommonAppIcon name="down" :size="20"
         /></VarButton>
       </li>
-    </ul>
+    </TransitionGroup>
     <div class="admin-actions">
       <VarButton tonal @click="refresh()">刷新列表</VarButton>
       <VarButton v-if="selection === undefined || selected.length" text @click="setSelection([])"

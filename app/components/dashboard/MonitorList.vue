@@ -103,15 +103,17 @@ watch(rows, (next) => {
           :aria-controls="`${headingId}-history-${index}`"
           @click="expanded = expanded === monitor.id ? null : monitor.id"
         >
-          <CommonAppIcon :name="expanded === monitor.id ? 'chevronUp' : 'chevronDown'" :size="20" />
+          <CommonAppIcon name="chevronDown" :size="20" />
         </button>
       </div>
       <div v-if="detail" :id="`${headingId}-history-${index}`">
-        <DashboardMonitorHistory
-          v-if="desktop || expanded === monitor.id"
-          :monitor-id="monitor.id"
-          :revision="revision ?? ''"
-        />
+        <Transition name="monitor-history-reveal">
+          <DashboardMonitorHistory
+            v-if="desktop || expanded === monitor.id"
+            :monitor-id="monitor.id"
+            :revision="revision ?? ''"
+          />
+        </Transition>
       </div>
       <div v-else class="monitor-heartbeat" aria-hidden="true">
         <div

@@ -11,7 +11,12 @@ function makePrivate() {
 <template>
   <section class="admin-module-group">
     <h3>基础设置</h3>
-    <AdminText v-model="model.title" :label="`${model.id} 标题`" :max="100" />
+    <AdminText
+      v-model="model.title"
+      data-error-field="title"
+      :label="`${model.id} 标题`"
+      :max="100"
+    />
     <slot name="source" />
   </section>
   <slot name="presentation" />

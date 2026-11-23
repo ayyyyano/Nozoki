@@ -12,10 +12,13 @@ const props = defineProps<{
   selectable?: readonly number[]
   range?: readonly [number, number]
   selectionText?: string
+  pinRevision?: number
 }>()
 const emit = defineEmits<{ preview: [index: number | null]; commit: [index: number] }>()
 const active = defineModel<number | null>({ required: true })
 const plot = useTemplateRef<HTMLDivElement>('plot')
+const markerElement = useTemplateRef<HTMLElement>('markerElement')
+const bandElement = useTemplateRef<HTMLElement>('bandElement')
 let chart: ReturnType<typeof createChart> | undefined
 let resize: ResizeObserver | undefined
 let theme: MutationObserver | undefined
@@ -88,6 +91,17 @@ onMounted(async () => {
 })
 watch([() => props.options, () => props.values], queueRender, { flush: 'post' })
 watch([active, () => props.range], syncMarker)
+watch(
+  () => props.pinRevision,
+  () => {
+    const highlight = markerElement.value ?? bandElement.value
+    if (!highlight) return
+    highlight.classList.remove('chart-pin-feedback')
+    highlight.getBoundingClientRect()
+    highlight.classList.add('chart-pin-feedback')
+  },
+  { flush: 'post' },
+)
 onBeforeUnmount(() => {
   alive = false
   resize?.disconnect()
@@ -163,9 +177,10 @@ function key(event: KeyboardEvent) {
       @click="pick($event, true)"
     >
       <div ref="plot" class="chart-plot" aria-hidden="true" />
-      <i v-if="band" class="chart-band" :style="band" aria-hidden="true" />
+      <i v-if="band" ref="bandElement" class="chart-band" :style="band" aria-hidden="true" />
       <i
         v-if="marker !== undefined && Number.isFinite(marker)"
+        ref="markerElement"
         class="chart-marker"
         :style="{ left: marker + 'px' }"
         aria-hidden="true"

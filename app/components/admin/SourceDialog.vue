@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { focusAdminValidation } from '../../utils/admin-validation-focus'
 const show = defineModel<boolean>('show', { required: true })
 const props = defineProps<{
   title: string
@@ -14,6 +15,7 @@ const emit = defineEmits<{ confirm: []; closed: []; back: [] }>()
 const titleId = useId(),
   panel = useTemplateRef<HTMLElement>('panel')
 const focus = useModalFocus(show, panel)
+defineExpose({ focusValidation: (field?: string) => focusAdminValidation(panel.value, field) })
 function dismiss() {
   if (props.busy) return
   if (props.back) emit('back')
@@ -28,6 +30,7 @@ function closed() {
   <VarPopup
     v-model:show="show"
     position="center"
+    :transition="editor ? 'admin-editor-motion' : undefined"
     :class="{ 'admin-edit-popup': editor, 'admin-edit-popup--compact': editor && compact }"
     :overlay-class="editor ? 'admin-edit-scrim' : undefined"
     :default-style="false"
