@@ -5,6 +5,7 @@ import type { createChart } from '../../utils/chart-engine'
 const props = defineProps<{
   label: string
   values: readonly number[]
+  pointKeys?: readonly string[]
   details: readonly string[]
   options: (palette: ChartPalette) => ChartOption
   compact?: boolean
@@ -28,14 +29,26 @@ let positions: number[] = []
 const marker = ref<number>()
 const band = ref<{ left: string; width: string }>()
 const failed = ref(false)
-const detailId = useId()
+const pinned = ref<string>()
+const preview = ref<string>()
+const selected = computed(() => {
+  if (props.linked) return active.value
+  const key = preview.value ?? pinned.value
+  const index = key === undefined ? -1 : (props.pointKeys?.indexOf(key) ?? -1)
+  return index < 0 ? null : index
+})
+watch(
+  () => props.pointKeys,
+  (keys) => {
+    if (pinned.value !== undefined && !keys?.includes(pinned.value)) pinned.value = undefined
+    if (preview.value !== undefined && !keys?.includes(preview.value)) preview.value = undefined
+  },
+)
 const detail = computed(() =>
-  props.linked
-    ? props.selectionText
-    : (props.details[active.value ?? -1] ?? '用方向键或点按查看数据'),
+  props.linked ? props.selectionText : props.details[selected.value ?? -1],
 )
 function syncMarker() {
-  marker.value = active.value === null ? undefined : positions[active.value]
+  marker.value = selected.value === null ? undefined : positions[selected.value]
   const range = props.range?.map((value) => chart?.convertToPixel({ xAxisIndex: 0 }, value))
   band.value = range?.every((value) => typeof value === 'number' && Number.isFinite(value))
     ? { left: `${range[0]}px`, width: `${Math.max(1, Number(range[1]) - Number(range[0]))}px` }
@@ -90,7 +103,7 @@ onMounted(async () => {
   }
 })
 watch([() => props.options, () => props.values], queueRender, { flush: 'post' })
-watch([active, () => props.range], syncMarker)
+watch([selected, () => props.range], syncMarker)
 watch(
   () => props.pinRevision,
   () => {
@@ -111,21 +124,32 @@ onBeforeUnmount(() => {
 })
 
 const choices = computed(() => props.selectable ?? props.values.map((_, index) => index))
+function browse(index: number | null) {
+  if (props.linked) emit('preview', index)
+  else preview.value = index === null ? undefined : props.pointKeys?.[index]
+}
+function pin(index: number) {
+  if (props.linked) emit('commit', index)
+  else {
+    const key = props.pointKeys?.[index]
+    pinned.value = pinned.value === key ? undefined : key
+    preview.value = undefined
+  }
+}
 function pick(event: MouseEvent, commit: boolean) {
   if (!plot.value || !positions.length || !choices.value.length) return
   const x = event.clientX - plot.value.getBoundingClientRect().left
   let nearest = choices.value[0]!
   for (const index of choices.value)
     if (Math.abs(x - positions[index]!) < Math.abs(x - positions[nearest]!)) nearest = index
-  if (!props.linked) active.value = nearest
-  else if (props.selectable && Math.abs(x - positions[nearest]!) > 16) emit('preview', null)
-  else if (commit) emit('commit', nearest)
-  else emit('preview', nearest)
+  if (props.linked && props.selectable && Math.abs(x - positions[nearest]!) > 16) browse(null)
+  else if (commit) pin(nearest)
+  else browse(nearest)
 }
 function key(event: KeyboardEvent) {
   const end = choices.value.length - 1
   if (end < 0) return
-  const selected = active.value === null ? -1 : choices.value.indexOf(active.value)
+  const current = selected.value === null ? -1 : choices.value.indexOf(selected.value)
   let next: number
   switch (event.key) {
     case 'Home':
@@ -136,44 +160,50 @@ function key(event: KeyboardEvent) {
       break
     case 'ArrowLeft':
     case 'ArrowDown':
-      next = selected < 0 && props.linked ? end : selected - 1
+      next = current < 0 ? end : current - 1
       break
     case 'ArrowRight':
     case 'ArrowUp':
-      next = selected + 1
+      next = current + 1
       break
     case 'Enter':
     case ' ':
-      if (!props.linked) return
+      if (!props.linked && current < 0) return
       event.preventDefault()
-      emit('commit', choices.value[Math.max(0, selected)]!)
+      pin(choices.value[Math.max(0, current)]!)
+      return
+    case 'Escape':
+      if (props.linked || (preview.value === undefined && pinned.value === undefined)) return
+      event.stopPropagation()
+      pinned.value = undefined
+      browse(null)
       return
     default:
       return
   }
   event.preventDefault()
-  const index = choices.value[Math.max(0, Math.min(end, next))]!
-  if (props.linked) emit('preview', index)
-  else active.value = index
+  browse(choices.value[Math.max(0, Math.min(end, next))]!)
 }
 </script>
 
 <template>
-  <div class="chart-figure" :class="{ 'chart-figure-dense': compact }">
+  <div
+    class="chart-figure"
+    :class="{ 'chart-figure-dense': compact, 'chart-figure-standalone': !linked }"
+  >
     <div
       class="chart-interaction"
       role="slider"
       tabindex="0"
       :aria-label="label"
-      :aria-valuemin="1"
+      :aria-valuemin="0"
       :aria-valuemax="values.length"
-      :aria-valuenow="(active ?? 0) + 1"
-      :aria-valuetext="detail || undefined"
-      :aria-describedby="linked ? undefined : detailId"
+      :aria-valuenow="(selected ?? -1) + 1"
+      :aria-valuetext="detail || '未选中'"
       @keydown="key"
       @pointermove="(event) => event.pointerType === 'mouse' && pick(event, false)"
-      @pointerleave="linked && emit('preview', null)"
-      @blur="linked && emit('preview', null)"
+      @pointerleave="browse(null)"
+      @blur="browse(null)"
       @click="pick($event, true)"
     >
       <div ref="plot" class="chart-plot" aria-hidden="true" />
@@ -187,6 +217,6 @@ function key(event: KeyboardEvent) {
       />
     </div>
     <p v-if="failed" class="quiet-note" role="status">图表加载失败，仍可用方向键查看数据。</p>
-    <p v-if="!linked" :id="detailId" class="chart-readout">{{ detail }}</p>
+    <p v-if="!linked && detail" class="chart-readout">{{ detail }}</p>
   </div>
 </template>

@@ -27,7 +27,7 @@ const updates = computed(() => quoteUpdates(items.value, props.snapshot.observed
     <DashboardQuoteList :items="home" />
     <template #details="{ open }">
       <DashboardDataState :status="snapshot.status" :empty="!items.length" compact />
-      <DashboardQuoteList :items="items" :interactive="open" detail />
+      <DashboardQuoteList v-if="open" :items="items" detail />
     </template>
     <template v-if="updates.length" #subtitle>
       <p v-for="(update, index) in updates" :key="index">

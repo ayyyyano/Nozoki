@@ -522,7 +522,6 @@ p {
   width: 70%;
   background: var(--n-primary);
   border-radius: 4px 4px 0 0;
-  min-height: 3px;
 }
 .balance-bar small {
   font-size: 10px;
@@ -533,6 +532,7 @@ p {
 }
 .balance-bar-track .balance-negative {
   background: var(--color-danger);
+  border-radius: 0 0 4px 4px;
 }
 .balance-private {
   position: relative;
@@ -820,6 +820,9 @@ p {
 .quote-change {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+.quote-change span + span {
+  margin-inline-start: 3px;
 }
 .quote-change[data-direction='down'] {
   color: var(--color-danger);
@@ -1731,10 +1734,54 @@ p {
     row-gap: 6px;
   }
 }
-@container (max-width: 351px) {
-  .module-detail-content .quote-list {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.module-detail-content .quote-list-detail[data-wide='false'] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.quote-list-detail .quote-summary {
+  position: relative;
+  min-width: 0;
+}
+.quote-list-detail[data-wide='false'] .quote-summary {
+  padding-inline-end: 48px;
+}
+.quote-list-detail[data-wide='true'] .quote-item {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  row-gap: 4px;
+}
+.quote-toggle {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: 0;
+}
+.quote-expanded {
+  min-width: 0;
+}
+.detail-disclosure summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  padding-inline: 2px;
+  cursor: pointer;
+  list-style: none;
+}
+.detail-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+.detail-disclosure[open] summary .app-icon {
+  transform: rotate(180deg);
+}
+.quote-history dl,
+.balance-records {
+  margin: 4px 0 0;
+}
+.balance-records {
+  display: grid;
+  gap: 10px;
 }
 @media (max-width: 767px) {
   .var-popup__content:has(> .module-detail-panel) {
@@ -1939,6 +1986,9 @@ p {
   background: var(--n-text);
   pointer-events: none;
 }
+.chart-figure-standalone .chart-marker {
+  inset-block: 14px 24px;
+}
 .chart-band {
   position: absolute;
   inset-block: 8px 26px;
@@ -1953,7 +2003,21 @@ p {
     opacity: 0.45;
   }
 }
-.chart-readout,
+.chart-readout {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 0;
+  inset-inline-end: 4px;
+  max-inline-size: calc(100% - 8px);
+  margin: 0;
+  border-radius: 6px;
+  padding: 3px 6px;
+  background: var(--n-surface-high);
+  color: var(--n-text);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
 .monitor-history-readout {
   color: var(--n-muted);
   font-size: 12px;

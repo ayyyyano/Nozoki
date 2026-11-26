@@ -17,7 +17,7 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: #7861d4;
+  background: var(--color-primary-container, #e9ddff);
   opacity: 1;
   pointer-events: none;
 }

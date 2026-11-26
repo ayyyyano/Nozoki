@@ -11,6 +11,7 @@ import { readConfig, saveConfig } from '../../server/services/config.ts'
 import { editableConfig, CONFIG_BODY_LIMIT } from '../../shared/contracts/admin.ts'
 import { bindSources } from '../../shared/integration-presets/bindings.ts'
 import { createIntegrationDraft } from '../../shared/integration-presets/index.ts'
+import { createThemeColors } from '../../shared/domain/theme-colors.ts'
 import { importCredentialKey } from '../../server/services/credentials.ts'
 
 async function portNumber() {
@@ -125,10 +126,17 @@ test(
     })
     assert.equal((await command(cli, env, ['migrate'])).code, 0)
     assert.deepEqual(JSON.parse((await command(cli, env, ['migrate'])).out).applied, [])
+    const sharedSource = '#00786D'
     const offlineDb = new SqliteDatabase(env.NOZOKI_SQLITE_PATH)
     try {
       await offlineDb
         .prepare("UPDATE integrations SET enabled=0 WHERE provider='quotes-custom'")
+        .run()
+      await offlineDb
+        .prepare(
+          "UPDATE site_settings SET settings_json=json_set(settings_json,'$.appearance.sourceColor',?) WHERE id=1",
+        )
+        .bind(sharedSource)
         .run()
     } finally {
       offlineDb.close()
@@ -158,15 +166,17 @@ test(
       },
     )
     await t.test(
-      'boot animation skips reduced motion and fades out when its artwork stalls',
+      'boot animation uses theme colors, skips reduced motion and fades out when artwork stalls',
       { skip: process.env.NOZOKI_TEST_BROWSER !== '1' },
       async () => {
         const { launch } = await import('../browser/support.ts')
         const dxBrowser = await launch()
         const assetRoot = '/vendor/maimai-transition/'
+        const personalSource = '#BD4134'
         try {
           for (const mode of ['normal', 'stall', 'site-reduced', 'system-reduced'] as const) {
             const context = await dxBrowser.newContext({
+              colorScheme: 'light',
               reducedMotion: mode === 'system-reduced' ? 'reduce' : 'no-preference',
             })
             const page = await context.newPage()
@@ -177,36 +187,54 @@ test(
                 if (path.startsWith(assetRoot)) requests.push(path.slice(assetRoot.length))
               })
               if (mode === 'stall') await page.route('**/transition.svg', () => {})
-              await page.addInitScript((mode) => {
-                if (window !== window.top) return
-                if (mode === 'site-reduced') {
-                  localStorage.setItem(
-                    'nozoki-appearance-v2',
-                    JSON.stringify({ version: 2, overrides: { reduceMotion: true } }),
-                  )
-                }
-                const phases: string[] = []
-                const trace = { phases, fade: '' }
-                Object.assign(window, { dxRecordedTrace: trace })
-                new MutationObserver(() => {
-                  const overlay = document.querySelector('.dx-transition')
-                  const phase = overlay?.getAttribute('data-phase')
-                  if (phase && phase !== phases.at(-1)) phases.push(phase)
-                  const veil = overlay?.querySelector('.dx-veil')
-                  if (phase === 'fallback' && veil)
-                    trace.fade = getComputedStyle(veil).animationName
-                }).observe(document, {
-                  childList: true,
-                  subtree: true,
-                  attributes: true,
-                  attributeFilter: ['data-phase'],
-                })
-              }, mode)
+              await page.addInitScript(
+                ({ mode, personalSource }) => {
+                  if (window !== window.top) return
+                  if (mode === 'site-reduced' || mode === 'stall') {
+                    const overrides =
+                      mode === 'stall'
+                        ? { sourceColor: personalSource, mode: 'dark' }
+                        : { reduceMotion: true }
+                    localStorage.setItem(
+                      'nozoki-appearance-v2',
+                      JSON.stringify({ version: 2, overrides }),
+                    )
+                  }
+                  const phases: string[] = []
+                  const colors: Record<string, string> = {}
+                  const trace = { phases, colors, fade: '' }
+                  Object.assign(window, { dxRecordedTrace: trace })
+                  const record = () => {
+                    const overlay = document.querySelector('.dx-transition')
+                    if (!overlay) return
+                    const phase = overlay.getAttribute('data-phase')
+                    if (phase && phase !== phases.at(-1)) phases.push(phase)
+                    if (phase !== 'boot' && phase !== 'fallback') return
+                    const veil = overlay.querySelector('.dx-veil')
+                    if (!veil || getComputedStyle(overlay).position !== 'fixed') return
+                    const style = getComputedStyle(veil)
+                    colors[phase] ??= style.backgroundColor
+                    if (phase === 'fallback') trace.fade = style.animationName
+                  }
+                  document.addEventListener('load', record, true)
+                  new MutationObserver(record).observe(document, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ['data-phase'],
+                  })
+                },
+                { mode, personalSource },
+              )
               await page.goto(origin, { waitUntil: 'domcontentloaded' })
               await page.waitForFunction(() => '__NOZOKI_DX_BOOT__' in window)
               const boot = await page.evaluate(async () => {
                 const win = window as import('../../shared/browser/dx-boot').DxBootWindow & {
-                  dxRecordedTrace: { phases: string[]; fade: string }
+                  dxRecordedTrace: {
+                    phases: string[]
+                    colors: Record<string, string>
+                    fade: string
+                  }
                 }
                 const result = await win.__NOZOKI_DX_BOOT__!.done
                 return {
@@ -222,6 +250,14 @@ test(
                 listeners: 0,
               })
               assert.equal(await page.locator('.dx-transition').count(), 0)
+              if (mode === 'normal' || mode === 'stall') {
+                const dark = mode === 'stall'
+                const source = dark ? personalSource : sharedSource
+                const color = createThemeColors(source, dark)['--color-primary-container']
+                const expected = `rgb(${Buffer.from(color.slice(1), 'hex').join(', ')})`
+                assert.equal(boot.colors.boot, expected)
+                if (dark) assert.equal(boot.colors.fallback, expected)
+              }
               if (mode === 'normal') {
                 assert.equal(boot.result, 'complete')
                 assert.ok(boot.phases.includes('entering') && boot.phases.includes('leaving'))
@@ -505,7 +541,8 @@ test(
         const { fixture, fixed } = await import('../fixtures/layout.ts')
         const { statusBuckets } = await import('../../shared/domain/chart-series.ts')
         const { presentationSnapshots } = await import('../fixtures/presentation.ts')
-        const dashboard = await fixture({ disabled: [], monitors: 13, longNames: true })
+        const dashboard = await fixture({ disabled: [], monitors: 13, quotes: 4, longNames: true })
+        const maskedDashboard = await fixture({ guest: true, only: ['deepseek'], loginOnly: true })
         Object.assign(
           dashboard.modules.find((m) => m.id === 'tailscale').snapshot,
           presentationSnapshots(fixed).tailscale,
@@ -520,7 +557,7 @@ test(
             day: day.slice(0, 10),
             collectedAt: day,
             currency: 'CNY',
-            total: i === 2 ? '-12.5' : String(60 + i),
+            total: String(60 + i),
           }
         })
         const services = dashboard.modules.find((m) => m.id === 'services').snapshot
@@ -548,7 +585,9 @@ test(
         })).filter((_, index) => index < 25 || index > 32)
         const screenshots =
           process.env.NOZOKI_SERVICES_EVIDENCE ?? '.wrangler/test-results/service-charts'
+        const detailScreenshots = process.env.NOZOKI_QUOTES_EVIDENCE ?? screenshots
         await mkdir(screenshots, { recursive: true })
+        await mkdir(detailScreenshots, { recursive: true })
         const report = []
         const assets = resolve(release, 'public/_nuxt')
         let chartChunk = ''
@@ -587,6 +626,24 @@ test(
             page.on('pageerror', (error) => errors.push(error.message))
             await page.clock.setFixedTime(fixed)
             const current = structuredClone(dashboard)
+            const currentQuotes = current.modules.find((m) => m.id === 'quotes').snapshot.data.items
+            currentQuotes[1].history = currentQuotes[1].history.slice(2)
+            currentQuotes[1].delayedMinutes = 5
+            if (width === 1280) {
+              currentQuotes[0].history[2].close = null
+              currentQuotes[1].history = []
+              currentQuotes[2].history = currentQuotes[2].history.slice(0, 1)
+              currentQuotes[2].price = null
+              currentQuotes[2].change = null
+              currentQuotes[2].changePercent = null
+              currentQuotes[3].history = []
+            } else currentQuotes.splice(2)
+            const currentBalances = current.modules.find((m) => m.id === 'deepseek').snapshot.data
+            if (width === 390) {
+              currentBalances.dailyBalances[1].total = '0.00'
+              currentBalances.dailyBalances[2].total = '-12.50'
+              currentBalances.dailyBalances.splice(4, 1)
+            }
             const currentServices = current.modules.find((m) => m.id === 'services').snapshot
             if (width === 768) currentServices.partialFailures = 1
             if (width === 390) {
@@ -986,24 +1043,227 @@ test(
             ).toBeVisible()
             const balance = deepSeek.getByRole('slider', { name: /近 7 日.*余额/ })
             await expect(balance.locator('svg')).toBeVisible()
+            await expect(balance).toHaveAttribute('aria-valuenow', '0')
+            await expect(deepSeek.locator('.chart-marker, .chart-readout')).toHaveCount(0)
+            const history = deepSeek.getByText(/历史记录 \d+ 项/)
+            const records = deepSeek.locator('.balance-record')
+            await expect(records.first()).toBeHidden()
+            const snapDetail = (name) =>
+              page.locator('.module-detail-panel:visible').screenshot({
+                path: detailScreenshots + '/' + name + '.png',
+                animations: 'disabled',
+              })
+            if (width === 1440 || width === 390) await snapDetail('deepseek-default-' + width)
+            if (width === 390) {
+              const bars = await balance.locator('svg').evaluate((svg) => {
+                const style = getComputedStyle(svg)
+                const primary = style.getPropertyValue('--n-primary').trim().toLowerCase()
+                const danger = style.getPropertyValue('--color-danger').trim().toLowerCase()
+                return Array.from(svg.querySelectorAll('path[fill],rect[fill]')).flatMap((node) => {
+                  const fill = node.getAttribute('fill')?.toLowerCase()
+                  if (fill !== primary && fill !== danger) return []
+                  const shape = node as SVGGraphicsElement
+                  return [
+                    {
+                      negative: fill === danger,
+                      height: shape.getBBox().height,
+                      rounded: /[ACQ]/i.test(shape.getAttribute('d') ?? ''),
+                    },
+                  ]
+                })
+              })
+              assert.equal(bars.filter(({ height, negative }) => height > 0 && !negative).length, 4)
+              assert.ok(
+                bars.some(({ negative, rounded, height }) => negative && rounded && height > 0),
+              )
+              assert.ok(bars.filter(({ height }) => height > 0).every(({ rounded }) => rounded))
+              const compactBars = page.locator('[data-module="deepseek"] .balance-bar')
+              await expect(compactBars.nth(1).locator('i')).toHaveCSS('height', '0px')
+              await expect(compactBars.nth(2).locator('i')).toHaveCSS(
+                'border-bottom-left-radius',
+                '4px',
+              )
+              await expect(compactBars.nth(4).locator('i')).toHaveCount(0)
+              await balance.press('Home')
+              await balance.press('ArrowRight')
+              await expect(balance).toHaveAttribute('aria-valuetext', /0\.00 CNY/)
+              await snapDetail('deepseek-zero-390')
+              for (let offset = 0; offset < 3; offset++) await balance.press('ArrowRight')
+              await expect(balance).toHaveAttribute('aria-valuetext', /尚无记录/)
+              await snapDetail('deepseek-missing-390')
+            }
             await balance.press('End')
-            await expect(balance).toHaveAttribute('aria-valuetext', /今日/)
-            if (width === 1440)
-              await page.locator('.module-detail-panel:visible').screenshot({
-                path: screenshots + '/deepseek.png',
-                animations: 'disabled',
-              })
-            await page.keyboard.press('Escape')
-            await page.locator('[data-module="quotes"] .module-detail-button').click()
-            const quote = page.getByRole('slider', { name: 'QQQM 历史报价' })
+            await balance.press('Enter')
+            await expect(balance).toHaveAttribute('aria-valuetext', /今日最新观测.*采集于/)
+            await balance.press('Escape')
+            await expect(deepSeek.locator('.chart-marker, .chart-readout')).toHaveCount(0)
+            await history.click()
+            await expect(records.last()).toBeVisible()
+            await expect(records).toHaveCount(width === 390 ? 6 : 7)
+            if (width === 390) {
+              await expect(records.nth(1)).toContainText('0.00 CNY')
+              await expect(records.nth(2)).toContainText('-12.50 CNY')
+              await snapDetail('deepseek-history-390')
+            }
+            await history.click()
+            await expect(records.first()).toBeHidden()
+            await deepSeek.getByRole('button', { name: 'USD' }).click()
+            await expect(deepSeek.getByText('暂无历史数据。')).toBeVisible()
+            assert.ok(
+              await deepSeek
+                .locator('.module-detail-content')
+                .evaluate((e) => e.scrollWidth <= e.clientWidth + 1),
+            )
+            await deepSeek.getByRole('button', { name: '关闭详情' }).click()
+            const openQuotes = page.locator('[data-module="quotes"] .module-detail-button')
+            await openQuotes.click()
+            const quotesDialog = page.getByRole('dialog', { name: '自选行情' })
+            const quoteList = quotesDialog.locator('.quote-list-detail')
+            const tickerRows = quoteList.locator('.quote-item')
+            const quote = quotesDialog.getByRole('slider', { name: 'QQQM 历史报价' })
+            const voo = quotesDialog.getByRole('slider', { name: 'VOO 历史报价' })
+            const openQ = quotesDialog.getByRole('button', { name: '展开 QQQM 行情' })
+            const openV = quotesDialog.getByRole('button', { name: '展开 VOO 行情' })
+            const wideQuotes = width >= 768
+            await expect(quoteList).toHaveAttribute('data-wide', String(wideQuotes))
+            await expect(tickerRows).toHaveCount(width === 1280 ? 4 : 2)
+            await expect(quotesDialog).toContainText(/QQQM.*延迟 15 分钟/)
+            await expect(quotesDialog).toContainText(/VOO.*延迟 5 分钟/)
+            await expect(quotesDialog).not.toContainText(/查看\s*(QQQM|VOO)\s*图表|用方向键/)
+            await expect(tickerRows.nth(1).locator('.quote-change')).toHaveAttribute(
+              'data-direction',
+              'down',
+            )
+            if (!wideQuotes) {
+              await expect(quotesDialog.locator('.chart-plot')).toHaveCount(0)
+              await expect(openQ).toHaveCSS('width', '40px')
+              await expect(openQ).toHaveCSS('height', '40px')
+              assert.ok(
+                await tickerRows
+                  .first()
+                  .locator('.quote-title > span')
+                  .evaluate(
+                    (name) =>
+                      name.scrollWidth > name.clientWidth &&
+                      getComputedStyle(name).textOverflow === 'ellipsis',
+                  ),
+              )
+              if (width === 390) await snapDetail('quotes-collapsed-390')
+              await openQ.tap()
+              await expect(quote.locator('svg')).toBeVisible()
+              if (width === 390) await snapDetail('quotes-expanded-390')
+              await openV.tap()
+              await expect(quote).toHaveCount(0)
+              await expect(voo.locator('svg')).toBeVisible()
+              await voo.tap()
+              await expect(
+                quotesDialog.getByRole('button', { name: '收起 VOO 行情' }),
+              ).toBeVisible()
+              await quotesDialog.getByRole('button', { name: '收起 VOO 行情' }).tap()
+              await expect(quotesDialog.locator('.chart-plot')).toHaveCount(0)
+              await openQ.tap()
+            }
             await expect(quote.locator('svg')).toBeVisible()
+            await expect(quotesDialog.locator('.chart-marker, .chart-readout')).toHaveCount(0)
+            await expect(quote).toHaveAttribute('aria-valuenow', '0')
+            const geometryOf = async (plot) => {
+              const box = await plot.boundingBox()
+              assert.ok(box)
+              return box
+            }
+            if (wideQuotes && width !== 1280) {
+              await expect(voo.locator('svg')).toBeVisible()
+              const left = await geometryOf(quote)
+              const right = await geometryOf(voo)
+              const layout = `${width}px ${JSON.stringify({ left, right })}`
+              assert.ok(left.x < right.x && Math.abs(left.y - right.y) < 1, layout)
+              assert.ok(
+                Math.abs(left.width - right.width) < 1 && Math.abs(left.height - right.height) < 1,
+                layout,
+              )
+            }
+            if (width === 1280) {
+              await expect(tickerRows.nth(1)).toContainText('暂无历史数据。')
+              await expect(tickerRows.nth(3)).toContainText('暂无历史数据。')
+              const single = quotesDialog.getByRole('slider', { name: 'AAPL 历史报价' })
+              await expect(single.locator('svg')).toBeVisible()
+              await expect(single).toHaveAttribute('aria-valuemax', '1')
+              await expect(tickerRows.nth(2).locator('.quote-price')).toContainText('—')
+              await expect(tickerRows.nth(2).locator('.quote-change')).toHaveCount(0)
+            }
+            if (width === 1440) {
+              const before = [await geometryOf(quote), await geometryOf(voo)]
+              await snapDetail('quotes-desktop-default-1440')
+              await quote.hover({ position: { x: 50, y: 60 } })
+              await expect(quote).toHaveAttribute('aria-valuetext', /\d{2}:\d{2}.*USD/)
+              await expect(voo).toHaveAttribute('aria-valuenow', '0')
+              await quotesDialog.getByRole('heading', { name: '自选行情' }).hover()
+              await expect(quote).toHaveAttribute('aria-valuenow', '0')
+              await quote.click({ position: { x: 50, y: 60 } })
+              await voo.hover({ position: { x: 70, y: 60 } })
+              await expect(quotesDialog.locator('.chart-marker')).toHaveCount(2)
+              await quotesDialog.getByRole('heading', { name: '自选行情' }).hover()
+              await expect(quotesDialog.locator('.chart-marker')).toHaveCount(1)
+              await snapDetail('quotes-desktop-selected-1440')
+              const after = [await geometryOf(quote), await geometryOf(voo)]
+              for (const [i, bounds] of before.entries()) {
+                for (const key of ['x', 'y', 'width', 'height'] as const)
+                  assert.ok(Math.abs(bounds[key] - after[i][key]) < 1, `Quote ${i} ${key} shifted`)
+              }
+              await quote.click({ position: { x: 50, y: 60 } })
+              await expect(quote).toHaveAttribute('aria-valuenow', '0')
+            }
             await quote.press('Home')
+            await quote.press('Space')
             await expect(quote).toHaveAttribute('aria-valuetext', /USD/)
-            if (width === 1440)
-              await page.locator('.module-detail-panel:visible').screenshot({
-                path: screenshots + '/quotes.png',
-                animations: 'disabled',
+            if (width === 1440) {
+              async function refreshDashboard() {
+                const response = page.waitForResponse((r) => r.url().endsWith('/api/dashboard'))
+                await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+                await response
+              }
+              currentQuotes[0].history.push({
+                at: '2026-10-15T07:25:00.000Z',
+                close: '199',
               })
+              await refreshDashboard()
+              await expect(quote).toHaveAttribute('aria-valuenow', '2')
+              currentQuotes[0].history.shift()
+              await refreshDashboard()
+              await expect(quote).toHaveAttribute('aria-valuenow', '0')
+              await page.setViewportSize({ width: 390, height: 844 })
+              await expect(quotesDialog.locator('.chart-plot')).toHaveCount(0)
+              await openQ.click()
+              await expect(quote.locator('svg')).toBeVisible()
+              await page.setViewportSize({ width, height })
+              await expect(voo.locator('svg')).toBeVisible()
+            }
+            await quotesDialog.locator('.quote-history summary').first().click()
+            await expect(quotesDialog.locator('.quote-history dd').first()).toBeVisible()
+            assert.ok(
+              await quotesDialog
+                .locator('.module-detail-content')
+                .evaluate((e) => e.scrollWidth <= e.clientWidth + 1),
+            )
+            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+            await quotesDialog.getByRole('button', { name: '关闭详情' }).click()
+            await openQuotes.click()
+            await expect(
+              quotesDialog.locator('details[open], .chart-marker, .chart-readout'),
+            ).toHaveCount(0)
+            if (!wideQuotes) await expect(quotesDialog.locator('.chart-plot')).toHaveCount(0)
+            if (width === 320) {
+              await quotesDialog.getByRole('button', { name: '关闭详情' }).click()
+              Object.assign(current, maskedDashboard)
+              const response = page.waitForResponse((r) => r.url().endsWith('/api/dashboard'))
+              await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+              await response
+              const masked = page.locator('[data-module="deepseek"]')
+              await expect(masked.getByText('登录后查看')).toBeVisible()
+              await expect(masked.locator('.module-detail-button, .balance-bar-value')).toHaveCount(
+                0,
+              )
+            }
             assert.deepEqual(errors, [])
             await context.close()
           }

@@ -8,6 +8,7 @@ const props = defineProps<{
   type: 'line' | 'bar'
   timeLabel?: (at: number) => string
   pointTimeLabel?: (at: number) => string
+  categoryLabel?: (label: string) => string
   unit?: string
   linked?: boolean
   domain?: readonly [number, number]
@@ -22,6 +23,7 @@ const selectable = computed(() =>
   props.linked ? props.points.flatMap(({ value }, i) => (value === null ? [] : [i])) : undefined,
 )
 const x = computed(() => props.points.map((p, i) => (props.timeLabel ? p.at! : i)))
+const pointKeys = computed(() => props.points.map(({ key }) => key))
 const details = computed(() =>
   props.points.map((point) =>
     [
@@ -36,7 +38,7 @@ const details = computed(() =>
   ),
 )
 const options = computed(() => {
-  const { type, points, timeLabel, unit, domain } = props
+  const { type, points, timeLabel, categoryLabel, unit, domain } = props
   const values = points.map((point) => point.value)
   return (color: ChartPalette): ChartOption => ({
     grid: { top: 14, left: 10, right: 18, bottom: 8, containLabel: true },
@@ -46,12 +48,14 @@ const options = computed(() => {
         : {
             type: 'category' as const,
             data: points.map((point) => point.label),
-            boundaryGap: type === 'bar',
+            boundaryGap: type === 'bar' || points.length === 1,
           }),
       axisLabel: {
         color: color.muted,
         hideOverlap: true,
-        ...(timeLabel ? { formatter: (value: number | string) => timeLabel(Number(value)) } : {}),
+        formatter: timeLabel
+          ? (value: number | string) => timeLabel(Number(value))
+          : categoryLabel && ((value: number | string) => categoryLabel(String(value))),
       },
       axisLine: { lineStyle: { color: color.outline } },
       axisTick: { show: false },
@@ -80,10 +84,12 @@ const options = computed(() => {
             {
               type: 'bar',
               barMaxWidth: 32,
-              barMinHeight: 2,
               data: values.map((value) => ({
                 value,
-                itemStyle: { color: value !== null && value < 0 ? color.danger : color.primary },
+                itemStyle: {
+                  color: value !== null && value < 0 ? color.danger : color.primary,
+                  borderRadius: value !== null && value < 0 ? [0, 0, 4, 4] : [4, 4, 0, 0],
+                },
               })),
             },
           ],
@@ -96,6 +102,7 @@ const options = computed(() => {
     v-model="selected"
     :label="label"
     :values="x"
+    :point-keys="pointKeys"
     :details="details"
     :options="options"
     :linked="linked"

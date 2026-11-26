@@ -31,6 +31,7 @@ const series = computed(() => {
 })
 const selectedCurrency = ref<string>()
 const balances = computed(() => props.snapshot.data?.balances ?? [])
+const records = computed(() => props.snapshot.data?.dailyBalances ?? [])
 const detailSeries = computed(
   () => series.value.find((s) => s.currency === selectedCurrency.value) ?? series.value[0],
 )
@@ -54,55 +55,64 @@ const detailSeries = computed(
     "
   >
     <template v-if="!snapshot.data?.masked" #details="{ open }">
-      <DashboardDataState :status="snapshot.status" compact />
-      <section v-if="detailSeries && open" class="detail-chart">
-        <h3>近 7 日余额</h3>
-        <div v-if="series.length > 1" class="chart-choices" aria-label="余额币种">
-          <button
-            v-for="item in series"
-            :key="item.currency"
-            type="button"
-            :aria-pressed="item.currency === detailSeries.currency"
-            @click="selectedCurrency = item.currency"
-          >
-            {{ item.currency }}
-          </button>
-        </div>
-        <ChartsTimeSeriesChart
-          :key="detailSeries.currency"
-          type="bar"
-          :label="`近 7 日 ${detailSeries.currency} 余额`"
-          :points="detailSeries.points"
-        />
-      </section>
-      <section v-if="balances.length">
-        <h3>余额明细</h3>
-        <template v-for="balance in balances" :key="balance.currency">
-          <h4 v-if="balances.length > 1">{{ balance.currency }}</h4>
-          <dl class="quote-details">
-            <div v-if="balance.total !== null">
-              <dt>剩余</dt>
-              <dd>{{ decimalText(balance.total) }}</dd>
+      <template v-if="open">
+        <DashboardDataState :status="snapshot.status" compact />
+        <section v-if="detailSeries" class="detail-chart">
+          <h3>近 7 日余额</h3>
+          <div v-if="series.length > 1" class="chart-choices" aria-label="余额币种">
+            <button
+              v-for="item in series"
+              :key="item.currency"
+              type="button"
+              :aria-pressed="item.currency === detailSeries.currency"
+              @click="selectedCurrency = item.currency"
+            >
+              {{ item.currency }}
+            </button>
+          </div>
+          <ChartsTimeSeriesChart
+            :key="detailSeries.currency"
+            type="bar"
+            :label="`近 7 日 ${detailSeries.currency} 余额`"
+            :points="detailSeries.points"
+          />
+        </section>
+        <section v-if="balances.length">
+          <h3>余额明细</h3>
+          <template v-for="balance in balances" :key="balance.currency">
+            <h4 v-if="balances.length > 1">{{ balance.currency }}</h4>
+            <dl class="quote-details">
+              <div v-if="balance.total !== null">
+                <dt>剩余</dt>
+                <dd>{{ decimalText(balance.total) }} {{ balance.currency }}</dd>
+              </div>
+              <div v-if="balance.toppedUp !== null">
+                <dt>充值余额</dt>
+                <dd>{{ decimalText(balance.toppedUp) }} {{ balance.currency }}</dd>
+              </div>
+              <div v-if="balance.granted !== null">
+                <dt>赠送余额</dt>
+                <dd>{{ decimalText(balance.granted) }} {{ balance.currency }}</dd>
+              </div>
+            </dl>
+          </template>
+        </section>
+        <details v-if="records.length" class="detail-disclosure">
+          <summary>
+            历史记录 {{ records.length }} 项
+            <CommonAppIcon name="chevronDown" :size="20" />
+          </summary>
+          <div class="balance-records">
+            <div v-for="point in records" :key="point.day + point.currency" class="balance-record">
+              <strong>{{ point.day }} · {{ decimalText(point.total) }} {{ point.currency }}</strong>
+              <small>
+                <template v-if="point.day === days.at(-1)?.day">今日最新观测 · </template>
+                采集于 {{ formatTimestamp(point.collectedAt, timezone) }}
+              </small>
             </div>
-            <div v-if="balance.toppedUp !== null">
-              <dt>充值余额</dt>
-              <dd>{{ decimalText(balance.toppedUp) }}</dd>
-            </div>
-            <div v-if="balance.granted !== null">
-              <dt>赠送余额</dt>
-              <dd>{{ decimalText(balance.granted) }}</dd>
-            </div>
-          </dl>
-        </template>
-      </section>
-      <div
-        class="balance-record"
-        v-for="point in snapshot.data?.dailyBalances ?? []"
-        :key="point.day + point.currency"
-      >
-        <strong>{{ point.day }} · {{ decimalText(point.total) }} {{ point.currency }}</strong
-        ><small>采集于 {{ formatTimestamp(point.collectedAt, timezone) }}</small>
-      </div>
+          </div>
+        </details>
+      </template>
     </template>
     <div v-if="snapshot.data?.masked" class="balance-private" role="status">
       <div class="balance-private-preview" aria-hidden="true">

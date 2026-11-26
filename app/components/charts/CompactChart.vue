@@ -55,7 +55,7 @@ const pointsPath = computed(() => {
           v-if="point.value !== null"
           :class="{ 'balance-negative': point.value < 0 }"
           :style="{
-            top: `min(${Math.min(height(point.value), height(0))}%, calc(100% - 3px))`,
+            top: `${Math.min(height(point.value), height(0))}%`,
             height: `${Math.abs(height(point.value) - height(0))}%`,
           }"
         />
